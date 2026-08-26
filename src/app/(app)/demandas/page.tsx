@@ -484,7 +484,7 @@ export default function DemandasPage() {
                       </Select>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                      <div className="flex items-center justify-end gap-1 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
                         <button
                           onClick={() => startEdit(t)}
                           aria-label="Editar"
@@ -734,7 +734,7 @@ function TaskCard({
     <div
       draggable
       onDragStart={onDragStart}
-      className="group cursor-grab rounded-xl border border-line bg-ink-850 p-3 transition-all hover:border-ink-600 active:cursor-grabbing"
+      className="group cursor-grab rounded-xl border border-line bg-ink-850 p-3 transition-colors hover:border-ink-600 active:cursor-grabbing"
     >
       <div className="flex items-start justify-between gap-2">
         <p
@@ -745,7 +745,7 @@ function TaskCard({
         >
           {t.title}
         </p>
-        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100">
           {t.status !== "done" && (
             <button
               onClick={onAdvance}

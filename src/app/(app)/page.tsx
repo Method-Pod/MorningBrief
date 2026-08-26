@@ -378,7 +378,7 @@ export default function HomePage() {
                         onClick={() => toggleTask(t)}
                         aria-label={t.status === "done" ? "Reabrir" : "Concluir"}
                         className={cx(
-                          "grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.8px] transition-all",
+                          "grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.8px] transition-colors",
                           t.status === "done"
                             ? "border-brand-500 bg-brand-500 text-on-brand"
                             : "border-ink-600 text-transparent hover:border-brand-500"

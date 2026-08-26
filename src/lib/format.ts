@@ -93,3 +93,18 @@ export const rotuloMes = (ym: string) => {
   const [y, m] = ym.split("-");
   return `${MES_ABREV[Number(m) - 1] ?? "?"}/${y.slice(2)}`;
 };
+
+/** Os 7 dias terminando em `fim` (inclusive), em ISO local. */
+export const ultimosDias = (fim: string, n = 7) => {
+  const base = new Date(fim + "T00:00:00");
+  const dias: string[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() - i);
+    dias.push(
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+        d.getDate()
+      ).padStart(2, "0")}`
+    );
+  }
+  return dias;
+};

@@ -126,3 +126,23 @@ export const BILL_CATEGORIES = [
 ];
 
 export const NOTE_COLORS = ["blue", "violet", "emerald", "amber", "rose", "slate"];
+
+export type Habit = {
+  id: string;
+  user_id: string;
+  name: string;
+  color: string;
+  target_per_week: number;
+  active: boolean;
+  created_at: string;
+};
+
+export type HabitLog = {
+  id: string;
+  user_id: string;
+  habit_id: string;
+  day: string;
+  created_at: string;
+};
+
+export const HABIT_COLORS = ["blue", "violet", "emerald", "amber", "rose", "slate"];

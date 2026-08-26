@@ -15,6 +15,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { dateTimeBR } from "@/lib/format";
 import { ACCENTS, useAccent } from "@/components/accent";
+import { TrocarFoto, useAvatar } from "@/components/Avatar";
 import { Button, Card, Skeleton, cx } from "@/components/ui";
 
 type Perfil = {
@@ -33,6 +34,7 @@ export default function ContaPage() {
   const [aviso, setAviso] = React.useState("");
   const [erro, setErro] = React.useState("");
   const { accent, setAccent } = useAccent();
+  const { url: foto, setUrl: setFoto } = useAvatar();
 
   React.useEffect(() => {
     (async () => {
@@ -83,7 +85,6 @@ export default function ContaPage() {
     );
 
   const nome = perfil.email.split("@")[0] || "você";
-  const iniciais = nome.slice(0, 2).toUpperCase();
 
   return (
     <div className="rise max-w-[760px]">
@@ -99,15 +100,7 @@ export default function ContaPage() {
         <Card>
           <Cabeca icon={<User size={14} />} titulo="Perfil" />
           <div className="px-[18px] pb-[18px] pt-3">
-            <div className="flex items-center gap-3.5">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-brand-500 text-sm font-bold text-on-brand">
-                {iniciais}
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-[15px] font-semibold">{nome}</p>
-                <p className="truncate text-[13px] text-fg-mute">{perfil.email}</p>
-              </div>
-            </div>
+            <TrocarFoto nome={nome} url={foto} onTrocou={setFoto} />
 
             <dl className="mt-4 flex flex-col gap-0 border-t border-line-soft pt-1">
               <Linha
@@ -153,7 +146,7 @@ export default function ContaPage() {
                   onClick={() => setAccent(a.key)}
                   aria-pressed={accent === a.key}
                   className={cx(
-                    "flex items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-[13px] font-medium transition-all",
+                    "flex items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-[13px] font-medium transition-colors",
                     accent === a.key
                       ? "bg-brand-500/12 text-brand-400"
                       : "bg-ink-800 text-fg-dim hover:text-fg"

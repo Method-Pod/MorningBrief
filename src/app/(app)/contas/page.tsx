@@ -17,6 +17,11 @@ import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { BILL_CATEGORIES, type Bill, type BillStatus } from "@/lib/types";
 import { brl, dataCurta, daysUntil, rotuloMes, todayISO } from "@/lib/format";
 import {
+  CalendarioPagamentos,
+  ContasFixas,
+  proximoMes,
+} from "@/components/ContasExtras";
+import {
   EvolucaoMensal,
   PagoPendenteCategoria,
   ParticipacaoCategoria,
@@ -78,6 +83,8 @@ export default function ContasPage() {
   const [filtro, setFiltro] = React.useState<Filtro>("todas");
   const [ordem, setOrdem] = React.useState<Ordem>("vencimento");
   const [q, setQ] = React.useState("");
+  const [dia, setDia] = React.useState<string | null>(null);
+  const [lancando, setLancando] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Bill | null>(null);
   const [form, setForm] = React.useState(vazio());
@@ -209,6 +216,29 @@ export default function ContasPage() {
     load();
   };
 
+  /** Duplica a conta fixa para o mês seguinte, já em aberto. */
+  const lancarProximo = async (b: Bill) => {
+    setLancando(b.id);
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      setLancando(null);
+      return notice.show(SESSION_EXPIRED);
+    }
+    const { error } = await supabase.from("bills").insert({
+      user_id: uid,
+      description: b.description,
+      amount: b.amount,
+      due_date: proximoMes(b.due_date),
+      category: b.category,
+      status: "pending",
+      notes: b.notes,
+      recurring: true,
+      paid_at: null,
+    });
+    setLancando(null);
+    if (!notice.check(error, "lançar a próxima parcela")) load();
+  };
+
   const excluir = (b: Bill) =>
     confirm.ask(`Excluir "${b.description}"? Não pode ser desfeito.`, async () => {
       const { error } = await supabase.from("bills").delete().eq("id", b.id);
@@ -239,6 +269,8 @@ export default function ContasPage() {
     const termo = q.trim().toLowerCase();
     const hoje = todayISO();
     const passa = (b: Bill) => {
+      // dia escolhido no calendário manda em cima dos chips
+      if (dia) return b.due_date.slice(0, 10) === dia;
       switch (filtro) {
         case "hoje":
           return b.due_date.slice(0, 10) === hoje;
@@ -282,7 +314,7 @@ export default function ContasPage() {
       }
     });
     return ordenada;
-  }, [rows, filtro, ordem, q]);
+  }, [rows, filtro, ordem, q, dia]);
 
   /** Grupos por situação, na ordem em que pedem atenção. */
   const grupos = React.useMemo(() => {
@@ -455,7 +487,7 @@ export default function ContasPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 px-[18px] pb-3.5 pt-3">
-          <div className="relative min-w-[180px] flex-1">
+          <div className="relative w-full flex-1 sm:min-w-[180px]">
             <Search
               size={15}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
@@ -472,7 +504,7 @@ export default function ContasPage() {
             value={ordem}
             onChange={(e) => setOrdem(e.target.value as Ordem)}
             aria-label="Ordenar por"
-            className="w-[196px]"
+            className="w-full sm:w-[196px]"
           >
             {ORDENS.map((o) => (
               <option key={o.v} value={o.v}>
@@ -542,6 +574,26 @@ export default function ContasPage() {
           </div>
         )}
       </Card>
+
+      {/* -------------------- calendário + contas fixas -------------------- */}
+      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+        <Card>
+          <Cabeca titulo="Calendário de pagamentos" sub="Clique num dia para filtrar" />
+          <div className="px-[18px] pb-[18px] pt-3">
+            <CalendarioPagamentos contas={rows} dia={dia} onDia={setDia} />
+          </div>
+        </Card>
+
+        <Card>
+          <Cabeca
+            titulo="Contas fixas"
+            sub="Lance o mês seguinte com um clique"
+          />
+          <div className="px-[18px] pb-[18px] pt-3">
+            <ContasFixas contas={rows} onLancar={lancarProximo} ocupado={lancando} />
+          </div>
+        </Card>
+      </div>
 
       {/* ------------------------------ análises ------------------------------ */}
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
@@ -793,7 +845,7 @@ function Linha({
         onClick={onAlternar}
         aria-label={paga ? "Marcar em aberto" : "Marcar como paga"}
         className={cx(
-          "grid h-[22px] w-[22px] shrink-0 place-items-center rounded-md border-[1.8px] transition-all",
+          "grid h-[22px] w-[22px] shrink-0 place-items-center rounded-md border-[1.8px] transition-colors",
           paga
             ? "border-pos bg-pos text-white"
             : "border-ink-600 text-transparent hover:border-brand-500"
@@ -854,7 +906,7 @@ function Linha({
         {brl(b.amount)}
       </span>
 
-      <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+      <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
         <button
           onClick={onEditar}
           aria-label="Editar"

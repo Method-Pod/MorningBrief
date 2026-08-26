@@ -293,7 +293,7 @@ export default function AnotacoesPage() {
                     onClick={() => setForm({ ...form, color: c })}
                     aria-label={`Cor ${c}`}
                     className={cx(
-                      "h-7 w-7 rounded-full transition-all",
+                      "h-7 w-7 rounded-full transition-colors",
                       SWATCH[c].dot,
                       form.color === c
                         ? "ring-2 ring-white/70 ring-offset-2 ring-offset-ink-850"

@@ -9,16 +9,12 @@ import {
   Eye,
   EyeOff,
   Loader2,
-  Lock,
-  Mail,
-  Sunrise,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { Button, Input } from "@/components/ui";
 
-type Mode = "signin" | "signup" | "reset";
+type Modo = "entrar" | "criar" | "recuperar";
 
-const MESSAGES: Record<string, string> = {
+const MENSAGENS: Record<string, string> = {
   "Invalid login credentials": "E-mail ou senha incorretos.",
   "Email not confirmed":
     "Confirme seu e-mail pelo link que enviamos antes de entrar.",
@@ -28,294 +24,273 @@ const MESSAGES: Record<string, string> = {
   "Signup requires a valid password": "Informe uma senha válida.",
   "Unable to validate email address: invalid format":
     "Formato de e-mail inválido.",
+  "For security purposes, you can only request this after 60 seconds.":
+    "Aguarde um minuto antes de tentar de novo.",
 };
 
-const translate = (m: string) => MESSAGES[m] ?? m;
+const traduz = (m: string) => MENSAGENS[m] ?? m;
 
-function LoginForm() {
+const TEXTOS: Record<Modo, { titulo: string; sub: string; acao: string }> = {
+  entrar: {
+    titulo: "Bom te ver",
+    sub: "Entre para ver o brief de hoje.",
+    acao: "Entrar",
+  },
+  criar: {
+    titulo: "Criar conta",
+    sub: "Leva menos de um minuto.",
+    acao: "Criar conta",
+  },
+  recuperar: {
+    titulo: "Recuperar acesso",
+    sub: "Enviamos um link para você definir uma senha nova.",
+    acao: "Enviar link",
+  },
+};
+
+const campo =
+  "h-12 w-full rounded-[14px] border border-line bg-white text-[15px] outline-none transition-colors focus:border-brand-500";
+
+function Formulario() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
+  const proximo = params.get("next") || "/";
 
-  const configured =
+  const configurado =
     !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
     !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const [mode, setMode] = React.useState<Mode>("signin");
+  const [modo, setModo] = React.useState<Modo>("entrar");
   const [email, setEmail] = React.useState("");
-  const [password, setPassword] = React.useState("");
-  const [show, setShow] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState("");
+  const [senha, setSenha] = React.useState("");
+  const [vendo, setVendo] = React.useState(false);
+  const [ocupado, setOcupado] = React.useState(false);
+  const [erro, setErro] = React.useState("");
   const [ok, setOk] = React.useState("");
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const trocaModo = (m: Modo) => {
+    setModo(m);
+    setErro("");
     setOk("");
-    setBusy(true);
+  };
+
+  const enviar = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErro("");
+    setOk("");
+    setOcupado(true);
     const supabase = createClient();
 
     try {
-      if (mode === "signin") {
+      if (modo === "entrar") {
         const { error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
-          password,
+          password: senha,
         });
         if (error) throw error;
-        router.replace(next);
+        router.replace(proximo);
         router.refresh();
         return;
       }
 
-      if (mode === "signup") {
+      if (modo === "criar") {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
-          password,
+          password: senha,
         });
         if (error) throw error;
         if (data.session) {
-          router.replace(next);
+          router.replace(proximo);
           router.refresh();
           return;
         }
         setOk(
-          "Conta criada. Verifique seu e-mail e clique no link de confirmação para entrar."
+          "Conta criada. Confirme pelo link que enviamos ao seu e-mail para entrar."
         );
-        setMode("signin");
+        setModo("entrar");
       }
 
-      if (mode === "reset") {
+      if (modo === "recuperar") {
         const { error } = await supabase.auth.resetPasswordForEmail(
           email.trim(),
           { redirectTo: `${window.location.origin}/login` }
         );
         if (error) throw error;
-        setOk("Enviamos um link de redefinição para o seu e-mail.");
+        setOk("Link enviado. Confira sua caixa de entrada.");
       }
     } catch (err) {
-      setError(translate(err instanceof Error ? err.message : String(err)));
+      setErro(traduz(err instanceof Error ? err.message : String(err)));
     } finally {
-      setBusy(false);
+      setOcupado(false);
     }
   };
 
-  const titles: Record<Mode, { h: string; s: string; cta: string }> = {
-    signin: {
-      h: "Bem-vindo de volta",
-      s: "Entre para ver seu brief de hoje.",
-      cta: "Entrar",
-    },
-    signup: {
-      h: "Criar sua conta",
-      s: "Leva 20 segundos. Seus dados ficam só com você.",
-      cta: "Criar conta",
-    },
-    reset: {
-      h: "Redefinir senha",
-      s: "Enviamos um link para o seu e-mail.",
-      cta: "Enviar link",
-    },
-  };
-  const t = titles[mode];
+  const t = TEXTOS[modo];
 
   return (
-    <div className="flex min-h-dvh items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-[880px] overflow-hidden rounded-[26px] bg-white shadow-[0_24px_70px_-24px_rgb(20_24_26/0.22)] rise">
-        <div className="grid lg:grid-cols-[1.05fr_1fr]">
-          {/* ---------- painel esquerdo ---------- */}
-          <div className="relative hidden flex-col justify-between bg-brand-500/[0.07] p-9 lg:flex">
+    <div className="flex min-h-dvh items-center justify-center p-3 sm:p-6">
+      <div className="w-full max-w-[1040px] rounded-[24px] bg-white p-3 shadow-[0_24px_70px_-28px_rgb(20_24_26/0.22)] sm:rounded-[28px] sm:p-4">
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
+          {/* ---------------- painel de marca ---------------- */}
+          <aside className="relative hidden overflow-hidden rounded-[20px] bg-[#16191b] p-9 lg:flex lg:flex-col">
+            {/* Aurora do accent: única peça decorativa, e ela acompanha o tema. */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  "radial-gradient(120% 68% at 18% 110%, var(--a) 0%, transparent 56%), radial-gradient(85% 45% at 92% 104%, var(--a) 0%, transparent 60%)",
+              }}
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3"
+              style={{
+                background:
+                  "linear-gradient(to top, rgb(22 25 27 / 0.62), transparent)",
+              }}
+            />
 
-            <div className="relative">
-              <div className="flex items-center gap-2.5">
-                <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand-500 text-on-brand">
-                  <Sunrise size={19} />
-                </div>
-                <span className="text-base font-semibold tracking-tight">
-                  Morning<span className="text-brand-400">Brief</span>
-                </span>
-              </div>
-              <h1 className="mt-10 text-[28px] font-semibold leading-[1.15] tracking-tight">
+            <p className="relative text-[19px] font-bold tracking-[-0.035em] text-white">
+              morning<span className="font-normal text-white/55">brief</span>
+            </p>
+
+            <div className="relative mt-auto">
+              <h2 className="text-[30px] font-bold leading-[1.12] tracking-[-0.035em] text-white">
                 Tudo que importa
                 <br />
                 antes do primeiro café.
-              </h1>
-              <p className="mt-3 max-w-[300px] text-sm leading-relaxed text-fg-dim">
-                Contas a pagar, demandas do dia, recorrências e agenda em uma
-                única tela.
+              </h2>
+              <p className="mt-3 max-w-[300px] text-[13.5px] leading-relaxed text-white/65">
+                Demandas, contas a pagar, hábitos, anotações e agenda numa só
+                tela.
               </p>
             </div>
+          </aside>
 
-            <ul className="relative mt-10 space-y-2.5">
-              {[
-                "Contas a pagar com vencimento e status",
-                "Demandas em kanban com prioridade",
-                "Recorrentes que geram tarefas sozinhas",
-                "Anotações fixáveis e calendário mensal",
-              ].map((f) => (
-                <li key={f} className="flex items-start gap-2.5 text-[13px] text-fg-dim">
-                  <CheckCircle2
-                    size={15}
-                    className="mt-0.5 shrink-0 text-brand-400"
-                  />
-                  {f}
-                </li>
-              ))}
-            </ul>
-          </div>
+          {/* ---------------- formulário ---------------- */}
+          <div className="flex flex-col justify-center px-2 py-6 sm:px-8 sm:py-10">
+            <p className="text-[19px] font-bold tracking-[-0.035em] lg:hidden">
+              morning<span className="font-normal text-fg-mute">brief</span>
+            </p>
 
-          {/* ---------- formulário ---------- */}
-          <div className="p-7 sm:p-9">
-            <div className="mb-7 flex items-center gap-2.5 lg:hidden">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand-500 text-on-brand">
-                <Sunrise size={19} />
-              </div>
-              <span className="text-base font-semibold tracking-tight">
-                Morning<span className="text-brand-400">Brief</span>
-              </span>
-            </div>
+            <h1 className="mt-5 text-[27px] font-bold tracking-[-0.035em] lg:mt-0">
+              {t.titulo}
+            </h1>
+            <p className="mt-1.5 text-[14px] text-fg-mute">{t.sub}</p>
 
-            <h2 className="text-xl font-semibold tracking-tight">{t.h}</h2>
-            <p className="mt-1 text-sm text-fg-mute">{t.s}</p>
-
-            {!configured && (
-              <div className="mt-5 flex gap-2.5 rounded-xl border border-warn/30 bg-warn/10 p-3.5 text-xs leading-relaxed text-warn">
+            {!configurado && (
+              <div className="mt-5 flex gap-2.5 rounded-[14px] bg-warn/12 p-3.5 text-xs leading-relaxed text-warn">
                 <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-                <div>
-                  <strong className="font-semibold">Supabase não configurado.</strong>
-                  <br />
-                  Defina <code>NEXT_PUBLIC_SUPABASE_URL</code> e{" "}
-                  <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> nas variáveis de
-                  ambiente e faça um novo deploy.
-                </div>
+                <span>
+                  <strong className="font-bold">
+                    Supabase não configurado.
+                  </strong>{" "}
+                  Defina as variáveis de ambiente e faça um novo deploy.
+                </span>
               </div>
             )}
 
-            <form onSubmit={submit} className="mt-6 space-y-4">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-fg-mute"
-                >
-                  E-mail
-                </label>
-                <div className="relative">
-                  <Mail
-                    size={15}
-                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
-                  />
-                  <Input
-                    id="email"
-                    type="email"
-                    autoComplete="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="voce@empresa.com"
-                    className="pl-10"
-                  />
-                </div>
-              </div>
+            <div className="my-6 h-px bg-line-soft" />
 
-              {mode !== "reset" && (
-                <div>
-                  <div className="mb-1.5 flex items-baseline justify-between">
-                    <label
-                      htmlFor="password"
-                      className="text-[11px] font-medium uppercase tracking-wider text-fg-mute"
-                    >
-                      Senha
-                    </label>
-                    {mode === "signin" && (
+            <form onSubmit={enviar} className="flex flex-col gap-4">
+              <label className="block">
+                <span className="mb-1.5 block text-[12.5px] font-medium text-fg-dim">
+                  Seu e-mail
+                </span>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="voce@empresa.com"
+                  className={`${campo} px-4`}
+                />
+              </label>
+
+              {modo !== "recuperar" && (
+                <label className="block">
+                  <span className="mb-1.5 flex items-baseline justify-between">
+                    <span className="text-[12.5px] font-medium text-fg-dim">
+                      {modo === "criar" ? "Crie uma senha" : "Sua senha"}
+                    </span>
+                    {modo === "entrar" && (
                       <button
                         type="button"
-                        onClick={() => {
-                          setMode("reset");
-                          setError("");
-                          setOk("");
-                        }}
-                        className="text-[11px] text-brand-400 hover:text-brand-500"
+                        onClick={() => trocaModo("recuperar")}
+                        className="text-[12px] font-semibold text-brand-400 hover:underline"
                       >
-                        Esqueci a senha
+                        Esqueci
                       </button>
                     )}
-                  </div>
-                  <div className="relative">
-                    <Lock
-                      size={15}
-                      className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
-                    />
-                    <Input
-                      id="password"
-                      type={show ? "text" : "password"}
+                  </span>
+                  <span className="relative block">
+                    <input
+                      type={vendo ? "text" : "password"}
                       autoComplete={
-                        mode === "signup" ? "new-password" : "current-password"
+                        modo === "criar" ? "new-password" : "current-password"
                       }
                       required
                       minLength={6}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      value={senha}
+                      onChange={(e) => setSenha(e.target.value)}
                       placeholder="••••••••"
-                      className="pl-10 pr-10"
+                      className={`${campo} pl-4 pr-11`}
                     />
                     <button
                       type="button"
-                      onClick={() => setShow((v) => !v)}
-                      aria-label={show ? "Ocultar senha" : "Mostrar senha"}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-fg-mute transition-colors hover:text-fg-dim"
+                      onClick={() => setVendo((v) => !v)}
+                      aria-label={vendo ? "Ocultar senha" : "Mostrar senha"}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-fg-mute transition-colors hover:text-fg-dim"
                     >
-                      {show ? <EyeOff size={15} /> : <Eye size={15} />}
+                      {vendo ? <EyeOff size={17} /> : <Eye size={17} />}
                     </button>
-                  </div>
-                  {mode === "signup" && (
-                    <p className="mt-1.5 text-[11px] text-fg-mute">
+                  </span>
+                  {modo === "criar" && (
+                    <span className="mt-1.5 block text-[11.5px] text-fg-mute">
                       Mínimo 6 caracteres.
-                    </p>
+                    </span>
                   )}
-                </div>
+                </label>
               )}
 
-              {error && (
-                <div className="flex gap-2 rounded-xl border border-neg/30 bg-neg/10 p-3 text-xs text-neg">
-                  <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-                  {error}
-                </div>
+              {erro && (
+                <p className="flex gap-2 rounded-[14px] bg-neg/12 p-3 text-xs font-medium text-neg">
+                  <AlertTriangle size={14} className="mt-px shrink-0" />
+                  {erro}
+                </p>
               )}
               {ok && (
-                <div className="flex gap-2 rounded-xl border border-pos/30 bg-pos/10 p-3 text-xs text-pos">
-                  <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+                <p className="flex gap-2 rounded-[14px] bg-pos/12 p-3 text-xs font-medium text-pos">
+                  <CheckCircle2 size={14} className="mt-px shrink-0" />
                   {ok}
-                </div>
+                </p>
               )}
 
-              <Button
+              <button
                 type="submit"
-                variant="primary"
-                disabled={busy || !configured}
-                className="w-full"
+                disabled={ocupado || !configurado}
+                className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-brand-500 text-[15px] font-bold text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-45"
               >
-                {busy ? (
-                  <Loader2 size={15} className="animate-spin" />
+                {ocupado ? (
+                  <Loader2 size={17} className="animate-spin" />
                 ) : (
                   <>
-                    {t.cta}
-                    <ArrowRight size={15} />
+                    {t.acao}
+                    <ArrowRight size={17} />
                   </>
                 )}
-              </Button>
+              </button>
             </form>
 
-            <div className="mt-6 border-t border-line-soft pt-5 text-center text-xs text-fg-mute">
-              {mode === "signin" ? (
+            <p className="mt-6 text-center text-[13px] text-fg-mute">
+              {modo === "entrar" ? (
                 <>
                   Não tem conta?{" "}
                   <button
-                    onClick={() => {
-                      setMode("signup");
-                      setError("");
-                      setOk("");
-                    }}
-                    className="font-medium text-brand-400 hover:text-brand-500"
+                    onClick={() => trocaModo("criar")}
+                    className="font-bold text-fg underline"
                   >
                     Criar agora
                   </button>
@@ -324,18 +299,14 @@ function LoginForm() {
                 <>
                   Já tem conta?{" "}
                   <button
-                    onClick={() => {
-                      setMode("signin");
-                      setError("");
-                      setOk("");
-                    }}
-                    className="font-medium text-brand-400 hover:text-brand-500"
+                    onClick={() => trocaModo("entrar")}
+                    className="font-bold text-fg underline"
                   >
                     Entrar
                   </button>
                 </>
               )}
-            </div>
+            </p>
           </div>
         </div>
       </div>
@@ -352,7 +323,7 @@ export default function LoginPage() {
         </div>
       }
     >
-      <LoginForm />
+      <Formulario />
     </React.Suspense>
   );
 }

@@ -486,7 +486,7 @@ export default function CalendarioPage() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                        <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
                           <button
                             onClick={() => startEdit(e)}
                             aria-label="Editar"

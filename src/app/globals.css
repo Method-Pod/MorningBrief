@@ -149,24 +149,27 @@ textarea::placeholder {
   color: var(--color-fg-mute);
 }
 
+/* Só opacidade: transform criava containing block e forçava repaint de
+   subárvore inteira a cada navegação. Fade é composto na GPU e não afeta
+   layout nem position:fixed dos filhos. */
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: none;
   }
 }
 .rise {
-  animation: rise 0.34s cubic-bezier(0.2, 1, 0.3, 1) both;
+  animation: rise 0.18s ease-out both;
 }
 
+/* pop fica com transform: é o modal, que já vive num portal no <body>,
+   então o containing block não atrapalha ninguém. */
 @keyframes pop {
   from {
     opacity: 0;
-    transform: scale(0.98) translateY(6px);
+    transform: scale(0.985);
   }
   to {
     opacity: 1;
@@ -174,7 +177,8 @@ textarea::placeholder {
   }
 }
 .pop {
-  animation: pop 0.18s cubic-bezier(0.2, 1, 0.3, 1) both;
+  animation: pop 0.14s ease-out both;
+  will-change: transform, opacity;
 }
 
 @keyframes fade {

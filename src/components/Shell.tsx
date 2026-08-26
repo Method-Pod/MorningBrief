@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ChevronRight,
   ListChecks,
+  Repeat2,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ACCENTS, useAccent } from "./accent";
+import { Iniciais, useAvatar } from "./Avatar";
 import { cx } from "./ui";
 
 /*
@@ -27,6 +29,7 @@ import { cx } from "./ui";
 const NAV = [
   { href: "/", label: "Início", icon: LayoutDashboard },
   { href: "/demandas", label: "Demandas", icon: ListChecks },
+  { href: "/habitos", label: "Hábitos", icon: Repeat2 },
   { href: "/contas", label: "Contas a pagar", icon: Wallet },
   { href: "/anotacoes", label: "Anotações", icon: StickyNote },
   { href: "/calendario", label: "Calendário", icon: CalendarDays },
@@ -71,7 +74,7 @@ function CaixaConta({
   ativo: boolean;
 }) {
   const nome = email.split("@")[0] || "você";
-  const iniciais = nome.slice(0, 2).toUpperCase();
+  const { url: foto } = useAvatar();
 
   return (
     <section
@@ -87,9 +90,7 @@ function CaixaConta({
         href="/conta"
         className="flex items-center gap-2.5 rounded-[12px] transition-opacity hover:opacity-80"
       >
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-[11px] font-bold text-on-brand">
-          {iniciais}
-        </span>
+        <Iniciais nome={nome} url={foto} tamanho={32} />
         <span className="min-w-0 flex-1">
           <span
             className={cx(
@@ -153,7 +154,7 @@ export function Shell({
             key={href}
             href={href}
             className={cx(
-              "flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm font-medium transition-all duration-150",
+              "flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm font-medium transition-colors duration-150",
               active
                 ? "bg-brand-500 text-on-brand"
                 : "text-fg-dim hover:bg-ink-800 hover:text-fg"

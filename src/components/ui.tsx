@@ -57,7 +57,7 @@ export function Button({
   ...rest
 }: BtnProps) {
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-all duration-150 disabled:opacity-45 disabled:pointer-events-none select-none";
+    "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-colors duration-150 disabled:opacity-45 disabled:pointer-events-none select-none";
   const sizes = {
     sm: "h-8 px-3 text-xs",
     md: "h-10 px-4 text-sm",
@@ -178,7 +178,7 @@ export function Segmented<T extends string>({
           key={o.value}
           onClick={() => onChange(o.value)}
           className={cx(
-            "h-7 rounded-lg px-3 text-xs font-medium transition-all",
+            "h-7 rounded-lg px-3 text-xs font-medium transition-colors",
             value === o.value
               ? "bg-white text-brand-400 shadow-[0_1px_2px_rgb(20_24_26/0.05)]"
               : "text-fg-mute hover:text-fg-dim"
