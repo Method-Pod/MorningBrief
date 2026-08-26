@@ -237,8 +237,19 @@ textarea::placeholder {
     opacity: 1;
   }
 }
+/*
+ * Atraso curto, entrada curta.
+ *
+ * A espera medida é de 0.35s a 0.60s. Numa janela dessas, uma entrada de 300ms
+ * fazia o indicador passar quase toda a vida aparecendo — ficava plenamente
+ * visível por 0.10s e saía. É isso que se lê como blip.
+ *
+ * Com 140ms ele chega inteiro em 0.19s e fica presente pelo resto da espera.
+ * Presença longa é o que evita a impressão de tela parada; a suavidade vem da
+ * curva do ponto, não de uma entrada arrastada.
+ */
 .surgir-tarde {
-  animation: surgir 0.22s ease-out 0.15s both;
+  animation: surgir 0.14s ease-out 0.05s both;
 }
 
 /*
@@ -257,19 +268,28 @@ textarea::placeholder {
 @keyframes carregando-ponto {
   0%,
   100% {
-    opacity: 0.28;
+    opacity: 0.3;
     transform: translate3d(0, 0, 0);
   }
   50% {
     opacity: 1;
-    transform: translate3d(0, -3px, 0);
+    transform: translate3d(0, -4px, 0);
   }
 }
 .ponto {
   /* base fora da animação: com prefers-reduced-motion o ciclo é cortado e
      este valor é o que fica, então o indicador continua legível */
   opacity: 1;
-  animation: carregando-ponto 1.45s ease-in-out infinite;
+  /*
+   * Ciclo longo, de propósito: o pedido é que pareça calmo.
+   *
+   * O risco de desacelerar é o ponto quase não se mover na janela de meio
+   * segundo em que fica na tela, e ponto imóvel lê como travado. O que evita
+   * isso não é o ciclo curto: é o passo de 0.22s entre os três, que mantém os
+   * pontos em fases visivelmente diferentes. A fila se lê como onda parada no
+   * meio do movimento, com deriva lenta — que é o efeito procurado.
+   */
+  animation: carregando-ponto 2s ease-in-out infinite;
 }
 
 @keyframes fade {
