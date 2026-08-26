@@ -9,6 +9,8 @@ import {
   PartyPopper,
   Pencil,
   Repeat2,
+  CheckSquare,
+  HandCoins,
   Search,
   Tag,
   Trash2,
@@ -16,11 +18,21 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { type Bill, type BillStatus } from "@/lib/types";
+import {
+  ehAbatida,
+  restanteDe,
+  type Bill,
+  type BillStatus,
+} from "@/lib/types";
 import {
   GerenciarCategorias,
   useCategorias,
 } from "@/components/Categorias";
+import {
+  AbaterModal,
+  BarraLote,
+  ProgressoAbatida,
+} from "@/components/ContasLote";
 import { brl, dataCurta, daysUntil, rotuloMes, todayISO } from "@/lib/format";
 import {
   CalendarioPagamentos,
@@ -79,6 +91,9 @@ const vazio = () => ({
   parcelado: false,
   installment_no: 1,
   installment_total: 2,
+  // conta paga aos poucos, sem data marcada
+  abatida: false,
+  paid_amount: "0",
 });
 
 export default function ContasPage() {
@@ -111,12 +126,20 @@ export default function ContasPage() {
   const notice = useNotice();
   const categorias = useCategorias(supabase);
   const [gerindoCategorias, setGerindoCategorias] = React.useState(false);
+  const [modoSelecao, setModoSelecao] = React.useState(false);
+  const [selecao, setSelecao] = React.useState<Set<string>>(new Set());
+  const [abatendo, setAbatendo] = React.useState<Bill | null>(null);
+  const [emLote, setEmLote] = React.useState(false);
 
   const load = React.useCallback(async () => {
     const { data } = await supabase.from("bills").select("*").order("due_date");
     // numeric do Postgres chega como string no JSON
     setRows(
-      ((data as Bill[]) ?? []).map((b) => ({ ...b, amount: Number(b.amount) }))
+      ((data as Bill[]) ?? []).map((b) => ({
+        ...b,
+        amount: Number(b.amount),
+        paid_amount: b.paid_amount == null ? null : Number(b.paid_amount),
+      }))
     );
     setLoading(false);
   }, [supabase]);
@@ -147,6 +170,8 @@ export default function ContasPage() {
       parcelado: b.installment_total != null,
       installment_no: b.installment_no ?? 1,
       installment_total: b.installment_total ?? 2,
+      abatida: ehAbatida(b),
+      paid_amount: String(b.paid_amount ?? 0),
     });
     setErr("");
     setOpen(true);
@@ -187,6 +212,23 @@ export default function ContasPage() {
        * não rodou, contas simples continuam sendo criadas normalmente em vez
        * de todas falharem com "could not find the column".
        */
+      /* paid_amount vem de ABATIDAS.sql. Só entra no payload quando a conta é
+         abatida, para o banco sem a migração continuar aceitando conta comum. */
+      ...(form.abatida || editing?.paid_amount != null
+        ? {
+            paid_amount: form.abatida
+              ? Math.min(
+                  valor,
+                  Math.max(
+                    0,
+                    parseFloat(
+                      String(form.paid_amount).replace(/\./g, "").replace(",", ".")
+                    ) || 0
+                  )
+                )
+              : null,
+          }
+        : {}),
       ...(form.parcelado || editing?.installment_total != null
         ? {
             installment_no: form.parcelado ? Number(form.installment_no) : null,
@@ -219,6 +261,10 @@ export default function ContasPage() {
       if (error.code === "PGRST204" && error.message.includes("installment"))
         return setErr(
           "Parcelamento precisa da migração 003 no banco. Rode supabase/migration-003.sql ou desmarque \"Parcelada\"."
+        );
+      if (error.code === "PGRST204" && error.message.includes("paid_amount"))
+        return setErr(
+          "Conta abatida precisa de supabase/ABATIDAS.sql no banco. Rode o arquivo ou desmarque \"Conta abatida\"."
         );
       return setErr(error.message);
     }
@@ -267,6 +313,81 @@ export default function ContasPage() {
     setLancando(null);
     if (!notice.check(error, "lançar a próxima parcela")) load();
   };
+
+  /*
+   * Grava o novo total abatido e quita a conta quando cobre o valor.
+   *
+   * Sem virar `paid` ao cobrir, a conta ficaria como dívida do mês para sempre,
+   * já que é justamente o resto em aberto que a mantém no recorte do mês.
+   */
+  const abater = async (novoTotalPago: number) => {
+    if (!abatendo) return;
+    setEmLote(true);
+    const quitou = novoTotalPago >= Number(abatendo.amount) - 0.001;
+    const { error } = await supabase
+      .from("bills")
+      .update({
+        paid_amount: novoTotalPago,
+        status: quitou ? "paid" : "pending",
+        paid_at: quitou ? new Date().toISOString() : null,
+      })
+      .eq("id", abatendo.id);
+    setEmLote(false);
+    if (notice.check(error, "abater o pagamento")) return;
+    setAbatendo(null);
+    load();
+  };
+
+  /* ------------------------------ lote ------------------------------ */
+
+  const acaoEmLote = async (
+    acao: "pagar" | "reabrir" | "categoria" | "vencimento" | "excluir",
+    valor?: string
+  ) => {
+    const ids = [...selecao];
+    if (!ids.length) return;
+
+    if (acao === "excluir") {
+      confirm.ask(
+        `Excluir ${ids.length} conta${ids.length > 1 ? "s" : ""}? Não pode ser desfeito.`,
+        async () => {
+          setEmLote(true);
+          const { error } = await supabase.from("bills").delete().in("id", ids);
+          setEmLote(false);
+          if (!notice.check(error, "excluir as contas")) {
+            setSelecao(new Set());
+            load();
+          }
+        }
+      );
+      return;
+    }
+
+    const patch: Record<string, unknown> =
+      acao === "pagar"
+        ? { status: "paid", paid_at: new Date().toISOString() }
+        : acao === "reabrir"
+          ? { status: "pending", paid_at: null }
+          : acao === "categoria"
+            ? { category: valor }
+            : { due_date: valor };
+
+    setEmLote(true);
+    const { error } = await supabase.from("bills").update(patch).in("id", ids);
+    setEmLote(false);
+    if (!notice.check(error, "aplicar a alteração")) {
+      setSelecao(new Set());
+      load();
+    }
+  };
+
+  const alternarSelecao = (id: string) =>
+    setSelecao((v) => {
+      const n = new Set(v);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   const excluir = (b: Bill) =>
     confirm.ask(`Excluir "${b.description}"? Não pode ser desfeito.`, async () => {
@@ -378,22 +499,41 @@ export default function ContasPage() {
    */
   const doMes = React.useMemo(() => {
     const prefixo = todayISO().slice(0, 7);
-    return rows.filter((b) => b.due_date.startsWith(prefixo));
+    return rows.filter(
+      (b) =>
+        b.due_date.startsWith(prefixo) ||
+        /* Conta abatida em aberto acompanha o mês atual, independente do
+           vencimento: ela não tem data marcada e segue sendo dívida de hoje
+           até o abatimento cobrir o total. */
+        (ehAbatida(b) && b.status === "pending" && restanteDe(b) > 0)
+    );
   }, [rows]);
 
   const resumoMes = React.useMemo(() => {
-    const soma = (l: Bill[]) => l.reduce((s, b) => s + b.amount, 0);
     const pend = doMes.filter((b) => b.status === "pending");
     const pagas = doMes.filter((b) => b.status === "paid");
     const venc = pend.filter(atrasada);
+
+    /*
+     * Numa conta abatida, a parte já abatida é dinheiro pago e só o resto é
+     * dívida. Somar o valor cheio em "Pendentes" mostraria como dívida algo
+     * que já saiu do bolso.
+     */
+    const emAberto = (l: Bill[]) => l.reduce((s, b) => s + restanteDe(b), 0);
+    const quitado = (l: Bill[]) =>
+      l.reduce(
+        (s, b) => s + (b.status === "paid" ? b.amount : Number(b.paid_amount ?? 0)),
+        0
+      );
+
     return {
-      total: soma(doMes),
+      total: doMes.reduce((s, b) => s + b.amount, 0),
       qtdTotal: doMes.length,
-      pagas: soma(pagas),
+      pagas: quitado(doMes),
       qtdPagas: pagas.length,
-      pendentes: soma(pend),
+      pendentes: emAberto(pend),
       qtdPendentes: pend.length,
-      vencidas: soma(venc),
+      vencidas: emAberto(venc),
       qtdVencidas: venc.length,
     };
   }, [doMes]);
@@ -478,6 +618,16 @@ export default function ContasPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => {
+              setModoSelecao((v) => !v);
+              setSelecao(new Set());
+            }}
+            className={modoSelecao ? "text-brand-400" : undefined}
+          >
+            <CheckSquare size={15} />
+            {modoSelecao ? "Sair da seleção" : "Selecionar"}
+          </Button>
           <Button onClick={() => setGerindoCategorias(true)}>
             <Tag size={15} />
             Categorias
@@ -637,6 +787,24 @@ export default function ContasPage() {
                       </span>
                     </button>
                   </h2>
+                  {aberto && modoSelecao && (
+                    <button
+                      onClick={() => {
+                        const ids = g.itens.map((b) => b.id);
+                        const todos = ids.every((id) => selecao.has(id));
+                        setSelecao((v) => {
+                          const n = new Set(v);
+                          ids.forEach((id) => (todos ? n.delete(id) : n.add(id)));
+                          return n;
+                        });
+                      }}
+                      className="px-[18px] pb-1 text-[11px] font-semibold text-brand-400 hover:underline"
+                    >
+                      {g.itens.every((b) => selecao.has(b.id))
+                        ? "Desmarcar grupo"
+                        : "Selecionar grupo"}
+                    </button>
+                  )}
                   {aberto && (
                     <ul className="px-2.5 pb-1">
                       {g.itens.map((b) => (
@@ -644,7 +812,11 @@ export default function ContasPage() {
                           key={b.id}
                           b={b}
                           atrasada={atrasada(b)}
+                          selecionavel={modoSelecao}
+                          selecionada={selecao.has(b.id)}
+                          onSelecionar={() => alternarSelecao(b.id)}
                           onAlternar={() => alternar(b)}
+                          onAbater={() => setAbatendo(b)}
                           onEditar={() => editar(b)}
                           onExcluir={() => excluir(b)}
                         />
@@ -756,7 +928,14 @@ export default function ContasPage() {
                 placeholder="1500,00"
               />
             </Field>
-            <Field label="Vencimento">
+            <Field
+              label={form.abatida ? "Data de referência" : "Vencimento"}
+              hint={
+                form.abatida
+                  ? "Conta abatida não tem vencimento; serve só para ordenar."
+                  : undefined
+              }
+            >
               <Input
                 type="date"
                 value={form.due_date}
@@ -818,6 +997,40 @@ export default function ContasPage() {
               </span>
             </span>
           </label>
+
+          <div className="rounded-[14px] bg-ink-800 p-3.5">
+            <label className="flex cursor-pointer items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={form.abatida}
+                onChange={(e) =>
+                  setForm({ ...form, abatida: e.target.checked })
+                }
+                className="mt-0.5 h-4 w-4 accent-[var(--a)]"
+              />
+              <span className="text-sm text-fg-dim">
+                <span className="font-semibold text-fg">Conta abatida</span>
+                <span className="mt-0.5 block text-[11.5px] text-fg-mute">
+                  Paga aos poucos, sem data marcada. Fica como dívida do mês
+                  atual até o abatimento cobrir o total.
+                </span>
+              </span>
+            </label>
+            {form.abatida && (
+              <div className="mt-3.5 border-t border-line-soft pt-3.5">
+                <Field label="Já abatido (R$)" hint="Depois, use o botão Abater na lista para somar cada pagamento.">
+                  <Input
+                    inputMode="decimal"
+                    value={form.paid_amount}
+                    onChange={(e) =>
+                      setForm({ ...form, paid_amount: e.target.value })
+                    }
+                    placeholder="0,00"
+                  />
+                </Field>
+              </div>
+            )}
+          </div>
 
           <div className="rounded-[14px] bg-ink-800 p-3.5">
             <label className="flex cursor-pointer items-center gap-2.5">
@@ -882,6 +1095,21 @@ export default function ContasPage() {
         onMudou={load}
       />
 
+      <AbaterModal
+        conta={abatendo}
+        onFechar={() => setAbatendo(null)}
+        onAbater={abater}
+        ocupado={emLote}
+      />
+
+      <BarraLote
+        selecionadas={filtradas.filter((b) => selecao.has(b.id))}
+        categorias={categorias.nomes}
+        onLimpar={() => setSelecao(new Set())}
+        onAcao={acaoEmLote}
+        ocupado={emLote}
+      />
+
       {confirm.node}
       {notice.node}
     </div>
@@ -935,21 +1163,44 @@ function Numero({
 function Linha({
   b,
   atrasada,
+  selecionavel,
+  selecionada,
+  onSelecionar,
   onAlternar,
+  onAbater,
   onEditar,
   onExcluir,
 }: {
   b: Bill;
   atrasada: boolean;
+  selecionavel: boolean;
+  selecionada: boolean;
+  onSelecionar: () => void;
   onAlternar: () => void;
+  onAbater: () => void;
   onEditar: () => void;
   onExcluir: () => void;
 }) {
   const d = daysUntil(b.due_date);
   const paga = b.status === "paid";
+  const abatida = ehAbatida(b);
 
   return (
-    <li className="group flex items-center gap-3 rounded-[14px] px-3 py-2.5 transition-colors hover:bg-ink-800">
+    <li
+      className={cx(
+        "group flex items-center gap-3 rounded-[14px] px-3 py-2.5 transition-colors",
+        selecionada ? "bg-brand-500/10" : "hover:bg-ink-800"
+      )}
+    >
+      {selecionavel && (
+        <input
+          type="checkbox"
+          checked={selecionada}
+          onChange={onSelecionar}
+          aria-label={`Selecionar ${b.description}`}
+          className="h-4 w-4 shrink-0 accent-[var(--a)]"
+        />
+      )}
       <button
         onClick={onAlternar}
         aria-label={paga ? "Marcar em aberto" : "Marcar como paga"}
@@ -973,12 +1224,20 @@ function Linha({
           {b.description}
         </p>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mute">
-          <span className="tnum">{dataCurta(b.due_date)}</span>
+          <span className="tnum">
+            {abatida ? "sem data" : dataCurta(b.due_date)}
+          </span>
           <span className="opacity-40">·</span>
           <span>{b.category}</span>
           {b.installment_total != null && (
             <span className="rounded-full bg-brand-500/12 px-1.5 font-semibold text-brand-400 tnum">
               {b.installment_no}/{b.installment_total}
+            </span>
+          )}
+          {abatida && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-warn/12 px-1.5 font-semibold text-warn">
+              <HandCoins size={9} />
+              abatida
             </span>
           )}
           {b.recurring && (
@@ -999,10 +1258,11 @@ function Linha({
               vence hoje
             </span>
           )}
-          {!paga && d > 0 && d <= 7 && (
+          {!paga && !abatida && d > 0 && d <= 7 && (
             <span className="font-bold text-warn">em {d}d</span>
           )}
         </div>
+        {abatida && <ProgressoAbatida conta={b} />}
       </div>
 
       <span
@@ -1016,6 +1276,16 @@ function Linha({
       </span>
 
       <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+        {abatida && !paga && (
+          <button
+            onClick={onAbater}
+            aria-label={`Abater pagamento de ${b.description}`}
+            title="Abater pagamento"
+            className="grid h-7 w-7 place-items-center rounded-lg text-warn transition-colors hover:bg-warn/15"
+          >
+            <HandCoins size={14} />
+          </button>
+        )}
         <button
           onClick={onEditar}
           aria-label="Editar"

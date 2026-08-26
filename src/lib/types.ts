@@ -35,7 +35,21 @@ export type Bill = {
   /* Parcelas: nulo nas duas = conta simples. Ver migration-003.sql. */
   installment_no: number | null;
   installment_total: number | null;
+  /*
+   * Conta abatida: nulo = pagamento único. Não-nulo = quanto já foi abatido,
+   * e a conta segue como dívida do mês atual até cobrir `amount`.
+   * Ver ABATIDAS.sql.
+   */
+  paid_amount: number | null;
 };
+
+/** Quanto falta numa conta abatida. Conta comum devolve o valor cheio. */
+export const restanteDe = (b: Pick<Bill, "amount" | "paid_amount">) =>
+  Math.max(0, Number(b.amount) - Number(b.paid_amount ?? 0));
+
+/** É conta abatida? */
+export const ehAbatida = (b: Pick<Bill, "paid_amount">) =>
+  b.paid_amount !== null && b.paid_amount !== undefined;
 
 export type Task = {
   id: string;
