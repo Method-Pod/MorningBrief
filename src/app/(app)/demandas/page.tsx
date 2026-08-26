@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Building2,
   CalendarDays,
+  Info,
   ListChecks,
   Pencil,
   Plus,
@@ -27,6 +28,7 @@ import {
   type TaskStatus,
 } from "@/lib/types";
 import { dateBR, daysUntil, todayISO } from "@/lib/format";
+import { HORAS_RETENCAO } from "@/lib/limpeza";
 import { frequencyDescription } from "@/lib/recurring";
 import {
   Badge,
@@ -290,6 +292,13 @@ export default function DemandasPage() {
           Nova demanda
         </Button>
       </div>
+
+      {/* A remoção automática precisa estar escrita: sem isso, a demanda
+          desaparece do quadro e parece que o app perdeu o dado. */}
+      <p className="mb-4 flex items-center gap-2 text-[12px] text-fg-mute">
+        <Info size={13} className="shrink-0" />
+        Demandas concluídas são removidas {HORAS_RETENCAO}h depois.
+      </p>
 
       <div className="flex flex-wrap items-center gap-3">
         <Segmented

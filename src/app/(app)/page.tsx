@@ -10,6 +10,7 @@ import {
   Pin,
   Plus,
   Repeat2,
+  Trash2,
   Wallet,
   Zap,
 } from "lucide-react";
@@ -27,6 +28,7 @@ import {
   todayISO,
 } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
+import { limparConcluidas } from "@/lib/limpeza";
 import { Card, Carregando, useNotice, cx } from "@/components/ui";
 import { useIdentity } from "@/components/identity";
 
@@ -61,6 +63,7 @@ export default function HomePage() {
   const [events, setEvents] = React.useState<CalendarEvent[]>([]);
   const [notes, setNotes] = React.useState<Note[]>([]);
   const [generated, setGenerated] = React.useState(0);
+  const [limpas, setLimpas] = React.useState(0);
   const [draft, setDraft] = React.useState("");
   const [adding, setAdding] = React.useState(false);
   const notice = useNotice();
@@ -152,9 +155,16 @@ export default function HomePage() {
   React.useEffect(() => {
     let alive = true;
     (async () => {
+      /*
+       * A limpeza vem antes da primeira leitura: assim a tela nunca mostra
+       * uma demanda que está a caminho de ser apagada, o que apareceria como
+       * item piscando na lista.
+       */
+      const apagadas = await limparConcluidas(supabase);
       const rows = await load();
       const made = await materialize(rows);
       if (!alive) return;
+      if (apagadas && apagadas > 0) setLimpas(apagadas);
       if (made > 0) {
         setGenerated(made);
         await load();
@@ -278,6 +288,15 @@ export default function HomePage() {
           })}
         </span>
       </div>
+
+      {limpas > 0 && (
+        <div className="mb-4 flex items-center gap-2.5 rounded-[14px] bg-ink-800 px-4 py-3 text-[12.5px] text-fg-mute">
+          <Trash2 size={15} className="shrink-0" />
+          {limpas} demanda{limpas > 1 ? "s" : ""} concluída
+          {limpas > 1 ? "s" : ""} há mais de 24h {limpas > 1 ? "foram" : "foi"}{" "}
+          removida{limpas > 1 ? "s" : ""}.
+        </div>
+      )}
 
       {generated > 0 && (
         <div className="mb-4 flex items-center gap-2.5 rounded-[14px] bg-brand-500/12 px-4 py-3 text-[12.5px] font-medium text-brand-400">
