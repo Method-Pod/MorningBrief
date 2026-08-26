@@ -33,7 +33,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" data-accent="blue" className={jakarta.variable}>
+    // suppressHydrationWarning: o ACCENT_BOOT troca data-accent antes da
+    // hidratação, então o <html> do servidor divergir do cliente é esperado.
+    // Extensões de navegador também injetam atributos aqui (LanguageTool
+    // grava data-lt-installed). Vale só para os atributos deste elemento —
+    // não silencia diferença nenhuma dentro da árvore.
+    <html
+      lang="pt-BR"
+      data-accent="blue"
+      className={jakarta.variable}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: ACCENT_BOOT }} />
       </head>
