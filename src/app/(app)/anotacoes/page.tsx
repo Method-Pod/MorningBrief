@@ -121,8 +121,8 @@ export default function AnotacoesPage() {
       .from("notes")
       .update({ pinned: !n.pinned })
       .eq("id", n.id);
-    notice.check(error, n.pinned ? "desafixar a nota" : "fixar a nota");
-    load();
+    if (notice.check(error, n.pinned ? "desafixar a nota" : "fixar a nota"))
+      load();
   };
 
   const remove = (n: Note) =>

@@ -16,8 +16,9 @@ export function useAvatar() {
   const [url, setUrl] = React.useState<string | null>(null);
 
   const recarregar = React.useCallback(async () => {
-    const { data } = await supabase.auth.getUser();
-    const v = data.user?.user_metadata?.avatar_url;
+    // user_metadata vem dentro do JWT, então não precisa consultar o servidor
+    const { data } = await supabase.auth.getClaims();
+    const v = data?.claims?.user_metadata?.avatar_url;
     setUrl(typeof v === "string" && v ? v : null);
   }, [supabase]);
 

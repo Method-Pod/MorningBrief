@@ -225,8 +225,13 @@ export default function ContasPage() {
         paid_at: proximo === "paid" ? new Date().toISOString() : null,
       })
       .eq("id", b.id);
-    notice.check(error, proximo === "paid" ? "marcar como paga" : "reabrir a conta");
-    load();
+    if (
+      notice.check(
+        error,
+        proximo === "paid" ? "marcar como paga" : "reabrir a conta"
+      )
+    )
+      load();
   };
 
   /** Duplica a conta fixa para o mês seguinte, já em aberto. */

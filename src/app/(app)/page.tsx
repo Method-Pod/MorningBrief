@@ -202,8 +202,10 @@ export default function HomePage() {
         completed_at: done ? null : new Date().toISOString(),
       })
       .eq("id", t.id);
-    notice.check(error, done ? "reabrir a tarefa" : "concluir a tarefa");
-    load();
+    // A tela já foi atualizada de forma otimista; só recarrega se falhou,
+    // para desfazer. Recarregar sempre custava uma busca completa por clique.
+    if (notice.check(error, done ? "reabrir a tarefa" : "concluir a tarefa"))
+      load();
   };
 
   /* ------------------------------ derivados ------------------------------ */

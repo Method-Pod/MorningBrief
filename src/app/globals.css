@@ -96,6 +96,16 @@
 
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
+
+  /*
+   * Padrão de toda transição sem duração explícita.
+   *
+   * O default do Tailwind é 150ms com ease, que corta seco. Esta curva
+   * desacelera longo — quase todo o movimento acontece no começo e o fim
+   * chega deslizando, que é o que faz parecer macio em vez de duro.
+   */
+  --default-transition-duration: 220ms;
+  --default-transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
 html,
@@ -166,36 +176,46 @@ textarea::placeholder {
   color: var(--color-fg-mute);
 }
 
-/* Só opacidade: transform criava containing block e forçava repaint de
-   subárvore inteira a cada navegação. Fade é composto na GPU e não afeta
-   layout nem position:fixed dos filhos. */
+/*
+ * Entrada de página: opacidade mais um deslize curto.
+ *
+ * Só opacidade ficava dura — o conteúdo simplesmente aparecia. O deslize de
+ * 8px com curva longa dá a sensação de chegar em vez de piscar.
+ *
+ * INVARIANTE: nada com position:fixed pode viver dentro de .rise. O transform
+ * daqui cria containing block, e um filho fixo passaria a se posicionar
+ * contra este div em vez da janela. Modal e useNotice usam portal para o body
+ * exatamente por isso — não é preferência, é o que mantém esta animação
+ * possível.
+ */
 @keyframes rise {
   from {
     opacity: 0;
+    transform: translate3d(0, 8px, 0);
   }
   to {
     opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 }
 .rise {
-  animation: rise 0.18s ease-out both;
+  animation: rise 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
-/* pop fica com transform: é o modal, que já vive num portal no <body>,
-   então o containing block não atrapalha ninguém. */
+/* O modal vive num portal no <body>, então o transform daqui não alcança
+   ninguém. Escala pequena com a mesma curva longa das outras entradas. */
 @keyframes pop {
   from {
     opacity: 0;
-    transform: scale(0.985);
+    transform: translate3d(0, 10px, 0) scale(0.97);
   }
   to {
     opacity: 1;
-    transform: none;
+    transform: translate3d(0, 0, 0) scale(1);
   }
 }
 .pop {
-  animation: pop 0.14s ease-out both;
-  will-change: transform, opacity;
+  animation: pop 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 @keyframes fade {
@@ -207,7 +227,7 @@ textarea::placeholder {
   }
 }
 .fade {
-  animation: fade 0.14s ease both;
+  animation: fade 0.24s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

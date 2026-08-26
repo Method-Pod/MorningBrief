@@ -116,7 +116,7 @@ export default function HabitosPage() {
         .delete()
         .eq("habit_id", h.id)
         .eq("day", dia);
-      notice.check(error, "desmarcar o hábito");
+      if (notice.check(error, "desmarcar o hábito")) load();
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {
@@ -127,9 +127,9 @@ export default function HabitosPage() {
         .from("habit_logs")
         .insert({ user_id: uid, habit_id: h.id, day: dia });
       // 23505 = unique(habit_id, day): já estava marcado, não é falha
-      if (error && error.code !== "23505") notice.check(error, "marcar o hábito");
+      if (error && error.code !== "23505" && notice.check(error, "marcar o hábito"))
+        load();
     }
-    load();
   };
 
   const novo = () => {
@@ -202,8 +202,8 @@ export default function HabitosPage() {
       .from("habits")
       .update({ active: !h.active })
       .eq("id", h.id);
-    notice.check(error, h.active ? "pausar o hábito" : "retomar o hábito");
-    load();
+    if (notice.check(error, h.active ? "pausar o hábito" : "retomar o hábito"))
+      load();
   };
 
   /** Dias seguidos terminando hoje (ou ontem, se hoje ainda não foi marcado). */

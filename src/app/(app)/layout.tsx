@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { currentIdentity } from "@/lib/session";
 import { Shell } from "@/components/Shell";
 
 export default async function AppLayout({
@@ -15,11 +16,17 @@ export default async function AppLayout({
   }
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
+  /*
+   * Verificação local, não getUser().
+   *
+   * O middleware já validou a sessão contra o servidor de auth nesta mesma
+   * requisição. Chamar getUser() aqui repetia essa ida de ~105ms, em série
+   * com a do middleware, antes de qualquer pixel aparecer — 210ms de espera
+   * em cada clique de navegação.
+   */
+  const quem = await currentIdentity(supabase);
+  if (!quem) redirect("/login");
 
-  return <Shell email={user.email ?? ""}>{children}</Shell>;
+  return <Shell email={quem.email}>{children}</Shell>;
 }
