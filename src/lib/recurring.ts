@@ -44,20 +44,18 @@ export function isDueOn(r: RecurringTask, iso: string): boolean {
   }
 }
 
-/** Próxima data em que a recorrência dispara, olhando até 400 dias à frente. */
+/**
+ * Próxima data em que a recorrência realmente dispara, olhando até 400 dias
+ * à frente. Avalia com o `last_run_on` real — é o que garante que o intervalo
+ * mínimo de quinzenal/trimestral/anual seja respeitado; zerar o campo aqui
+ * fazia a regra quinzenal anunciar "hoje" num dia em que ela não geraria nada.
+ */
 export function nextOccurrence(r: RecurringTask, fromISO = todayISO()): string | null {
   if (!r.active) return null;
   const start = toDate(fromISO);
   for (let i = 0; i <= 400; i++) {
     const iso = toISO(new Date(start.getTime() + i * DAY));
-    // Ignora o trava-de-hoje para poder mostrar "próxima: hoje" mesmo já rodada.
-    const probe: RecurringTask = { ...r, last_run_on: null };
-    if (isDueOn(probe, iso)) {
-      if (r.frequency === "biweekly" || r.frequency === "quarterly" || r.frequency === "yearly") {
-        if (r.last_run_on && !isDueOn(r, iso)) continue;
-      }
-      return iso;
-    }
+    if (isDueOn(r, iso)) return iso;
   }
   return null;
 }
