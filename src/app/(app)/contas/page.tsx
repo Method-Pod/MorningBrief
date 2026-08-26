@@ -175,7 +175,12 @@ export default function ContasPage() {
       status: form.status,
       notes: form.notes.trim(),
       recurring: form.recurring,
-      paid_at: form.status === "paid" ? new Date().toISOString() : null,
+      /* Mesma razão do completed_at em demandas: reescrever aqui apagava
+         quando a conta foi realmente paga. */
+      paid_at:
+        form.status === "paid"
+          ? (editing?.paid_at ?? new Date().toISOString())
+          : null,
       /*
        * As colunas de parcela vêm da migration-003. Só entram no payload
        * quando a conta é parcelada: assim, num banco onde a migração ainda
@@ -278,7 +283,9 @@ export default function ContasPage() {
     const pend = rows.filter((b) => b.status === "pending");
     return {
       todas: rows.length,
-      hoje: rows.filter((b) => b.due_date.slice(0, 10) === todayISO()).length,
+      // pendentes, como "semana" e "atrasadas": misturar pagas fazia o
+      // contador do chip discordar da lista que ele filtra
+      hoje: pend.filter((b) => b.due_date.slice(0, 10) === todayISO()).length,
       semana: pend.filter((b) => {
         const d = daysUntil(b.due_date);
         return d >= 0 && d <= 7;
@@ -297,7 +304,7 @@ export default function ContasPage() {
       if (dia) return b.due_date.slice(0, 10) === dia;
       switch (filtro) {
         case "hoje":
-          return b.due_date.slice(0, 10) === hoje;
+          return b.status === "pending" && b.due_date.slice(0, 10) === hoje;
         case "semana": {
           const d = daysUntil(b.due_date);
           return b.status === "pending" && d >= 0 && d <= 7;

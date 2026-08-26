@@ -155,8 +155,18 @@ export default function DemandasPage() {
           ...base,
           status: form.status,
           due_date: form.due_date || null,
+          /*
+           * Preserva a conclusão original.
+           *
+           * Marcar `new Date()` aqui reescrevia a data de conclusão a cada
+           * edição: além de perder quando a demanda foi de fato concluída, a
+           * janela de 24h da limpeza reiniciava, e editar de vez em quando
+           * mantinha a demanda viva para sempre.
+           */
           completed_at:
-            form.status === "done" ? new Date().toISOString() : null,
+            form.status === "done"
+              ? (editing.completed_at ?? new Date().toISOString())
+              : null,
         })
         .eq("id", editing.id);
       setBusy(false);

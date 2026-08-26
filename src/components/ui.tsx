@@ -196,6 +196,9 @@ export function Segmented<T extends string>({
 
 /* ------------------------------ Modal ------------------------------ */
 
+/** Quantos modais estão abertos; a rolagem só volta quando chega a zero. */
+let travas = 0;
+
 export function Modal({
   open,
   onClose,
@@ -213,32 +216,83 @@ export function Modal({
   footer?: React.ReactNode;
   wide?: boolean;
 }) {
-  React.useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKey);
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prev;
-    };
-  }, [open, onClose]);
+  const caixa = React.useRef<HTMLDivElement>(null);
 
   /*
-   * O modal vai para um portal no <body>, não fica na árvore da página.
+   * Foco e trava de rolagem: dependem só de `open`.
    *
-   * As páginas envolvem o conteúdo num <div className="rise">, e a animação
-   * `rise` tem transform nos keyframes com fill-mode both. Isso faz o Chrome
-   * criar um containing block nesse div, então `position: fixed` passava a
-   * valer contra ele em vez da viewport: o scrim não cobria a sidebar e o
-   * container ficava com a altura do conteúdo da página, cortando o cabeçalho
-   * e o rodapé do modal para dentro de um overflow rolável.
-   *
-   * No portal, nenhum transform de ancestral alcança o modal.
+   * Estavam no mesmo efeito do teclado, que depende de `onClose`. Como o pai
+   * passa `onClose={() => setX(false)}`, a identidade muda a cada render, o
+   * efeito refazia cleanup e setup toda vez, e o cleanup desfazia o próprio
+   * trabalho: cancelava o frame que ia mover o foco para dentro e devolvia o
+   * foco ao gatilho. O foco nunca entrava no diálogo.
    */
+  React.useEffect(() => {
+    if (!open) return;
+
+    const anterior = document.activeElement as HTMLElement | null;
+
+    /*
+     * Foco síncrono no próprio diálogo, não num frame seguinte.
+     *
+     * requestAnimationFrame não funcionou aqui e o diagnóstico não fechou;
+     * foco síncrono no efeito elimina a questão de tempo, e focar o container
+     * em vez de um campo é o que faz o leitor de tela anunciar o diálogo em
+     * vez de ler só o primeiro input solto. O Tab a partir dele entra nos
+     * controles de dentro, então a armadilha continua valendo.
+     *
+     * Não sobrepõe quem já colocou o foco dentro via autoFocus.
+     */
+    const cx = caixa.current;
+    if (cx && !cx.contains(document.activeElement)) cx.focus();
+
+    /* Contagem, não valor salvo: com dois modais em sequência, o segundo
+       guardava "hidden" como estado anterior e travava o body ao fechar. */
+    travas += 1;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      travas = Math.max(0, travas - 1);
+      if (travas === 0) document.body.style.overflow = "";
+      anterior?.focus?.();
+    };
+  }, [open]);
+
+  /* Teclado num efeito próprio, porque depende de onClose. */
+  React.useEffect(() => {
+    if (!open) return;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+
+      /*
+       * Prende o Tab dentro do diálogo. O modal vive num portal no fim do
+       * <body>, então sem isto o Tab saía para os controles da página atrás,
+       * que seguem visíveis e clicáveis por trás do scrim.
+       */
+      const foco = caixa.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (!foco || !foco.length) return;
+      const primeiro = foco[0];
+      const ultimo = foco[foco.length - 1];
+      if (e.shiftKey && document.activeElement === primeiro) {
+        e.preventDefault();
+        ultimo.focus();
+      } else if (!e.shiftKey && document.activeElement === ultimo) {
+        e.preventDefault();
+        primeiro.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
@@ -248,8 +302,12 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
       <div className="fixed inset-0 bg-fg/35 fade" onClick={onClose} />
       <div
+        ref={caixa}
         role="dialog"
         aria-modal="true"
+        aria-label={title}
+        /* -1: focável por script, fora da ordem natural do Tab */
+        tabIndex={-1}
         className={cx(
           "relative z-10 w-full rounded-[20px] bg-white shadow-[0_24px_60px_-20px_rgb(20_24_26/0.3)] pop",
           wide ? "max-w-3xl" : "max-w-lg"
