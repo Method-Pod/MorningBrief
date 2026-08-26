@@ -10,12 +10,17 @@ import {
   Pencil,
   Repeat2,
   Search,
+  Tag,
   Trash2,
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { BILL_CATEGORIES, type Bill, type BillStatus } from "@/lib/types";
+import { type Bill, type BillStatus } from "@/lib/types";
+import {
+  GerenciarCategorias,
+  useCategorias,
+} from "@/components/Categorias";
 import { brl, dataCurta, daysUntil, rotuloMes, todayISO } from "@/lib/format";
 import {
   CalendarioPagamentos,
@@ -104,6 +109,8 @@ export default function ContasPage() {
   const [err, setErr] = React.useState("");
   const confirm = useConfirm();
   const notice = useNotice();
+  const categorias = useCategorias(supabase);
+  const [gerindoCategorias, setGerindoCategorias] = React.useState(false);
 
   const load = React.useCallback(async () => {
     const { data } = await supabase.from("bills").select("*").order("due_date");
@@ -390,6 +397,17 @@ export default function ContasPage() {
     [filtradas]
   );
 
+  /** Uso por categoria em TODAS as contas, não só no filtro: o aviso antes de
+      excluir precisa contar tudo, senão diria "sem uso" para categoria em uso
+      fora do recorte visível. */
+  const usoPorCategoria = React.useMemo(() => {
+    const m: Record<string, number> = {};
+    rows.forEach((b) => {
+      m[b.category] = (m[b.category] ?? 0) + 1;
+    });
+    return m;
+  }, [rows]);
+
   const porCategoria = React.useMemo(() => {
     const mapa = new Map<string, { pago: number; pendente: number }>();
     doMes.forEach((b) => {
@@ -452,10 +470,16 @@ export default function ContasPage() {
             )}
           </p>
         </div>
-        <Button variant="primary" onClick={novo}>
-          <Wallet size={15} />
-          Nova conta
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setGerindoCategorias(true)}>
+            <Tag size={15} />
+            Categorias
+          </Button>
+          <Button variant="primary" onClick={novo}>
+            <Wallet size={15} />
+            Nova conta
+          </Button>
+        </div>
       </div>
 
       {nadaPendente && (
@@ -740,7 +764,13 @@ export default function ContasPage() {
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
               >
-                {BILL_CATEGORIES.map((c) => (
+                {/* a categoria da conta em edição pode não estar mais na lista,
+                    se foi excluída; incluí-la evita o select cair no primeiro
+                    item e trocar a categoria sem a pessoa pedir */}
+                {(categorias.nomes.includes(form.category)
+                  ? categorias.nomes
+                  : [form.category, ...categorias.nomes]
+                ).map((c) => (
                   <option key={c}>{c}</option>
                 ))}
               </Select>
@@ -835,6 +865,15 @@ export default function ContasPage() {
           )}
         </form>
       </Modal>
+
+      <GerenciarCategorias
+        aberto={gerindoCategorias}
+        onFechar={() => setGerindoCategorias(false)}
+        supabase={supabase}
+        estado={categorias}
+        usoPorNome={usoPorCategoria}
+        onMudou={load}
+      />
 
       {confirm.node}
       {notice.node}

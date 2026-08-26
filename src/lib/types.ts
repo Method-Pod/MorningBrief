@@ -112,6 +112,14 @@ export const WEEKDAYS = [
   "Sábado",
 ];
 
+export type BillCategory = {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+};
+
+/** Semente usada na primeira visita e como reserva se a tabela não existir. */
 export const BILL_CATEGORIES = [
   "Moradia",
   "Impostos",
