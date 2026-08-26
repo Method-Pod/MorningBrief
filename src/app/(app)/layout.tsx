@@ -28,5 +28,9 @@ export default async function AppLayout({
   const quem = await currentIdentity(supabase);
   if (!quem) redirect("/login");
 
-  return <Shell email={quem.email}>{children}</Shell>;
+  return (
+    <Shell email={quem.email} nome={quem.nome}>
+      {children}
+    </Shell>
+  );
 }

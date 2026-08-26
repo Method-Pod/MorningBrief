@@ -28,19 +28,48 @@ export async function currentUserId(
   return data.session?.user.id ?? null;
 }
 
-/** Id e e-mail juntos, para telas que mostram quem está logado. */
+/**
+ * Nome de exibição a partir do que existe.
+ *
+ * Prefere um nome de verdade se estiver no metadata; cai para a parte antes
+ * do @ do e-mail, que é como o app já identifica a pessoa na barra lateral.
+ */
+function nomeDe(email: string, meta?: Record<string, unknown> | null) {
+  const bruto =
+    (typeof meta?.full_name === "string" && meta.full_name) ||
+    (typeof meta?.nome === "string" && meta.nome) ||
+    (typeof meta?.name === "string" && meta.name) ||
+    email.split("@")[0] ||
+    "";
+  const limpo = bruto.trim();
+  if (!limpo) return "";
+  // ponto, hífen e underscore em handle de e-mail viram espaço:
+  // "ana.silva" saía "Ana.silva" em vez de "Ana Silva"
+  return limpo
+    .replace(/[._-]+/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+/** Id, e-mail e nome, para telas que mostram quem está logado. */
 export async function currentIdentity(
   supabase: SupabaseClient
-): Promise<{ id: string; email: string } | null> {
+): Promise<{ id: string; email: string; nome: string } | null> {
   try {
     const { data } = await supabase.auth.getClaims();
     const c = data?.claims;
-    if (c && typeof c.sub === "string")
-      return { id: c.sub, email: typeof c.email === "string" ? c.email : "" };
+    if (c && typeof c.sub === "string") {
+      const email = typeof c.email === "string" ? c.email : "";
+      return { id: c.sub, email, nome: nomeDe(email, c.user_metadata) };
+    }
   } catch {
     // segue para o caminho alternativo
   }
   const { data } = await supabase.auth.getSession();
   const u = data.session?.user;
-  return u ? { id: u.id, email: u.email ?? "" } : null;
+  if (!u) return null;
+  const email = u.email ?? "";
+  return { id: u.id, email, nome: nomeDe(email, u.user_metadata) };
 }

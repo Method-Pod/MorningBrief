@@ -18,6 +18,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { ACCENTS, useAccent } from "./accent";
 import { Iniciais, useAvatar } from "./Avatar";
+import { IdentityProvider } from "./identity";
 import { cx } from "./ui";
 
 /*
@@ -149,9 +150,11 @@ function CaixaConta({
 
 export function Shell({
   email,
+  nome,
   children,
 }: {
   email: string;
+  nome: string;
   children: React.ReactNode;
 }) {
   const path = usePathname();
@@ -263,7 +266,7 @@ export function Shell({
             morning<span className="font-normal text-fg-mute">brief</span>
           </span>
         </div>
-        {children}
+        <IdentityProvider value={{ email, nome }}>{children}</IdentityProvider>
       </main>
     </div>
   );

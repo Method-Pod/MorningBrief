@@ -28,6 +28,7 @@ import {
 } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import { Card, Skeleton, useNotice, cx } from "@/components/ui";
+import { useIdentity } from "@/components/identity";
 
 const PRIO_DOT: Record<string, string> = {
   urgent: "bg-neg",
@@ -63,6 +64,7 @@ export default function HomePage() {
   const [draft, setDraft] = React.useState("");
   const [adding, setAdding] = React.useState(false);
   const notice = useNotice();
+  const { nome } = useIdentity();
 
   const today = todayISO();
 
@@ -261,8 +263,9 @@ export default function HomePage() {
       {/* ------------------------------ saudação ------------------------------ */}
       <div className="mb-[22px] flex flex-wrap items-start justify-between gap-3.5">
         <div>
-          <h1 className="flex items-center gap-2.5 text-[clamp(24px,4vw,32px)] font-bold tracking-[-0.035em]">
-            {greeting()} <span className="text-[0.8em]">☀️</span>
+          <h1 className="text-[clamp(24px,4vw,32px)] font-bold tracking-[-0.035em]">
+            {greeting()}
+            {nome && `, ${nome}`}
           </h1>
           <p className="mt-1.5 text-[14.5px] text-fg-mute">
             Vamos dar uma olhada no seu dia — tudo em um só lugar.
