@@ -37,29 +37,59 @@ const NAV = [
 
 function CaixaTema() {
   const { accent, setAccent } = useAccent();
+  /* Fechada por padrão: a cor se troca raramente, não precisa ocupar a
+     barra lateral o tempo todo. Fechada, ainda mostra qual está ativa. */
+  const [aberta, setAberta] = React.useState(false);
+  const atual = ACCENTS.find((a) => a.key === accent) ?? ACCENTS[1];
+
   return (
-    <section className="rounded-[16px] bg-ink-800 p-3.5">
-      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-fg-mute">
-        Tema
-      </p>
-      <p className="mb-2.5 text-[11.5px] text-fg-dim">Cor principal</p>
-      <div className="flex gap-2">
-        {ACCENTS.map((a) => (
-          <button
-            key={a.key}
-            onClick={() => setAccent(a.key)}
-            title={a.name}
-            aria-label={`Cor ${a.name}`}
-            aria-pressed={accent === a.key}
-            style={{ background: a.hex }}
-            className={cx(
-              "h-6 w-6 rounded-full transition-transform hover:scale-110",
-              accent === a.key &&
-                "ring-2 ring-fg-dim ring-offset-2 ring-offset-ink-800"
-            )}
+    <section className="overflow-hidden rounded-[16px] bg-ink-800">
+      <button
+        onClick={() => setAberta((v) => !v)}
+        aria-expanded={aberta}
+        className="flex w-full items-center gap-2 px-3.5 py-3 text-left transition-colors hover:bg-black/[0.03]"
+      >
+        <span className="flex-1 text-[10px] font-bold uppercase tracking-[0.1em] text-fg-mute">
+          Tema
+        </span>
+        {!aberta && (
+          <span
+            className="h-4 w-4 shrink-0 rounded-full ring-1 ring-black/10"
+            style={{ background: atual.hex }}
+            title={atual.name}
           />
-        ))}
-      </div>
+        )}
+        <ChevronRight
+          size={13}
+          className={cx(
+            "shrink-0 text-fg-mute transition-transform",
+            aberta && "rotate-90"
+          )}
+        />
+      </button>
+
+      {aberta && (
+        <div className="px-3.5 pb-3.5">
+          <p className="mb-2.5 text-[11.5px] text-fg-dim">Cor principal</p>
+          <div className="flex gap-2">
+            {ACCENTS.map((a) => (
+              <button
+                key={a.key}
+                onClick={() => setAccent(a.key)}
+                title={a.name}
+                aria-label={`Cor ${a.name}`}
+                aria-pressed={accent === a.key}
+                style={{ background: a.hex }}
+                className={cx(
+                  "h-6 w-6 rounded-full transition-transform hover:scale-110",
+                  accent === a.key &&
+                    "ring-2 ring-fg-dim ring-offset-2 ring-offset-ink-800"
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

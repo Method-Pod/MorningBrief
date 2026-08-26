@@ -335,7 +335,7 @@ export default function CalendarioPage() {
                   onClick={() => setSelected(cell.iso)}
                   onDoubleClick={() => startNew(cell.iso)}
                   className={cx(
-                    "relative flex min-h-[84px] flex-col items-start gap-1 border-b border-r border-line-soft/60 p-2 text-left transition-colors last:border-r-0",
+                    "relative flex min-h-[62px] flex-col items-start gap-1 border-b border-r border-line-soft/60 p-1.5 text-left transition-colors last:border-r-0 sm:min-h-[84px] sm:p-2",
                     !cell.inMonth && "opacity-35",
                     isSel
                       ? "bg-brand-500/10 ring-1 ring-inset ring-brand-500/40"

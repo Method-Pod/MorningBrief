@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronRight,
   Clock,
   PartyPopper,
   Pencil,
@@ -85,6 +86,18 @@ export default function ContasPage() {
   const [q, setQ] = React.useState("");
   const [dia, setDia] = React.useState<string | null>(null);
   const [lancando, setLancando] = React.useState<string | null>(null);
+  /* Pagas nasce fechado: é o grupo que só cresce e não pede ação. */
+  const [fechados, setFechados] = React.useState<Set<string>>(
+    () => new Set(["Pagas"])
+  );
+
+  const alternarGrupo = (titulo: string) =>
+    setFechados((v) => {
+      const n = new Set(v);
+      if (n.has(titulo)) n.delete(titulo);
+      else n.add(titulo);
+      return n;
+    });
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Bill | null>(null);
   const [form, setForm] = React.useState(vazio());
@@ -338,16 +351,26 @@ export default function ContasPage() {
     return g.filter((x) => x.itens.length > 0);
   }, [filtradas]);
 
-  /* Resumo e categorias refletem o filtro na tela, não o mês inteiro:
-     assim os números sempre explicam o que está sendo mostrado. */
-  const resumo = React.useMemo(() => {
+  /*
+   * O resumo e as categorias são do MÊS ATUAL, fixos.
+   *
+   * Deixá-los seguir o filtro fazia os quatro números mudarem a cada chip
+   * clicado, e o card Total perdia utilidade como referência. A soma do que
+   * está na tela existe no pé da lista, que é onde ela pertence.
+   */
+  const doMes = React.useMemo(() => {
+    const prefixo = todayISO().slice(0, 7);
+    return rows.filter((b) => b.due_date.startsWith(prefixo));
+  }, [rows]);
+
+  const resumoMes = React.useMemo(() => {
     const soma = (l: Bill[]) => l.reduce((s, b) => s + b.amount, 0);
-    const pend = filtradas.filter((b) => b.status === "pending");
-    const pagas = filtradas.filter((b) => b.status === "paid");
+    const pend = doMes.filter((b) => b.status === "pending");
+    const pagas = doMes.filter((b) => b.status === "paid");
     const venc = pend.filter(atrasada);
     return {
-      total: soma(filtradas),
-      qtdTotal: filtradas.length,
+      total: soma(doMes),
+      qtdTotal: doMes.length,
       pagas: soma(pagas),
       qtdPagas: pagas.length,
       pendentes: soma(pend),
@@ -355,11 +378,17 @@ export default function ContasPage() {
       vencidas: soma(venc),
       qtdVencidas: venc.length,
     };
-  }, [filtradas]);
+  }, [doMes]);
+
+  /** Soma do que está na tela, para o pé da lista. */
+  const somaFiltro = React.useMemo(
+    () => filtradas.reduce((s, b) => s + b.amount, 0),
+    [filtradas]
+  );
 
   const porCategoria = React.useMemo(() => {
     const mapa = new Map<string, { pago: number; pendente: number }>();
-    filtradas.forEach((b) => {
+    doMes.forEach((b) => {
       const c = mapa.get(b.category) ?? { pago: 0, pendente: 0 };
       if (b.status === "paid") c.pago += b.amount;
       else c.pendente += b.amount;
@@ -372,7 +401,7 @@ export default function ContasPage() {
     }));
     lista.sort((a, b) => b.total - a.total);
     return lista;
-  }, [filtradas]);
+  }, [doMes]);
 
   /** Últimos 12 meses, sempre sobre todas as contas — é tendência, não filtro. */
   const evolucao = React.useMemo<PontoMes[]>(() => {
@@ -391,6 +420,10 @@ export default function ContasPage() {
     }
     return pontos;
   }, [rows]);
+
+  const nomeMes = new Date(todayISO() + "T00:00:00").toLocaleDateString("pt-BR", {
+    month: "long",
+  });
 
   const nadaPendente =
     !loading && rows.length > 0 && contagens.pendentes === 0;
@@ -444,20 +477,28 @@ export default function ContasPage() {
         </div>
       )}
 
-      {/* ------------------------------ resumo ------------------------------ */}
+      {/* ------------------------------ resumo do mês ------------------------------ */}
+      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
+        Resumo de {nomeMes}
+      </p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Numero rotulo="Total" valor={resumo.total} qtd={resumo.qtdTotal} />
-        <Numero rotulo="Pagas" valor={resumo.pagas} qtd={resumo.qtdPagas} tom="text-pos" />
+        <Numero rotulo="Total" valor={resumoMes.total} qtd={resumoMes.qtdTotal} />
+        <Numero
+          rotulo="Pagas"
+          valor={resumoMes.pagas}
+          qtd={resumoMes.qtdPagas}
+          tom="text-pos"
+        />
         <Numero
           rotulo="Pendentes"
-          valor={resumo.pendentes}
-          qtd={resumo.qtdPendentes}
+          valor={resumoMes.pendentes}
+          qtd={resumoMes.qtdPendentes}
           tom="text-warn"
         />
         <Numero
           rotulo="Vencidas"
-          valor={resumo.vencidas}
-          qtd={resumo.qtdVencidas}
+          valor={resumoMes.vencidas}
+          qtd={resumoMes.qtdVencidas}
           tom="text-neg"
         />
       </div>
@@ -538,37 +579,63 @@ export default function ContasPage() {
             <p className="px-[18px] pt-3 text-[11.5px] font-semibold text-fg-mute">
               {filtradas.length} conta{filtradas.length === 1 ? "" : "s"}
             </p>
-            {grupos.map((g) => (
-              <section key={g.titulo}>
-                <h2
-                  className={cx(
-                    "px-[18px] pb-1.5 pt-4 text-[10.5px] font-bold uppercase tracking-[0.1em]",
-                    g.tom
+            {grupos.map((g) => {
+              const aberto = !fechados.has(g.titulo);
+              const soma = g.itens.reduce((t, b) => t + b.amount, 0);
+              return (
+                <section key={g.titulo}>
+                  <h2>
+                    <button
+                      onClick={() => alternarGrupo(g.titulo)}
+                      aria-expanded={aberto}
+                      className="flex w-full items-center gap-2 px-[18px] pb-1.5 pt-4 text-left transition-colors hover:bg-ink-800/60"
+                    >
+                      <ChevronRight
+                        size={13}
+                        className={cx(
+                          "shrink-0 text-fg-mute transition-transform",
+                          aberto && "rotate-90"
+                        )}
+                      />
+                      <span
+                        className={cx(
+                          "text-[10.5px] font-bold uppercase tracking-[0.1em]",
+                          g.tom
+                        )}
+                      >
+                        {g.titulo}
+                      </span>
+                      <span className="text-[10.5px] font-bold text-fg-mute tnum">
+                        ({g.itens.length})
+                      </span>
+                      <span className="ml-auto text-[12px] font-semibold text-fg-mute tnum">
+                        {brl(soma)}
+                      </span>
+                    </button>
+                  </h2>
+                  {aberto && (
+                    <ul className="px-2.5 pb-1">
+                      {g.itens.map((b) => (
+                        <Linha
+                          key={b.id}
+                          b={b}
+                          atrasada={atrasada(b)}
+                          onAlternar={() => alternar(b)}
+                          onEditar={() => editar(b)}
+                          onExcluir={() => excluir(b)}
+                        />
+                      ))}
+                    </ul>
                   )}
-                >
-                  {g.titulo}{" "}
-                  <span className="text-fg-mute tnum">({g.itens.length})</span>
-                </h2>
-                <ul className="px-2.5 pb-1">
-                  {g.itens.map((b) => (
-                    <Linha
-                      key={b.id}
-                      b={b}
-                      atrasada={atrasada(b)}
-                      onAlternar={() => alternar(b)}
-                      onEditar={() => editar(b)}
-                      onExcluir={() => excluir(b)}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ))}
+                </section>
+              );
+            })}
             <div className="mt-1 flex items-baseline justify-between border-t border-line-soft px-[18px] py-3.5">
               <span className="text-[12px] text-fg-mute">
                 Soma do filtro
               </span>
               <span className="text-[16px] font-bold tracking-[-0.02em] tnum">
-                {brl(resumo.total)}
+                {brl(somaFiltro)}
               </span>
             </div>
           </div>
@@ -598,20 +665,23 @@ export default function ContasPage() {
       {/* ------------------------------ análises ------------------------------ */}
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <Card>
-          <Cabeca titulo="Gastos por categoria" />
+          <Cabeca titulo="Gastos por categoria" sub={`Vencimentos de ${nomeMes}`} />
           <div className="px-[18px] pb-[18px] pt-3">
             <ParticipacaoCategoria
               dados={porCategoria.map((c) => ({
                 categoria: c.categoria,
                 valor: c.total,
               }))}
-              total={resumo.total}
+              total={resumoMes.total}
             />
           </div>
         </Card>
 
         <Card>
-          <Cabeca titulo="Pago vs pendente por categoria" />
+          <Cabeca
+            titulo="Pago vs pendente por categoria"
+            sub={`Vencimentos de ${nomeMes}`}
+          />
           <div className="px-[18px] pb-[18px] pt-3">
             <PagoPendenteCategoria dados={porCategoria} />
           </div>

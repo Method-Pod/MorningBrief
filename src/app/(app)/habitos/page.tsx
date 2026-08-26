@@ -60,6 +60,15 @@ export default function HabitosPage() {
   const hoje = todayISO();
   const semana = React.useMemo(() => semanaDe(hoje, semanas), [hoje, semanas]);
 
+  /* A sigla vive dentro da bolinha: sem ela, sete círculos vazios não dizem
+     que dia é cada um. A data completa fica no title e no aria-label, que é
+     o que resolve o S/S e o Q/Q repetidos. */
+  const sigla = (iso: string) => {
+    const i = semana.indexOf(iso);
+    return i >= 0 ? DIAS[i][0].toUpperCase() : "";
+  };
+  const ehHoje = (iso: string) => iso === hoje;
+
   const load = React.useCallback(async () => {
     // 90 dias cobrem a sequência mais longa e algumas semanas para trás
     const desde = ultimosDias(todayISO(), 90)[0];
@@ -287,40 +296,6 @@ export default function HabitosPage() {
             </button>
           </div>
 
-          {/* ---------------- cabeçalho dos dias ---------------- */}
-          <div className="flex items-end gap-3 border-y border-line-soft px-4 py-2.5">
-            <span className="min-w-0 flex-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-fg-mute">
-              Hábito
-            </span>
-            <div className="flex shrink-0 gap-1">
-              {semana.map((d, i) => {
-                const ehHoje = d === hoje;
-                return (
-                  <div key={d} className="w-8 text-center sm:w-9">
-                    <p
-                      className={cx(
-                        "text-[9.5px] font-bold uppercase",
-                        ehHoje ? "text-brand-400" : "text-fg-mute"
-                      )}
-                    >
-                      {DIAS[i]}
-                    </p>
-                    <p
-                      className={cx(
-                        "mx-auto mt-1 grid h-5 w-5 place-items-center rounded-full text-[11.5px] font-bold tnum",
-                        ehHoje
-                          ? "bg-brand-500 text-on-brand"
-                          : "text-fg-dim"
-                      )}
-                    >
-                      {Number(d.slice(8))}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
           {/* ---------------- linhas ---------------- */}
           <ul>
             {habits.map((h) => {
@@ -332,11 +307,15 @@ export default function HabitosPage() {
                 <li
                   key={h.id}
                   className={cx(
-                    "group flex items-center gap-3 border-b border-line-soft px-4 py-3 last:border-0",
+                    // Em 375px as 7 bolinhas mais as 3 ações somam 332px num
+                    // espaço de 303px. No mobile a grade desce para a própria
+                    // linha em vez de comprimir o nome até desaparecer.
+                    "group flex flex-col gap-2.5 border-b border-line-soft px-4 py-3 last:border-0 lg:flex-row lg:items-center lg:gap-3",
                     !h.active && "opacity-55"
                   )}
                 >
-                  <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-start justify-between gap-3 lg:flex-1">
+                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -372,15 +351,41 @@ export default function HabitosPage() {
                         </>
                       )}
                     </p>
+                   </div>
+
+                    {/* no mobile as ações moram na linha do nome */}
+                    <div className="flex shrink-0 gap-0.5 lg:hidden">
+                      <button
+                        onClick={() => pausar(h)}
+                        aria-label={h.active ? "Pausar" : "Retomar"}
+                        className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+                      >
+                        <Power size={14} />
+                      </button>
+                      <button
+                        onClick={() => editar(h)}
+                        aria-label="Editar"
+                        className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        onClick={() => excluir(h)}
+                        aria-label="Excluir"
+                        className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex shrink-0 gap-1">
+                  <div className="flex shrink-0 justify-between gap-1 lg:justify-end">
                     {semana.map((d) => {
                       const on = marcado(h.id, d);
                       const futuro = d > hoje;
                       const travado = futuro || !h.active;
                       return (
-                        <div key={d} className="grid w-8 place-items-center sm:w-9">
+                        <div key={d} className="grid place-items-center lg:w-9">
                           <button
                             disabled={travado}
                             onClick={() => alternar(h, d)}
@@ -390,23 +395,25 @@ export default function HabitosPage() {
                             aria-pressed={on}
                             title={dataCurta(d)}
                             className={cx(
-                              "grid h-7 w-7 place-items-center rounded-full border-[1.5px] transition-colors sm:h-8 sm:w-8",
+                              "grid h-8 w-8 place-items-center rounded-full border-[1.5px] text-[10px] font-bold uppercase transition-colors",
                               on
                                 ? "border-transparent text-white"
-                                : "border-line bg-white text-transparent",
+                                : ehHoje(d)
+                                  ? "border-brand-500 bg-white text-brand-400"
+                                  : "border-line bg-white text-fg-mute",
                               !travado && !on && "hover:border-brand-500",
                               travado && "cursor-not-allowed opacity-35"
                             )}
                             style={on ? { background: cor } : undefined}
                           >
-                            <Check size={13} strokeWidth={3} />
+                            {on ? <Check size={13} strokeWidth={3} /> : sigla(d)}
                           </button>
                         </div>
                       );
                     })}
                   </div>
 
-                  <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                  <div className="hidden shrink-0 gap-0.5 transition-opacity lg:flex lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
                     <button
                       onClick={() => pausar(h)}
                       aria-label={h.active ? "Pausar" : "Retomar"}

@@ -132,7 +132,9 @@ function Formulario() {
       <div className="w-full max-w-[1040px] rounded-[24px] bg-white p-3 shadow-[0_24px_70px_-28px_rgb(20_24_26/0.22)] sm:rounded-[28px] sm:p-4">
         <div className="grid items-stretch gap-4 lg:grid-cols-2">
           {/* ---------------- painel de marca ---------------- */}
-          <aside className="relative hidden overflow-hidden rounded-[20px] bg-[#16191b] p-9 lg:flex lg:flex-col">
+          {/* No mobile vira faixa compacta em cima do formulário, em vez de
+              desaparecer: era a única peça que dava identidade à tela. */}
+          <aside className="relative flex min-h-[168px] flex-col overflow-hidden rounded-[20px] bg-[#16191b] p-6 sm:min-h-[196px] lg:min-h-0 lg:p-9">
             {/* Aurora do accent: única peça decorativa, e ela acompanha o tema. */}
             <div
               aria-hidden
@@ -151,17 +153,17 @@ function Formulario() {
               }}
             />
 
-            <p className="relative text-[19px] font-bold tracking-[-0.035em] text-white">
+            <p className="relative text-[18px] font-bold tracking-[-0.035em] text-white lg:text-[19px]">
               morning<span className="font-normal text-white/55">brief</span>
             </p>
 
             <div className="relative mt-auto">
-              <h2 className="text-[30px] font-bold leading-[1.12] tracking-[-0.035em] text-white">
+              <h2 className="text-[22px] font-bold leading-[1.14] tracking-[-0.035em] text-white sm:text-[26px] lg:text-[30px]">
                 Tudo que importa
                 <br />
                 antes do primeiro café.
               </h2>
-              <p className="mt-3 max-w-[300px] text-[13.5px] leading-relaxed text-white/65">
+              <p className="mt-2.5 hidden max-w-[300px] text-[13.5px] leading-relaxed text-white/65 sm:block">
                 Demandas, contas a pagar, hábitos, anotações e agenda numa só
                 tela.
               </p>
@@ -169,12 +171,8 @@ function Formulario() {
           </aside>
 
           {/* ---------------- formulário ---------------- */}
-          <div className="flex flex-col justify-center px-2 py-6 sm:px-8 sm:py-10">
-            <p className="text-[19px] font-bold tracking-[-0.035em] lg:hidden">
-              morning<span className="font-normal text-fg-mute">brief</span>
-            </p>
-
-            <h1 className="mt-5 text-[27px] font-bold tracking-[-0.035em] lg:mt-0">
+          <div className="flex flex-col justify-center px-3 py-6 sm:px-8 sm:py-10">
+            <h1 className="text-[25px] font-bold tracking-[-0.035em] sm:text-[27px]">
               {t.titulo}
             </h1>
             <p className="mt-1.5 text-[14px] text-fg-mute">{t.sub}</p>
@@ -191,7 +189,7 @@ function Formulario() {
               </div>
             )}
 
-            <div className="my-6 h-px bg-line-soft" />
+            <div className="my-5 h-px bg-line-soft sm:my-6" />
 
             <form onSubmit={enviar} className="flex flex-col gap-4">
               <label className="block">
