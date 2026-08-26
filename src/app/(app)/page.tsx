@@ -29,7 +29,7 @@ import {
 } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import { limparConcluidas } from "@/lib/limpeza";
-import { Card, Carregando, useNotice, cx } from "@/components/ui";
+import { Card, useNotice, cx } from "@/components/ui";
 import { useIdentity } from "@/components/identity";
 
 const PRIO_DOT: Record<string, string> = {
@@ -261,7 +261,7 @@ export default function HomePage() {
     };
   }, [tasks, bills, recurring, events, notes, today]);
 
-  if (loading) return <Carregando />;
+  if (loading) return null;
 
   const R = 34;
   const C = 2 * Math.PI * R;

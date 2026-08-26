@@ -35,7 +35,6 @@ import {
   Modal,
   Segmented,
   Select,
-  Carregando,
   Textarea,
   useConfirm,
   useNotice,
@@ -249,7 +248,7 @@ export default function RecorrentesPage() {
       />
 
       {loading ? (
-        <Carregando altura="32vh" />
+        null
       ) : view.length === 0 ? (
         <Card>
           <Empty

@@ -26,7 +26,6 @@ import {
   Field,
   Input,
   Modal,
-  Carregando,
   Select,
   Textarea,
   useConfirm,
@@ -249,7 +248,7 @@ export default function CalendarioPage() {
 
   const day = index.get(selected) ?? { events: [], bills: [], tasks: [] };
 
-  if (loading) return <Carregando />;
+  if (loading) return null;
 
   return (
     <div className="space-y-5 rise">

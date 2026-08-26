@@ -399,32 +399,3 @@ export function useNotice() {
 
   return { show, check, node };
 }
-
-/* ------------------------------ Carregando ------------------------------ */
-
-/**
- * Três pontos, o mesmo indicador do loading.tsx da área logada.
- *
- * As páginas tinham cada uma seu esqueleto de blocos para a busca de dados no
- * cliente. Somado ao loading.tsx, isso produzia duas trocas visuais em
- * sequência — pontos, depois blocos, depois conteúdo — que se via como
- * piscada. Um indicador só mantém a espera contínua.
- */
-export function Carregando({ altura = "42vh" }: { altura?: string }) {
-  return (
-    <div
-      role="status"
-      aria-label="Carregando"
-      className="surgir-tarde flex items-center justify-center gap-2"
-      style={{ minHeight: altura }}
-    >
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="ponto h-2.5 w-2.5 rounded-full bg-brand-500"
-          style={{ animationDelay: `${i * 0.34}s` }}
-        />
-      ))}
-    </div>
-  );
-}

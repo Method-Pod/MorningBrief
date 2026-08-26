@@ -40,7 +40,6 @@ import {
   Modal,
   Segmented,
   Select,
-  Carregando,
   Textarea,
   useConfirm,
   useNotice,
@@ -332,7 +331,7 @@ export default function DemandasPage() {
       </div>
 
       {loading ? (
-        <Carregando altura="32vh" />
+        null
       ) : rows.length === 0 ? (
         <Card>
           <Empty

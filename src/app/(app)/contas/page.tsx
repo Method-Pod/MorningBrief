@@ -35,7 +35,6 @@ import {
   Input,
   Modal,
   Select,
-  Carregando,
   Textarea,
   cx,
   useConfirm,
@@ -433,7 +432,7 @@ export default function ContasPage() {
   const nadaPendente =
     !loading && rows.length > 0 && contagens.pendentes === 0;
 
-  if (loading) return <Carregando />;
+  if (loading) return null;
 
   return (
     <div className="rise">

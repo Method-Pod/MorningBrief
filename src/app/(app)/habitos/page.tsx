@@ -22,7 +22,6 @@ import {
   Field,
   Input,
   Modal,
-  Carregando,
   Select,
   cx,
   useConfirm,
@@ -231,7 +230,7 @@ export default function HabitosPage() {
     ? "Esta semana"
     : `${dataCurta(semana[0]).replace(".", "")} – ${dataCurta(semana[6])}`;
 
-  if (loading) return <Carregando />;
+  if (loading) return null;
 
   return (
     <div className="rise">

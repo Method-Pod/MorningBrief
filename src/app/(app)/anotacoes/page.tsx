@@ -13,7 +13,6 @@ import {
   Field,
   Input,
   Modal,
-  Carregando,
   Textarea,
   useConfirm,
   useNotice,
@@ -175,7 +174,7 @@ export default function AnotacoesPage() {
       </div>
 
       {loading ? (
-        <Carregando altura="32vh" />
+        null
       ) : view.length === 0 ? (
         <Card>
           <Empty
