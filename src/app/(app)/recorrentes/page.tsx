@@ -73,7 +73,6 @@ export default function RecorrentesPage() {
   const [form, setForm] = React.useState(blank());
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
-  const [toast, setToast] = React.useState("");
   const confirm = useConfirm();
   const notice = useNotice();
 
@@ -91,12 +90,6 @@ export default function RecorrentesPage() {
   React.useEffect(() => {
     load();
   }, [load]);
-
-  React.useEffect(() => {
-    if (!toast) return;
-    const id = setTimeout(() => setToast(""), 3500);
-    return () => clearTimeout(id);
-  }, [toast]);
 
   const startNew = () => {
     setEditing(null);
@@ -179,7 +172,7 @@ export default function RecorrentesPage() {
   /** Gera a demanda agora, sem esperar a data. */
   const runNow = async (r: RecurringTask) => {
     const uid = await currentUserId(supabase);
-    if (!uid) return setToast(SESSION_EXPIRED);
+    if (!uid) return notice.show(SESSION_EXPIRED);
     const { error } = await supabase.from("tasks").insert({
       user_id: uid,
       title: r.title,
@@ -190,12 +183,12 @@ export default function RecorrentesPage() {
       due_date: today,
       origin_id: r.id,
     });
-    if (error) return setToast(`Erro: ${error.message}`);
+    if (error) return notice.show(`Não foi possível gerar a demanda: ${error.message}`);
     await supabase
       .from("recurring_tasks")
       .update({ last_run_on: today })
       .eq("id", r.id);
-    setToast(`"${r.title}" foi criada em Demandas.`);
+    notice.show(`"${r.title}" foi criada em Demandas.`);
     load();
   };
 
@@ -403,11 +396,6 @@ export default function RecorrentesPage() {
         </div>
       )}
 
-      {toast && (
-        <div className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-line bg-ink-850 px-4 py-3 text-xs text-fg-dim shadow-[0_20px_50px_-20px_rgba(0,0,0,1)] pop">
-          {toast}
-        </div>
-      )}
 
       {/* ------------------------------ modal ------------------------------ */}
       <Modal

@@ -2,6 +2,7 @@
 
 import { X } from "lucide-react";
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 export const cx = (...v: (string | false | null | undefined)[]) =>
   v.filter(Boolean).join(" ");
@@ -226,14 +227,26 @@ export function Modal({
     };
   }, [open, onClose]);
 
-  if (!open) return null;
+  /*
+   * O modal vai para um portal no <body>, não fica na árvore da página.
+   *
+   * As páginas envolvem o conteúdo num <div className="rise">, e a animação
+   * `rise` tem transform nos keyframes com fill-mode both. Isso faz o Chrome
+   * criar um containing block nesse div, então `position: fixed` passava a
+   * valer contra ele em vez da viewport: o scrim não cobria a sidebar e o
+   * container ficava com a altura do conteúdo da página, cortando o cabeçalho
+   * e o rodapé do modal para dentro de um overflow rolável.
+   *
+   * No portal, nenhum transform de ancestral alcança o modal.
+   */
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
 
-  return (
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
-      <div
-        className="fixed inset-0 bg-fg/35 fade"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-fg/35 fade" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
@@ -262,7 +275,8 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -365,14 +379,23 @@ export function useNotice() {
     return true;
   };
 
-  const node = msg ? (
-    <div
-      role="status"
-      className="fixed bottom-5 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full bg-neg px-4 py-3 text-center text-xs font-medium text-white shadow-[0_6px_20px_-8px_rgb(20_24_26/0.4)] pop"
-    >
-      {msg}
-    </div>
-  ) : null;
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
+  // portal pelo mesmo motivo do Modal: o `fixed` seria capturado pelo
+  // containing block que a animação `rise` cria no wrapper da página.
+  const node =
+    msg && mounted
+      ? createPortal(
+          <div
+            role="status"
+            className="fixed bottom-5 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full bg-neg px-4 py-3 text-center text-xs font-medium text-white shadow-[0_6px_20px_-8px_rgb(20_24_26/0.4)] pop"
+          >
+            {msg}
+          </div>,
+          document.body
+        )
+      : null;
 
   return { show, check, node };
 }
