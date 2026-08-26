@@ -28,7 +28,7 @@ import {
   todayISO,
 } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
-import { limparConcluidas } from "@/lib/limpeza";
+import { HORAS_RETENCAO, limparConcluidas } from "@/lib/limpeza";
 import { Card, useNotice, cx } from "@/components/ui";
 import { useIdentity } from "@/components/identity";
 
@@ -83,7 +83,19 @@ export default function HomePage() {
     setBills(
       ((b.data as Bill[]) ?? []).map((x) => ({ ...x, amount: Number(x.amount) }))
     );
-    setTasks((t.data as Task[]) ?? []);
+    /* Descarta o que a limpeza vai apagar: sem isso, a demanda concluída há
+       mais de 24h apareceria por um instante antes de o delete responder. */
+      const corte = Date.now() - HORAS_RETENCAO * 3600 * 1000;
+    setTasks(
+      ((t.data as Task[]) ?? []).filter(
+        (x) =>
+          !(
+            x.status === "done" &&
+            x.completed_at &&
+            new Date(x.completed_at).getTime() < corte
+          )
+      )
+    );
     setRecurring((r.data as RecurringTask[]) ?? []);
     setEvents((e.data as CalendarEvent[]) ?? []);
     setNotes((n.data as Note[]) ?? []);
@@ -109,16 +121,20 @@ export default function HomePage() {
        * O `or` é necessário porque em SQL `last_run_on <> hoje` é falso quando
        * a coluna é NULL: a recorrência que nunca rodou não seria reivindicada.
        */
-      const claimed: RecurringTask[] = [];
-      for (const r of due) {
-        const { data } = await supabase
-          .from("recurring_tasks")
-          .update({ last_run_on: today })
-          .eq("id", r.id)
-          .or(`last_run_on.is.null,last_run_on.neq.${today}`)
-          .select("id");
-        if (data && data.length) claimed.push(r);
-      }
+      // Em paralelo: eram idas em série, uma por recorrência vencida, e com
+      // cinco regras isso somava meio segundo antes da tela aparecer.
+      const resultados = await Promise.all(
+        due.map(async (r) => {
+          const { data } = await supabase
+            .from("recurring_tasks")
+            .update({ last_run_on: today })
+            .eq("id", r.id)
+            .or(`last_run_on.is.null,last_run_on.neq.${today}`)
+            .select("id");
+          return data && data.length ? r : null;
+        })
+      );
+      const claimed = resultados.filter((r): r is RecurringTask => r !== null);
       if (!claimed.length) return 0;
 
       const { error } = await supabase.from("tasks").insert(
@@ -156,12 +172,17 @@ export default function HomePage() {
     let alive = true;
     (async () => {
       /*
-       * A limpeza vem antes da primeira leitura: assim a tela nunca mostra
-       * uma demanda que está a caminho de ser apagada, o que apareceria como
-       * item piscando na lista.
+       * Limpeza em paralelo com a leitura, não antes dela.
+       *
+       * Em série, a exclusão somava uma ida de rede à espera da primeira
+       * pintura. O motivo de vir antes era não exibir demanda a caminho de ser
+       * apagada; isso agora é resolvido no cliente, em `load`, que descarta
+       * localmente o que já passou da janela de 24h.
        */
-      const apagadas = await limparConcluidas(supabase);
-      const rows = await load();
+      const [apagadas, rows] = await Promise.all([
+        limparConcluidas(supabase),
+        load(),
+      ]);
       const made = await materialize(rows);
       if (!alive) return;
       if (apagadas && apagadas > 0) setLimpas(apagadas);

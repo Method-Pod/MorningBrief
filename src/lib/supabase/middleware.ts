@@ -31,21 +31,48 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  /*
+   * getClaims() em vez de getUser().
+   *
+   * getUser() é uma ida de rede ao servidor de auth — 105ms medidos — em toda
+   * navegação, antes de qualquer byte da página. getClaims() verifica a
+   * assinatura do JWT localmente contra o JWKS do projeto, que fica em cache;
+   * este projeto usa ES256, então a verificação é local de fato.
+   *
+   * A renovação do token continua acontecendo: getClaims chama getSession por
+   * dentro, e é getSession que troca o token expirado e regrava os cookies
+   * pelo setAll acima.
+   */
+  let autenticado = false;
+  try {
+    const { data } = await supabase.auth.getClaims();
+    autenticado = typeof data?.claims?.sub === "string";
+  } catch {
+    autenticado = false;
+  }
+
+  /*
+   * Rede de proteção: se getClaims falhar por algo alheio à sessão — busca do
+   * JWKS que não completou, por exemplo — sem isto a pessoa seria mandada para
+   * o login com sessão válida. getSession lê o cookie, é local, e só corre
+   * quando a verificação já falhou.
+   */
+  if (!autenticado) {
+    const { data } = await supabase.auth.getSession();
+    autenticado = !!data.session;
+  }
 
   const path = request.nextUrl.pathname;
   const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
 
-  if (!user && !isPublic) {
+  if (!autenticado && !isPublic) {
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/login";
     redirect.searchParams.set("next", path);
     return NextResponse.redirect(redirect);
   }
 
-  if (user && path === "/login") {
+  if (autenticado && path === "/login") {
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/";
     redirect.search = "";

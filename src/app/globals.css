@@ -104,7 +104,12 @@
    * desacelera longo — quase todo o movimento acontece no começo e o fim
    * chega deslizando, que é o que faz parecer macio em vez de duro.
    */
-  --default-transition-duration: 220ms;
+  /*
+   * 130ms. Estava em 220ms, e isso se sente em cada hover — 220ms é o tempo
+   * de uma transição de página, não de um botão mudando de cor. Suavidade vem
+   * da curva; o que dá sensação de lentidão é a duração.
+   */
+  --default-transition-duration: 130ms;
   --default-transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
@@ -175,7 +180,9 @@ body {
   }
 }
 @utility girar-lento {
-  animation: girar-lento 2.2s linear infinite;
+  /* 2.2s ficava parecendo travado num botão; 1.2s gira visivelmente sem
+     virar motor */
+  animation: girar-lento 1.2s linear infinite;
 }
 
 .tnum {
@@ -202,7 +209,7 @@ textarea::placeholder {
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translate3d(0, 8px, 0);
+    transform: translate3d(0, 5px, 0);
   }
   to {
     opacity: 1;
@@ -210,7 +217,8 @@ textarea::placeholder {
   }
 }
 .rise {
-  animation: rise 0.42s cubic-bezier(0.32, 0.72, 0, 1) both;
+  /* 420ms era quase meio segundo antes de a página ficar legível */
+  animation: rise 0.19s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 /* O modal vive num portal no <body>, então o transform daqui não alcança
@@ -226,7 +234,7 @@ textarea::placeholder {
   }
 }
 .pop {
-  animation: pop 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: pop 0.16s cubic-bezier(0.32, 0.72, 0, 1) both;
 }
 
 @keyframes fade {
@@ -238,7 +246,7 @@ textarea::placeholder {
   }
 }
 .fade {
-  animation: fade 0.24s cubic-bezier(0.32, 0.72, 0, 1) both;
+  animation: fade 0.12s ease-out both;
 }
 
 @media (prefers-reduced-motion: reduce) {
