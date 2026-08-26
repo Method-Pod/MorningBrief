@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   ArrowRight,
@@ -596,7 +597,11 @@ export default function DemandasPage() {
           {editing?.origin_id && (
             <p className="rounded-[14px] bg-brand-500/10 px-3.5 py-3 text-xs text-brand-400">
               Esta demanda foi gerada por uma recorrência. Editar aqui muda só
-              esta ocorrência — para mudar a regra, vá em Recorrentes.
+              esta ocorrência —{" "}
+              <Link href="/recorrentes" className="font-semibold underline">
+                abra a regra
+              </Link>{" "}
+              para mudar todas as próximas.
             </p>
           )}
 

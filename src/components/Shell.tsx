@@ -5,64 +5,46 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import {
   CalendarDays,
+  ChevronRight,
   ListChecks,
   LayoutDashboard,
   LogOut,
   Menu,
-  Repeat2,
   StickyNote,
   Wallet,
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ACCENTS, useAccent } from "./accent";
 import { cx } from "./ui";
 
+/*
+ * Recorrentes saiu da navegação lateral: a regra agora é criada pela caixa
+ * "Demanda recorrente" dentro de Nova demanda. A rota /recorrentes continua
+ * existindo para pausar, editar e excluir — chega-se a ela pelo card do Início
+ * e pelo aviso de demanda gerada.
+ */
 const NAV = [
   { href: "/", label: "Início", icon: LayoutDashboard },
   { href: "/demandas", label: "Demandas", icon: ListChecks },
-  { href: "/recorrentes", label: "Recorrentes", icon: Repeat2 },
   { href: "/contas", label: "Contas a pagar", icon: Wallet },
   { href: "/anotacoes", label: "Anotações", icon: StickyNote },
   { href: "/calendario", label: "Calendário", icon: CalendarDays },
 ];
 
-const ACCENTS = [
-  { key: "red", hex: "#e72828", name: "Vermelho" },
-  { key: "blue", hex: "#287ee7", name: "Azul" },
-  { key: "green", hex: "#28e75e", name: "Verde" },
-  { key: "yellow", hex: "#e7e128", name: "Amarelo" },
-] as const;
-
-type AccentKey = (typeof ACCENTS)[number]["key"];
-
-function AccentPicker() {
-  const [accent, setAccent] = React.useState<AccentKey>("blue");
-
-  React.useEffect(() => {
-    const el = document.documentElement.dataset.accent;
-    if (ACCENTS.some((a) => a.key === el)) setAccent(el as AccentKey);
-  }, []);
-
-  const pick = (key: AccentKey) => {
-    setAccent(key);
-    document.documentElement.dataset.accent = key;
-    try {
-      localStorage.setItem("mb.accent", key);
-    } catch {
-      // navegação privada: a escolha vale só nesta aba
-    }
-  };
-
+function CaixaTema() {
+  const { accent, setAccent } = useAccent();
   return (
-    <div className="px-2.5 pt-4">
+    <section className="rounded-[16px] bg-ink-800 p-3.5">
       <p className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-fg-mute">
-        Cor principal
+        Tema
       </p>
+      <p className="mb-2.5 text-[11.5px] text-fg-dim">Cor principal</p>
       <div className="flex gap-2">
         {ACCENTS.map((a) => (
           <button
             key={a.key}
-            onClick={() => pick(a.key)}
+            onClick={() => setAccent(a.key)}
             title={a.name}
             aria-label={`Cor ${a.name}`}
             aria-pressed={accent === a.key}
@@ -70,12 +52,67 @@ function AccentPicker() {
             className={cx(
               "h-6 w-6 rounded-full transition-transform hover:scale-110",
               accent === a.key &&
-                "ring-2 ring-fg-dim ring-offset-2 ring-offset-white"
+                "ring-2 ring-fg-dim ring-offset-2 ring-offset-ink-800"
             )}
           />
         ))}
       </div>
-    </div>
+    </section>
+  );
+}
+
+function CaixaConta({
+  email,
+  onSair,
+  ativo,
+}: {
+  email: string;
+  onSair: () => void;
+  ativo: boolean;
+}) {
+  const nome = email.split("@")[0] || "você";
+  const iniciais = nome.slice(0, 2).toUpperCase();
+
+  return (
+    <section
+      className={cx(
+        "rounded-[16px] p-3.5 transition-colors",
+        ativo ? "bg-brand-500/12" : "bg-ink-800"
+      )}
+    >
+      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-fg-mute">
+        Conta
+      </p>
+      <Link
+        href="/conta"
+        className="flex items-center gap-2.5 rounded-[12px] transition-opacity hover:opacity-80"
+      >
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-500 text-[11px] font-bold text-on-brand">
+          {iniciais}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span
+            className={cx(
+              "block truncate text-[12.5px] font-semibold",
+              ativo ? "text-brand-400" : "text-fg"
+            )}
+          >
+            {nome}
+          </span>
+          <span className="block truncate text-[10.5px] text-fg-mute">
+            {email}
+          </span>
+        </span>
+        <ChevronRight size={14} className="shrink-0 text-fg-mute" />
+      </Link>
+      <button
+        onClick={onSair}
+        className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[12px] bg-white py-2 text-[11.5px] font-semibold text-fg-mute shadow-[0_1px_2px_rgb(20_24_26/0.05)] transition-colors hover:text-neg"
+      >
+        <LogOut size={13} />
+        Sair
+      </button>
+    </section>
   );
 }
 
@@ -97,8 +134,6 @@ export function Shell({
     router.replace("/login");
     router.refresh();
   };
-
-  const name = email.split("@")[0] || "você";
 
   const wordmark = (
     <Link
@@ -132,39 +167,34 @@ export function Shell({
     </nav>
   );
 
-  const account = (
-    <div className="px-2.5 pt-3.5">
-      <p className="truncate px-1 text-[11px] text-fg-mute">{name}</p>
-      <button
-        onClick={signOut}
-        className="mt-2 flex w-full items-center justify-center gap-2 rounded-[14px] py-2.5 text-xs font-medium text-fg-mute transition-colors hover:bg-ink-800 hover:text-neg"
-      >
-        <LogOut size={13} />
-        Sair
-      </button>
+  const rodape = (
+    <div className="mt-auto flex flex-col gap-2.5 px-2.5 pt-4">
+      <CaixaTema />
+      <CaixaConta
+        email={email}
+        onSair={signOut}
+        ativo={path.startsWith("/conta")}
+      />
     </div>
   );
 
   return (
     <div className="flex min-h-dvh">
-      {/* -------- sidebar desktop -------- */}
+      {/* -------- barra lateral, desktop -------- */}
       <aside className="hidden w-[224px] shrink-0 flex-col bg-white pt-6 pb-5 lg:flex">
         <div className="mb-6">{wordmark}</div>
         {nav}
-        <div className="mt-auto">
-          <AccentPicker />
-          {account}
-        </div>
+        {rodape}
       </aside>
 
-      {/* -------- drawer mobile -------- */}
+      {/* -------- gaveta, mobile -------- */}
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
             className="absolute inset-0 bg-fg/35 fade"
             onClick={() => setOpen(false)}
           />
-          <aside className="relative flex h-full w-[262px] flex-col bg-white pt-6 pb-5 rise">
+          <aside className="relative flex h-full w-[262px] flex-col overflow-y-auto bg-white pt-6 pb-5 rise">
             <div className="mb-6 flex items-center justify-between pr-3">
               {wordmark}
               <button
@@ -176,10 +206,7 @@ export function Shell({
               </button>
             </div>
             {nav}
-            <div className="mt-auto">
-              <AccentPicker />
-              {account}
-            </div>
+            {rodape}
           </aside>
         </div>
       )}
