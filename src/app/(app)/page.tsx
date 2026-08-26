@@ -220,6 +220,18 @@ export default function HomePage() {
       open,
       lateT: open.filter((t) => t.due_date && daysUntil(t.due_date) < 0),
       pend,
+      /* Mesmo recorte do card Total em Contas a pagar: mês atual, todas as
+         situações. Dois lugares mostrando "total" com escopos diferentes
+         fariam os números não fecharem entre as telas. */
+      totalMes: bills
+        .filter((b) => b.due_date.startsWith(today.slice(0, 7)))
+        .reduce((s, b) => s + Number(b.amount), 0),
+      abertoMes: bills
+        .filter(
+          (b) =>
+            b.status === "pending" && b.due_date.startsWith(today.slice(0, 7))
+        )
+        .reduce((s, b) => s + Number(b.amount), 0),
       late: pend.filter((b) => daysUntil(b.due_date) < 0),
       soon: pend.filter((b) => {
         const d = daysUntil(b.due_date);
@@ -240,6 +252,7 @@ export default function HomePage() {
   const R = 34;
   const C = 2 * Math.PI * R;
   const now = new Date();
+  const nomeMes = now.toLocaleDateString("pt-BR", { month: "long" });
 
   return (
     <div className="rise">
@@ -508,10 +521,16 @@ export default function HomePage() {
           <div className="px-[18px] pb-[18px] pt-1.5">
             <div className="flex items-baseline gap-2.5 pt-2.5">
               <b className="text-2xl font-bold tracking-[-0.035em] tnum">
-                {brl(m.pend.reduce((s, b) => s + Number(b.amount), 0))}
+                {brl(m.totalMes)}
               </b>
-              <span className="text-xs text-fg-mute">em aberto</span>
+              <span className="text-xs text-fg-mute">em {nomeMes}</span>
             </div>
+            <p className="mt-1 text-[11.5px] text-fg-mute">
+              <span className="font-bold text-fg-dim tnum">
+                {brl(m.abertoMes)}
+              </span>{" "}
+              ainda em aberto
+            </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {m.late.length > 0 ? (
                 <span className="rounded-full bg-neg/12 px-2 py-0.5 text-[11px] font-semibold text-neg">
