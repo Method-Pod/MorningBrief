@@ -16,7 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { dateTimeBR } from "@/lib/format";
 import { ACCENTS, useAccent } from "@/components/accent";
 import { TrocarFoto, useAvatar } from "@/components/Avatar";
-import { Button, Card, Skeleton, cx } from "@/components/ui";
+import { Button, Card, Input, Skeleton, cx } from "@/components/ui";
 
 type Perfil = {
   email: string;
@@ -24,6 +24,7 @@ type Perfil = {
   confirmado: boolean;
   criadoEm: string | null;
   ultimoAcesso: string | null;
+  apelido: string;
 };
 
 export default function ContaPage() {
@@ -31,6 +32,9 @@ export default function ContaPage() {
   const router = useRouter();
   const [perfil, setPerfil] = React.useState<Perfil | null>(null);
   const [enviando, setEnviando] = React.useState(false);
+  const [apelido, setApelido] = React.useState("");
+  const [salvandoNome, setSalvandoNome] = React.useState(false);
+  const [nomeOk, setNomeOk] = React.useState("");
   const [aviso, setAviso] = React.useState("");
   const [erro, setErro] = React.useState("");
   const { accent, setAccent } = useAccent();
@@ -41,13 +45,17 @@ export default function ContaPage() {
       const { data } = await supabase.auth.getUser();
       const u = data.user;
       if (!u) return;
+      const guardado = u.user_metadata?.nome;
+      const inicial = typeof guardado === "string" ? guardado : "";
       setPerfil({
         email: u.email ?? "",
         id: u.id,
         confirmado: !!u.email_confirmed_at,
         criadoEm: u.created_at ?? null,
         ultimoAcesso: u.last_sign_in_at ?? null,
+        apelido: inicial,
       });
+      setApelido(inicial);
     })();
   }, [supabase]);
 
@@ -69,6 +77,37 @@ export default function ContaPage() {
     setAviso(`Link enviado para ${perfil.email}. Confira a caixa de entrada.`);
   };
 
+  /*
+   * Salva o nome e faz a saudação enxergar a mudança.
+   *
+   * Três passos, e nenhum é dispensável: updateUser grava o metadata, mas o
+   * access_token não é reemitido — e o layout, que monta a saudação, lê o nome
+   * de dentro do JWT. refreshSession pede o token novo; router.refresh manda o
+   * servidor renderizar o layout outra vez com ele.
+   */
+  const salvarNome = async () => {
+    const valor = apelido.trim().slice(0, 40);
+    setErro("");
+    setNomeOk("");
+    setSalvandoNome(true);
+    const { error } = await supabase.auth.updateUser({
+      data: { nome: valor || null },
+    });
+    if (error) {
+      setSalvandoNome(false);
+      return setErro(error.message);
+    }
+    try {
+      await supabase.auth.refreshSession();
+    } catch {
+      // sem token novo a saudação atualiza no próximo login
+    }
+    setSalvandoNome(false);
+    setPerfil((p) => (p ? { ...p, apelido: valor } : p));
+    setNomeOk(valor ? "Pronto." : "Voltamos a usar seu e-mail.");
+    router.refresh();
+  };
+
   const sair = async () => {
     await supabase.auth.signOut();
     router.replace("/login");
@@ -84,7 +123,8 @@ export default function ContaPage() {
       </div>
     );
 
-  const nome = perfil.email.split("@")[0] || "você";
+  // as iniciais do avatar seguem o nome escolhido, não o handle do e-mail
+  const nome = perfil.apelido || perfil.email.split("@")[0] || "você";
 
   return (
     <div className="rise max-w-[760px]">
@@ -101,6 +141,42 @@ export default function ContaPage() {
           <Cabeca icon={<User size={14} />} titulo="Perfil" />
           <div className="px-[18px] pb-[18px] pt-3">
             <TrocarFoto nome={nome} url={foto} onTrocou={setFoto} />
+
+            <div className="mt-4 border-t border-line-soft pt-4">
+              <label className="block">
+                <span className="block text-[13px] font-semibold">
+                  Como quer ser chamado
+                </span>
+                <span className="mt-0.5 block text-[11.5px] text-fg-mute">
+                  É o nome que aparece na saudação do Início. Em branco, usamos
+                  a primeira parte do seu e-mail.
+                </span>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <Input
+                    value={apelido}
+                    maxLength={40}
+                    onChange={(e) => {
+                      setApelido(e.target.value);
+                      setNomeOk("");
+                    }}
+                    placeholder={perfil.email.split("@")[0] || "Seu nome"}
+                    className="min-w-[180px] flex-1"
+                  />
+                  <Button
+                    onClick={salvarNome}
+                    disabled={salvandoNome || apelido.trim() === perfil.apelido}
+                  >
+                    {salvandoNome ? "Salvando..." : "Salvar"}
+                  </Button>
+                </div>
+              </label>
+
+              {nomeOk && (
+                <p className="mt-2.5 rounded-[14px] bg-pos/12 px-3.5 py-2.5 text-xs font-medium text-pos">
+                  {nomeOk}
+                </p>
+              )}
+            </div>
 
             <dl className="mt-4 flex flex-col gap-0 border-t border-line-soft pt-1">
               <Linha

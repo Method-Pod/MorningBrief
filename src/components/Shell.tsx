@@ -97,14 +97,15 @@ function CaixaTema() {
 
 function CaixaConta({
   email,
+  nome,
   onSair,
   ativo,
 }: {
   email: string;
+  nome: string;
   onSair: () => void;
   ativo: boolean;
 }) {
-  const nome = email.split("@")[0] || "você";
   const { url: foto } = useAvatar();
 
   return (
@@ -206,6 +207,7 @@ export function Shell({
       <CaixaTema />
       <CaixaConta
         email={email}
+        nome={nome || email.split("@")[0] || "você"}
         onSair={signOut}
         ativo={path.startsWith("/conta")}
       />
