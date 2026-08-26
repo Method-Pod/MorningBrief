@@ -422,7 +422,7 @@ export function Carregando({ altura = "42vh" }: { altura?: string }) {
         <span
           key={i}
           className="ponto h-2.5 w-2.5 rounded-full bg-brand-500"
-          style={{ animationDelay: `${i * 0.22}s` }}
+          style={{ animationDelay: `${i * 0.34}s` }}
         />
       ))}
     </div>

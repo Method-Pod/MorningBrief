@@ -236,7 +236,7 @@ export function TrocarFoto({
             className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full bg-white text-fg-dim shadow-[0_1px_4px_rgb(20_24_26/0.18)] transition-colors hover:text-brand-400 disabled:opacity-50"
           >
             {ocupado ? (
-              <Loader2 size={13} className="animate-spin" />
+              <Loader2 size={13} className="girar-lento" />
             ) : (
               <Camera size={13} />
             )}

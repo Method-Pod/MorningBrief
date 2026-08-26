@@ -167,6 +167,17 @@ body {
   border-radius: 0.875rem;
 }
 
+/* animate-spin do Tailwind gira em 1s linear, rápido demais ao lado do resto.
+   Mesma rotação em 2.2s, e com ease-in-out para não parecer motor. */
+@keyframes girar-lento {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@utility girar-lento {
+  animation: girar-lento 2.2s linear infinite;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
 }
@@ -248,8 +259,13 @@ textarea::placeholder {
  * Presença longa é o que evita a impressão de tela parada; a suavidade vem da
  * curva do ponto, não de uma entrada arrastada.
  */
+/*
+ * Sem atraso. O elemento aparece no clique e fica pela espera inteira — é o
+ * que dá tempo de ver o movimento lento. Atrasar a exibição não acelera a
+ * página em nada; só encurta a janela em que o indicador é visível.
+ */
 .surgir-tarde {
-  animation: surgir 0.14s ease-out 0.05s both;
+  animation: surgir 0.1s ease-out both;
 }
 
 /*
@@ -268,12 +284,12 @@ textarea::placeholder {
 @keyframes carregando-ponto {
   0%,
   100% {
-    opacity: 0.3;
+    opacity: 0.34;
     transform: translate3d(0, 0, 0);
   }
   50% {
     opacity: 1;
-    transform: translate3d(0, -4px, 0);
+    transform: translate3d(0, -3px, 0);
   }
 }
 .ponto {
@@ -281,15 +297,14 @@ textarea::placeholder {
      este valor é o que fica, então o indicador continua legível */
   opacity: 1;
   /*
-   * Ciclo longo, de propósito: o pedido é que pareça calmo.
+   * 3s por ciclo: 1.5s subindo, 1.5s descendo. O movimento é uma deriva, não
+   * um pulso.
    *
-   * O risco de desacelerar é o ponto quase não se mover na janela de meio
-   * segundo em que fica na tela, e ponto imóvel lê como travado. O que evita
-   * isso não é o ciclo curto: é o passo de 0.22s entre os três, que mantém os
-   * pontos em fases visivelmente diferentes. A fila se lê como onda parada no
-   * meio do movimento, com deriva lenta — que é o efeito procurado.
+   * O que impede a fila de parecer congelada não é ciclo curto, é o passo de
+   * 0.34s entre os três pontos: eles ficam em fases distintas, e sempre há um
+   * subindo enquanto outro desce.
    */
-  animation: carregando-ponto 2s ease-in-out infinite;
+  animation: carregando-ponto 3s ease-in-out infinite;
 }
 
 @keyframes fade {

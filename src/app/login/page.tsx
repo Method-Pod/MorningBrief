@@ -272,7 +272,7 @@ function Formulario() {
                 className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-brand-500 text-[15px] font-bold text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-45"
               >
                 {ocupado ? (
-                  <Loader2 size={17} className="animate-spin" />
+                  <Loader2 size={17} className="girar-lento" />
                 ) : (
                   <>
                     {t.acao}
@@ -317,7 +317,7 @@ export default function LoginPage() {
     <React.Suspense
       fallback={
         <div className="grid min-h-dvh place-items-center">
-          <Loader2 className="animate-spin text-brand-400" />
+          <Loader2 className="girar-lento text-brand-400" />
         </div>
       }
     >
