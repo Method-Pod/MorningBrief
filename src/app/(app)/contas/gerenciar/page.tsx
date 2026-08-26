@@ -2,33 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import {
-  ArrowLeft,
-  ChevronRight,
-  CreditCard,
-  Dumbbell,
-  GraduationCap,
-  HandCoins,
-  Home,
-  Landmark,
-  Megaphone,
-  Package,
-  Pencil,
-  Receipt,
-  Repeat2,
-  Search,
-  Trash2,
-  Tv,
-  Users,
-  Wallet,
-  Wifi,
-} from "lucide-react";
+import { ArrowLeft, Pencil, Search, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ehAbatida, restanteDe, type Bill } from "@/lib/types";
 import { brl, dataCurta, rotuloMes } from "@/lib/format";
 import { useCategorias } from "@/components/Categorias";
 import {
   Button,
+  Card,
   Field,
   Input,
   Modal,
@@ -39,27 +20,22 @@ import {
   useNotice,
 } from "@/components/ui";
 
-/** Ícone por categoria; cai em carteira quando não há correspondência. */
-const ICONES: Record<string, React.ElementType> = {
-  Moradia: Home,
-  Impostos: Landmark,
-  Fornecedores: Package,
-  Software: Tv,
-  Marketing: Megaphone,
-  Equipe: Users,
-  Saúde: Dumbbell,
-  Educação: GraduationCap,
-  Internet: Wifi,
-  Cartão: CreditCard,
-};
+type Tipo = "fixa" | "parcelada" | "abatida" | "avulsa";
+type Filtro = "todas" | Tipo;
 
-type Tipo = "parcelada" | "abatida" | "recorrente" | "avulsa";
+const FILTROS: { v: Filtro; label: string }[] = [
+  { v: "todas", label: "Todas" },
+  { v: "fixa", label: "Fixas" },
+  { v: "parcelada", label: "Parceladas" },
+  { v: "abatida", label: "Abatidas" },
+  { v: "avulsa", label: "Avulsas" },
+];
 
 /**
  * Cada conta entra em um tipo só.
  *
- * Uma conta pode ser recorrente e abatida ao mesmo tempo; sem uma ordem fixa,
- * ela apareceria em duas seções e as contagens do cabeçalho somariam mais que o
+ * Uma conta pode ser fixa e abatida ao mesmo tempo; sem uma ordem fixa ela
+ * apareceria em dois filtros e as contagens dos chips somariam mais que o
  * total de contas.
  */
 const tipoDe = (b: Bill): Tipo =>
@@ -68,20 +44,37 @@ const tipoDe = (b: Bill): Tipo =>
     : ehAbatida(b)
       ? "abatida"
       : b.recurring
-        ? "recorrente"
+        ? "fixa"
         : "avulsa";
 
-type Grupo = {
+/** "ago/26" → "ago". A faixa já está em ordem, o ano só polui. */
+const mesCurto = (iso: string) => rotuloMes(iso).split("/")[0];
+
+const ultimoDiaDoMes = (ano: number, mes1: number) =>
+  new Date(ano, mes1, 0).getDate();
+
+/** Mesma data, outro dia do mês, encolhido quando o mês é curto. */
+const trocarDia = (iso: string, dia: number) => {
+  const ano = Number(iso.slice(0, 4));
+  const mes = Number(iso.slice(5, 7));
+  const d = Math.min(dia, ultimoDiaDoMes(ano, mes));
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+};
+
+type Serie = {
   chave: string;
   descricao: string;
   categoria: string;
+  tipo: Tipo;
   valor: number;
   dia: number;
+  /** ordem cronológica, do mais antigo para o mais novo */
   contas: Bill[];
-  emAberto: number;
-  parcelaAtual: number | null;
-  parcelaTotal: number | null;
+  emAberto: Bill[];
   falta: number;
+  parcelaTotal: number | null;
+  /** maior installment_no presente, para dizer em que parcela a conta está */
+  parcelaAtual: number | null;
 };
 
 const numero = (b: Bill): Bill => ({
@@ -94,20 +87,18 @@ export default function GerenciarPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = React.useState<Bill[]>([]);
   const [carregando, setCarregando] = React.useState(true);
+  const [filtro, setFiltro] = React.useState<Filtro>("todas");
   const [busca, setBusca] = React.useState("");
   const [categoria, setCategoria] = React.useState("todas");
-  const [situacao, setSituacao] = React.useState("todas");
-  const [abertos, setAbertos] = React.useState<Set<string>>(new Set());
-  const [editando, setEditando] = React.useState<Bill | null>(null);
+  const [edicao, setEdicao] = React.useState<{ conta: Bill; serie: Serie } | null>(
+    null
+  );
   const confirm = useConfirm();
   const notice = useNotice();
   const categorias = useCategorias(supabase);
 
   const carregar = React.useCallback(async () => {
-    const { data } = await supabase
-      .from("bills")
-      .select("*")
-      .order("due_date", { ascending: false });
+    const { data } = await supabase.from("bills").select("*").order("due_date");
     setRows(((data as Bill[]) ?? []).map(numero));
     setCarregando(false);
   }, [supabase]);
@@ -116,102 +107,100 @@ export default function GerenciarPage() {
     carregar();
   }, [carregar]);
 
-  const filtradas = React.useMemo(() => {
-    const termo = busca.trim().toLowerCase();
-    return rows
-      .filter((b) => categoria === "todas" || b.category === categoria)
-      .filter((b) => situacao === "todas" || b.status === situacao)
-      .filter(
-        (b) =>
-          !termo ||
-          b.description.toLowerCase().includes(termo) ||
-          b.category.toLowerCase().includes(termo)
-      );
-  }, [rows, busca, categoria, situacao]);
-
   /**
-   * Agrupa por descrição dentro do tipo.
-   *
-   * É o que identifica uma série neste modelo: uma conta recorrente é a mesma
-   * descrição repetida mês a mês. Limite conhecido: duas contas diferentes com
-   * descrição idêntica caem no mesmo grupo — abrir o grupo mostra cada uma
-   * separada, e a edição é sempre de uma conta só, então nada é alterado em
-   * bloco por engano.
+   * Uma série é a mesma descrição repetida — é o que liga os lançamentos neste
+   * modelo, onde cada mês é uma linha própria. O tipo entra na chave para que
+   * uma parcelada e uma fixa de mesmo nome não virem a mesma série.
    */
-  const grupos = React.useMemo(() => {
-    const porTipo: Record<Tipo, Map<string, Bill[]>> = {
-      parcelada: new Map(),
-      abatida: new Map(),
-      recorrente: new Map(),
-      avulsa: new Map(),
-    };
-    filtradas.forEach((b) => {
-      const mapa = porTipo[tipoDe(b)];
-      const lista = mapa.get(b.description) ?? [];
+  const series = React.useMemo(() => {
+    const mapa = new Map<string, Bill[]>();
+    rows.forEach((b) => {
+      const chave = `${tipoDe(b)}:${b.description}`;
+      const lista = mapa.get(chave) ?? [];
       lista.push(b);
-      mapa.set(b.description, lista);
+      mapa.set(chave, lista);
     });
 
-    const montar = (tipo: Tipo): Grupo[] =>
-      [...porTipo[tipo].entries()]
-        .map(([descricao, contas]) => {
-          const ordenadas = [...contas].sort((a, b) =>
-            b.due_date.localeCompare(a.due_date)
-          );
-          const recente = ordenadas[0];
-          return {
-            chave: `${tipo}:${descricao}`,
-            descricao,
-            categoria: recente.category,
-            valor: recente.amount,
-            dia: Number(recente.due_date.slice(8, 10)),
-            contas: ordenadas,
-            emAberto: contas.filter((b) => b.status === "pending").length,
-            parcelaAtual: ordenadas.reduce<number | null>(
-              (m, b) =>
-                b.installment_no != null ? Math.max(m ?? 0, b.installment_no) : m,
-              null
-            ),
-            parcelaTotal: recente.installment_total,
-            falta: contas.reduce((t, b) => t + restanteDe(b), 0),
-          };
-        })
-        .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
+    return [...mapa.entries()]
+      .map(([chave, contas]) => {
+        const ordenadas = [...contas].sort((a, b) =>
+          a.due_date.localeCompare(b.due_date)
+        );
+        const recente = ordenadas[ordenadas.length - 1];
+        return {
+          chave,
+          descricao: recente.description,
+          categoria: recente.category,
+          tipo: tipoDe(recente),
+          valor: recente.amount,
+          dia: Number(recente.due_date.slice(8, 10)),
+          contas: ordenadas,
+          emAberto: ordenadas.filter((b) => b.status === "pending"),
+          falta: ordenadas.reduce((t, b) => t + restanteDe(b), 0),
+          parcelaTotal: recente.installment_total,
+          /*
+           * Vem de installment_no, não da contagem de linhas: uma parcela 5 de
+           * 5 lançada sozinha é a quinta parcela, e contar linhas diria "1 de
+           * 5" — o oposto do que a conta é.
+           */
+          parcelaAtual: ordenadas.reduce<number | null>(
+            (m, b) =>
+              b.installment_no != null ? Math.max(m ?? 0, b.installment_no) : m,
+            null
+          ),
+        };
+      })
+      .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
+  }, [rows]);
 
-    return {
-      recorrente: montar("recorrente"),
-      parcelada: montar("parcelada"),
-      abatida: montar("abatida"),
-      avulsa: montar("avulsa"),
+  const contagens = React.useMemo(() => {
+    const c: Record<Filtro, number> = {
+      todas: series.length,
+      fixa: 0,
+      parcelada: 0,
+      abatida: 0,
+      avulsa: 0,
     };
-  }, [filtradas]);
+    series.forEach((s) => (c[s.tipo] += 1));
+    return c;
+  }, [series]);
 
-  const alternar = (chave: string) =>
-    setAbertos((s) => {
-      const novo = new Set(s);
-      if (novo.has(chave)) novo.delete(chave);
-      else novo.add(chave);
-      return novo;
-    });
+  const visiveis = React.useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return series
+      .filter((s) => filtro === "todas" || s.tipo === filtro)
+      .filter((s) => categoria === "todas" || s.categoria === categoria)
+      .filter(
+        (s) =>
+          !termo ||
+          s.descricao.toLowerCase().includes(termo) ||
+          s.categoria.toLowerCase().includes(termo)
+      );
+  }, [series, filtro, categoria, busca]);
 
-  const excluirConta = (b: Bill) =>
+  /** Abre o editor no lançamento em aberto mais próximo, ou no último. */
+  const editarSerie = (s: Serie) =>
+    setEdicao({ conta: s.emAberto[0] ?? s.contas[s.contas.length - 1], serie: s });
+
+  const excluirSerie = (s: Serie) => {
+    const n = s.contas.length;
+    const pagas = s.contas.filter((b) => b.status === "paid").length;
     confirm.ask(
-      `Excluir "${b.description}" de ${dataCurta(b.due_date)}?${
-        b.status === "paid"
-          ? " Esta conta já está paga, e o histórico vai com ela."
-          : ""
-      }`,
+      `Excluir "${s.descricao}" e ${n === 1 ? "seu único lançamento" : `seus ${n} lançamentos`}?` +
+        (pagas ? ` ${pagas} já ${pagas === 1 ? "está paga" : "estão pagas"}, e o histórico vai junto.` : ""),
       async () => {
-        const { error } = await supabase.from("bills").delete().eq("id", b.id);
-        if (!notice.check(error, "excluir a conta")) carregar();
+        const { error } = await supabase
+          .from("bills")
+          .delete()
+          .in("id", s.contas.map((b) => b.id));
+        if (!notice.check(error, "excluir a série")) carregar();
       }
     );
-
-  const vazio = !filtradas.length;
+  };
 
   return (
-    <div className="rise max-w-[900px]">
-      <div className="mb-5 flex items-start gap-3">
+    <div className="rise max-w-[860px]">
+      <div className="flex items-start gap-3">
         <Link
           href="/contas"
           aria-label="Voltar para contas a pagar"
@@ -224,130 +213,93 @@ export default function GerenciarPage() {
             Gerenciar contas
           </h1>
           <p className="mt-1 text-sm text-fg-mute">
-            Abra uma série e altere conta por conta: data, valor, categoria ou
-            situação.
+            Altere um lançamento e os outros em aberto da mesma conta acompanham.
           </p>
         </div>
       </div>
 
-      {/* ------------------------------ filtros ------------------------------ */}
-      <div className="mb-4 flex flex-wrap gap-2.5">
-        <div className="relative w-full min-w-[180px] flex-1">
-          <Search
-            size={15}
-            className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
-          />
-          <Input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar conta..."
-            aria-label="Buscar conta"
-            className="pl-9"
-          />
-        </div>
-        <Select
-          value={categoria}
-          onChange={(e) => setCategoria(e.target.value)}
-          aria-label="Filtrar por categoria"
-          className="w-[calc(50%-5px)] sm:w-[180px]"
-        >
-          <option value="todas">Todas categorias</option>
-          {categorias.nomes.map((c) => (
-            <option key={c}>{c}</option>
+      <Card className="mt-4 overflow-hidden">
+        <div className="flex flex-wrap gap-1.5 px-[18px] pt-[18px]">
+          {FILTROS.map((f) => (
+            <button
+              key={f.v}
+              onClick={() => setFiltro(f.v)}
+              className={cx(
+                "h-8 rounded-full px-3.5 text-[12.5px] font-semibold transition-colors",
+                filtro === f.v
+                  ? "bg-brand-500 text-on-brand"
+                  : "bg-ink-800 text-fg-mute hover:text-fg-dim"
+              )}
+            >
+              {f.label}
+              <span className="ml-1.5 opacity-60 tnum">{contagens[f.v]}</span>
+            </button>
           ))}
-        </Select>
-        <Select
-          value={situacao}
-          onChange={(e) => setSituacao(e.target.value)}
-          aria-label="Filtrar por situação"
-          className="w-[calc(50%-5px)] sm:w-[150px]"
-        >
-          <option value="todas">Todas situações</option>
-          <option value="pending">Em aberto</option>
-          <option value="paid">Pagas</option>
-        </Select>
-      </div>
+        </div>
 
-      {carregando ? null : vazio ? (
-        <div className="rounded-[22px] bg-white p-10 text-center shadow-[0_1px_2px_rgb(20_24_26/0.05)]">
-          <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-[14px] bg-ink-800 text-fg-mute">
-            <Search size={19} />
+        <div className="flex flex-wrap items-center gap-2.5 px-[18px] pb-3.5 pt-3">
+          <div className="relative w-full flex-1 sm:min-w-[180px]">
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
+            />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar conta..."
+              aria-label="Buscar conta"
+              className="h-9 pl-9"
+            />
           </div>
-          <p className="text-[13.5px] font-semibold text-fg-dim">
-            {rows.length
-              ? "Nenhuma conta com esses filtros"
-              : "Nenhuma conta ainda"}
-          </p>
-          <p className="mx-auto mt-1 max-w-[340px] text-xs text-fg-mute">
-            {rows.length
-              ? "Limpe a busca ou troque os filtros."
-              : "Crie a primeira em Contas a pagar."}
-          </p>
+          <Select
+            value={categoria}
+            onChange={(e) => setCategoria(e.target.value)}
+            aria-label="Filtrar por categoria"
+            className="h-9 w-full sm:w-[190px]"
+          >
+            <option value="todas">Todas as categorias</option>
+            {categorias.nomes.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </Select>
         </div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          <Secao
-            icone={Repeat2}
-            titulo="Contas recorrentes"
-            grupos={grupos.recorrente}
-            resumo={(g) => `Todo dia ${g.dia}`}
-            selo={(g) =>
-              `${g.contas.length} ${g.contas.length === 1 ? "mês" : "meses"}`
-            }
-            abertos={abertos}
-            alternar={alternar}
-            setEditando={setEditando}
-            excluirConta={excluirConta}
-          />
-          <Secao
-            icone={CreditCard}
-            titulo="Contas parceladas"
-            grupos={grupos.parcelada}
-            resumo={(g) =>
-              g.parcelaTotal
-                ? `${g.parcelaAtual ?? 0} de ${g.parcelaTotal} parcelas`
-                : "parcelada"
-            }
-            selo={(g) =>
-              `${g.contas.length} lançada${g.contas.length > 1 ? "s" : ""}`
-            }
-            abertos={abertos}
-            alternar={alternar}
-            setEditando={setEditando}
-            excluirConta={excluirConta}
-          />
-          <Secao
-            icone={HandCoins}
-            titulo="Contas abatidas"
-            grupos={grupos.abatida}
-            resumo={(g) => (g.falta > 0 ? `falta ${brl(g.falta)}` : "quitada")}
-            selo={(g) => `${g.contas.length} conta${g.contas.length > 1 ? "s" : ""}`}
-            abertos={abertos}
-            alternar={alternar}
-            setEditando={setEditando}
-            excluirConta={excluirConta}
-          />
-          <Secao
-            icone={Receipt}
-            titulo="Contas avulsas"
-            grupos={grupos.avulsa}
-            resumo={(g) => dataCurta(g.contas[0].due_date)}
-            selo={(g) => (g.contas.length > 1 ? `${g.contas.length} lançamentos` : "")}
-            abertos={abertos}
-            alternar={alternar}
-            setEditando={setEditando}
-            excluirConta={excluirConta}
-          />
-        </div>
-      )}
 
-      <EditarConta
-        conta={editando}
+        {carregando ? null : !visiveis.length ? (
+          <p className="border-t border-line-soft px-[18px] py-10 text-center text-[13px] text-fg-mute">
+            {rows.length
+              ? "Nenhuma conta com esses filtros."
+              : "Nenhuma conta ainda. Crie a primeira em Contas a pagar."}
+          </p>
+        ) : (
+          <ul className="border-t border-line-soft">
+            {visiveis.map((s) => (
+              <LinhaSerie
+                key={s.chave}
+                serie={s}
+                onEditarSerie={() => editarSerie(s)}
+                onEditarConta={(b) => setEdicao({ conta: b, serie: s })}
+                onExcluir={() => excluirSerie(s)}
+              />
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <p className="mt-3 px-1 text-[11.5px] leading-relaxed text-fg-mute">
+        Cada bolha é um mês da conta:{" "}
+        <span className="font-semibold text-warn">em aberto</span> ou{" "}
+        <span className="font-semibold text-pos">paga</span>. Clique numa bolha
+        para abrir aquele mês. Lançamentos já pagos não são alterados junto —
+        são histórico.
+      </p>
+
+      <Editor
+        alvo={edicao}
         categorias={categorias.nomes}
         supabase={supabase}
-        onFechar={() => setEditando(null)}
+        onFechar={() => setEdicao(null)}
         onSalvo={() => {
-          setEditando(null);
+          setEdicao(null);
           carregar();
         }}
       />
@@ -358,228 +310,125 @@ export default function GerenciarPage() {
   );
 }
 
-/* ------------------------------ seção ------------------------------ */
+/* ------------------------------ linha da série ------------------------------ */
 
-function Secao({
-  icone: Icone,
-  titulo,
-  grupos,
-  resumo,
-  selo,
-  abertos,
-  alternar,
-  setEditando,
-  excluirConta,
-}: {
-  icone: React.ElementType;
-  titulo: string;
-  grupos: Grupo[];
-  resumo: (g: Grupo) => string;
-  selo: (g: Grupo) => string;
-  abertos: Set<string>;
-  alternar: (chave: string) => void;
-  setEditando: (b: Bill) => void;
-  excluirConta: (b: Bill) => void;
-}) {
-  if (!grupos.length) return null;
-
-  return (
-    <section>
-      <h2 className="mb-2.5 flex items-center gap-2 px-1 text-[14px] font-bold">
-        <Icone size={16} className="text-brand-400" />
-        {titulo}
-        <span className="font-semibold text-fg-mute tnum">({grupos.length})</span>
-      </h2>
-
-      <ul className="flex flex-col gap-2">
-        {grupos.map((g) => {
-          const Cat = ICONES[g.categoria] ?? Wallet;
-          const unica = g.contas.length === 1;
-          const aberto = abertos.has(g.chave);
-          const marca = selo(g);
-
-          return (
-            <li
-              key={g.chave}
-              className="overflow-hidden rounded-[18px] bg-white shadow-[0_1px_2px_rgb(20_24_26/0.05)]"
-            >
-              <div className="group flex items-center gap-3 p-3.5">
-                {/*
-                  Grupo de uma conta só não expande: abrir para mostrar a mesma
-                  linha de novo seria um clique sem resposta visível.
-                */}
-                {unica ? (
-                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-brand-500/12 text-brand-400">
-                    <Cat size={18} />
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => alternar(g.chave)}
-                    aria-expanded={aberto}
-                    aria-label={`${aberto ? "Fechar" : "Abrir"} ${g.descricao}`}
-                    className="relative grid h-10 w-10 shrink-0 place-items-center rounded-[12px] bg-brand-500/12 text-brand-400 transition-colors hover:bg-brand-500/20"
-                  >
-                    <Cat size={18} />
-                    <ChevronRight
-                      size={12}
-                      strokeWidth={3}
-                      className={cx(
-                        "absolute -bottom-0.5 -right-0.5 rounded-full bg-white text-fg-dim shadow-[0_1px_2px_rgb(20_24_26/0.14)]",
-                        aberto && "rotate-90"
-                      )}
-                    />
-                  </button>
-                )}
-
-                <button
-                  onClick={() => (unica ? setEditando(g.contas[0]) : alternar(g.chave))}
-                  className="min-w-0 flex-1 text-left"
-                >
-                  <p className="truncate text-[13.5px] font-bold">{g.descricao}</p>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11.5px] text-fg-mute">
-                    <span className="font-bold text-fg tnum">{brl(g.valor)}</span>
-                    <span>· {resumo(g)}</span>
-                    {marca && (
-                      <span className="rounded-full bg-brand-500/12 px-1.5 font-semibold text-brand-400">
-                        {marca}
-                      </span>
-                    )}
-                    {g.emAberto > 0 && (
-                      <span className="font-semibold text-warn tnum">
-                        {g.emAberto} em aberto
-                      </span>
-                    )}
-                  </p>
-                </button>
-
-                <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                  {unica ? (
-                    <>
-                      <button
-                        onClick={() => setEditando(g.contas[0])}
-                        aria-label={`Editar ${g.descricao}`}
-                        className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
-                      >
-                        <Pencil size={15} />
-                      </button>
-                      <button
-                        onClick={() => excluirConta(g.contas[0])}
-                        aria-label={`Excluir ${g.descricao}`}
-                        className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
-                      >
-                        <Trash2 size={15} />
-                      </button>
-                    </>
-                  ) : (
-                    <span className="pr-1 text-[11px] font-semibold text-fg-mute">
-                      {aberto ? "fechar" : "abrir"}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {aberto && !unica && (
-                <ul className="fade border-t border-line-soft bg-ink-900/40 px-3.5 py-1.5">
-                  {g.contas.map((b) => (
-                    <Ocorrencia
-                      key={b.id}
-                      conta={b}
-                      onEditar={() => setEditando(b)}
-                      onExcluir={() => excluirConta(b)}
-                    />
-                  ))}
-                </ul>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-    </section>
-  );
-}
-
-/** Uma conta dentro da série, com edição e exclusão próprias. */
-function Ocorrencia({
-  conta,
-  onEditar,
+function LinhaSerie({
+  serie: s,
+  onEditarSerie,
+  onEditarConta,
   onExcluir,
 }: {
-  conta: Bill;
-  onEditar: () => void;
+  serie: Serie;
+  onEditarSerie: () => void;
+  onEditarConta: (b: Bill) => void;
   onExcluir: () => void;
 }) {
-  const paga = conta.status === "paid";
-  const falta = restanteDe(conta);
+  const cadencia =
+    s.tipo === "fixa"
+      ? `Todo dia ${s.dia}`
+      : s.tipo === "parcelada"
+        ? `Parcela ${s.parcelaAtual ?? s.contas.length} de ${s.parcelaTotal ?? "?"}`
+        : s.tipo === "abatida"
+          ? s.falta > 0
+            ? `falta ${brl(s.falta)}`
+            : "quitada"
+          : dataCurta(s.contas[0].due_date);
 
   return (
-    <li className="group/o flex items-center gap-2.5 border-b border-line-soft py-2 last:border-0">
-      <span
-        className={cx("h-1.5 w-1.5 shrink-0 rounded-full", paga ? "bg-pos" : "bg-warn")}
-        aria-hidden
-      />
-      <button
-        onClick={onEditar}
-        className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 text-left"
-      >
-        <span className="text-[12.5px] font-semibold tnum">
-          {dataCurta(conta.due_date)}
-        </span>
-        <span className="text-[11px] text-fg-mute">{rotuloMes(conta.due_date)}</span>
-        <span className="text-[12.5px] font-bold tnum">{brl(conta.amount)}</span>
-        {conta.installment_no != null && conta.installment_total != null && (
-          <span className="text-[11px] text-fg-mute tnum">
-            {conta.installment_no}/{conta.installment_total}
-          </span>
-        )}
-        {ehAbatida(conta) && falta > 0 && (
-          <span className="text-[11px] font-semibold text-warn tnum">
-            falta {brl(falta)}
-          </span>
-        )}
-        <span
-          className={cx(
-            "rounded-full px-1.5 text-[10.5px] font-bold",
-            paga ? "bg-pos/12 text-pos" : "bg-warn/12 text-warn"
-          )}
-        >
-          {paga ? "paga" : "em aberto"}
-        </span>
-      </button>
+    <li className="group flex flex-col gap-2.5 border-b border-line-soft px-[18px] py-3.5 last:border-0 lg:flex-row lg:items-center lg:gap-4">
+      <div className="flex min-w-0 items-start justify-between gap-3 lg:flex-1">
+        <div className="min-w-0">
+          <p className="truncate text-[13.5px] font-semibold">{s.descricao}</p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-fg-mute">
+            <span>{cadencia}</span>
+            <span className="opacity-40">·</span>
+            <span>{s.categoria}</span>
+            {s.emAberto.length > 0 && (
+              <>
+                <span className="opacity-40">·</span>
+                <span className="font-bold text-warn tnum">
+                  {s.emAberto.length} em aberto
+                </span>
+              </>
+            )}
+          </p>
+        </div>
+        <p className="shrink-0 text-right text-[13.5px] font-bold tnum">
+          {brl(s.valor)}
+        </p>
+      </div>
 
-      <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover/o:opacity-100 lg:focus-within:opacity-100">
+      {/*
+        Faixa de meses: um botão por lançamento, na ordem do calendário.
+        Mostra a série inteira sem precisar expandir nada, e é por onde se abre
+        um mês específico quando ele foge do padrão dos outros.
+      */}
+      <div className="flex flex-wrap items-center gap-1 lg:shrink-0">
+        {s.contas.map((b) => {
+          const paga = b.status === "paid";
+          const falta = restanteDe(b);
+          return (
+            <button
+              key={b.id}
+              onClick={() => onEditarConta(b)}
+              title={`${dataCurta(b.due_date)} · ${brl(b.amount)} · ${
+                paga ? "paga" : "em aberto"
+              }`}
+              aria-label={`Editar ${s.descricao} de ${dataCurta(b.due_date)}, ${
+                paga ? "paga" : "em aberto"
+              }`}
+              className={cx(
+                "h-8 rounded-full px-2.5 text-[10.5px] font-bold uppercase tracking-wide transition-colors tnum lg:h-[26px] lg:px-2",
+                paga
+                  ? "bg-pos/14 text-pos hover:bg-pos/24"
+                  : "bg-warn/14 text-warn ring-1 ring-inset ring-warn/25 hover:bg-warn/24"
+              )}
+            >
+              {mesCurto(b.due_date)}
+              {ehAbatida(b) && falta > 0 && (
+                <span className="ml-1 font-semibold opacity-70">
+                  {Math.round((1 - falta / Number(b.amount)) * 100)}%
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
         <button
-          onClick={onEditar}
-          aria-label={`Editar ${conta.description} de ${dataCurta(conta.due_date)}`}
-          className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+          onClick={onEditarSerie}
+          aria-label={`Editar ${s.descricao}`}
+          className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
         >
-          <Pencil size={13} />
+          <Pencil size={15} />
         </button>
         <button
           onClick={onExcluir}
-          aria-label={`Excluir ${conta.description} de ${dataCurta(conta.due_date)}`}
-          className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
+          aria-label={`Excluir ${s.descricao}`}
+          className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
         >
-          <Trash2 size={13} />
+          <Trash2 size={15} />
         </button>
       </div>
     </li>
   );
 }
 
-/* ------------------------------ editar uma conta ------------------------------ */
+/* ------------------------------ editor ------------------------------ */
 
 const paraCampo = (n: number) => String(n).replace(".", ",");
 const paraNumero = (s: string) =>
   parseFloat(String(s).replace(/\./g, "").replace(",", "."));
 
-function EditarConta({
-  conta,
+function Editor({
+  alvo,
   categorias,
   supabase,
   onFechar,
   onSalvo,
 }: {
-  conta: Bill | null;
+  alvo: { conta: Bill; serie: Serie } | null;
   categorias: string[];
   supabase: ReturnType<typeof createClient>;
   onFechar: () => void;
@@ -587,35 +436,47 @@ function EditarConta({
 }) {
   const [descricao, setDescricao] = React.useState("");
   const [valor, setValor] = React.useState("");
-  const [vencimento, setVencimento] = React.useState("");
   const [categoria, setCategoria] = React.useState("Outros");
-  const [status, setStatus] = React.useState("pending");
-  const [recorrente, setRecorrente] = React.useState(false);
-  const [abatido, setAbatido] = React.useState("");
-  const [parcelaNo, setParcelaNo] = React.useState("");
-  const [parcelaTotal, setParcelaTotal] = React.useState("");
   const [observacoes, setObservacoes] = React.useState("");
+  const [parcelaTotal, setParcelaTotal] = React.useState("");
+  const [fixa, setFixa] = React.useState(false);
+  const [vencimento, setVencimento] = React.useState("");
+  const [status, setStatus] = React.useState("pending");
+  const [abatido, setAbatido] = React.useState("");
+  const [soEste, setSoEste] = React.useState(false);
   const [ocupado, setOcupado] = React.useState(false);
   const [erro, setErro] = React.useState("");
+
+  const conta = alvo?.conta;
+  const serie = alvo?.serie;
 
   React.useEffect(() => {
     if (!conta) return;
     setDescricao(conta.description);
     setValor(paraCampo(Number(conta.amount)));
-    setVencimento(conta.due_date.slice(0, 10));
     setCategoria(conta.category);
-    setStatus(conta.status);
-    setRecorrente(conta.recurring);
-    setAbatido(conta.paid_amount == null ? "" : paraCampo(Number(conta.paid_amount)));
-    setParcelaNo(conta.installment_no == null ? "" : String(conta.installment_no));
+    setObservacoes(conta.notes ?? "");
     setParcelaTotal(
       conta.installment_total == null ? "" : String(conta.installment_total)
     );
-    setObservacoes(conta.notes ?? "");
+    setFixa(conta.recurring);
+    setVencimento(conta.due_date.slice(0, 10));
+    setStatus(conta.status);
+    setAbatido(conta.paid_amount == null ? "" : paraCampo(Number(conta.paid_amount)));
+    setSoEste(false);
     setErro("");
   }, [conta]);
 
-  if (!conta) return null;
+  if (!alvo || !conta || !serie) return null;
+
+  /*
+   * Alvos da propagação: o lançamento aberto no editor mais os outros em aberto
+   * da mesma série. Os pagos ficam de fora — mudar o valor de uma conta que já
+   * saiu do bolso reescreve histórico, e isso não pode acontecer sem pedido.
+   */
+  const outros = serie.emAberto.filter((b) => b.id !== conta.id);
+  const alvos = soEste ? [conta] : [conta, ...outros];
+  const pagasDeFora = serie.contas.length - serie.emAberto.length;
 
   const salvar = async () => {
     setErro("");
@@ -625,52 +486,72 @@ function EditarConta({
     if (!Number.isFinite(v) || v <= 0)
       return setErro("Informe um valor maior que zero.");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimento))
-      return setErro("Informe o vencimento.");
+      return setErro("Informe o vencimento deste lançamento.");
 
     const temAbatido = abatido.trim() !== "";
     const pago = temAbatido ? paraNumero(abatido) : null;
     if (pago != null && (!Number.isFinite(pago) || pago < 0))
       return setErro("O valor já abatido não pode ser negativo.");
     if (pago != null && pago > v + 0.001)
-      return setErro(`O já abatido (${brl(pago)}) passa do valor total (${brl(v)}).`);
+      return setErro(`O já abatido (${brl(pago)}) passa do valor (${brl(v)}).`);
 
-    const no = parcelaNo.trim() === "" ? null : Number(parcelaNo);
-    const totalParcelas = parcelaTotal.trim() === "" ? null : Number(parcelaTotal);
-    if (no != null && totalParcelas != null && no > totalParcelas)
-      return setErro("O número da parcela é maior que o total de parcelas.");
+    const total = parcelaTotal.trim() === "" ? null : Number(parcelaTotal);
+    if (total != null && (!Number.isFinite(total) || total < 1))
+      return setErro("O total de parcelas precisa ser 1 ou mais.");
 
     setOcupado(true);
-    /*
-     * paid_at acompanha o status: uma conta que volta para em aberto não pode
-     * continuar com data de pagamento, e uma que passa a paga sem data ficaria
-     * fora dos totais por período. Se já havia data e o status não mudou, a
-     * data original é preservada.
-     */
-    const { error } = await supabase
-      .from("bills")
-      .update({
-        description: desc,
-        amount: v,
-        due_date: vencimento,
-        category: categoria,
-        status,
-        recurring: recorrente,
-        notes: observacoes.trim(),
-        paid_amount: pago,
-        installment_no: no,
-        installment_total: totalParcelas,
-        paid_at:
-          status === "paid" ? (conta.paid_at ?? new Date().toISOString()) : null,
-      })
-      .eq("id", conta.id);
-    setOcupado(false);
 
-    if (error) {
-      if (error.code === "PGRST204" && error.message.includes("paid_amount"))
+    /* O que vale para a série inteira. */
+    const comuns = {
+      description: desc,
+      amount: v,
+      category: categoria,
+      notes: observacoes.trim(),
+      recurring: fixa,
+      installment_total: total,
+    };
+
+    /*
+     * Uma requisição por lançamento, e não um update em lote, porque o dia do
+     * mês depende da data de cada um: dia 31 tem de virar 28 em fevereiro, e 29
+     * em ano bissexto. Um update único não calcula isso por linha.
+     */
+    const falhas: string[] = [];
+    for (const b of alvos) {
+      const ehOEditado = b.id === conta.id;
+      const proprios = ehOEditado
+        ? {
+            due_date: vencimento,
+            status,
+            paid_amount: pago,
+            paid_at:
+              status === "paid" ? (conta.paid_at ?? new Date().toISOString()) : null,
+          }
+        : {
+            /*
+             * O dia sai do vencimento escolhido, e só o dia: cada mês guarda o
+             * seu. Havia um campo "Dia do mês" separado aqui, e ele disputava a
+             * mesma coluna com o vencimento — mudar o dia movia os outros meses
+             * e deixava justamente o lançamento aberto no editor para trás.
+             */
+            due_date: trocarDia(b.due_date, Number(vencimento.slice(8, 10))),
+          };
+
+      const { error } = await supabase
+        .from("bills")
+        .update({ ...comuns, ...proprios })
+        .eq("id", b.id);
+      if (error) falhas.push(error.message);
+    }
+
+    setOcupado(false);
+    if (falhas.length) {
+      const m = falhas[0];
+      if (m.includes("paid_amount"))
         return setErro(
           "A coluna de abatimento ainda não existe. Rode supabase/ABATIDAS.sql no SQL Editor."
         );
-      return setErro(error.message);
+      return setErro(m);
     }
     onSalvo();
   };
@@ -681,77 +562,99 @@ function EditarConta({
 
   return (
     <Modal
-      open={!!conta}
+      open
       onClose={onFechar}
-      title="Editar conta"
-      sub={`${conta.description} · ${dataCurta(conta.due_date)}`}
+      title={descricao || conta.description}
+      sub={`Lançamento de ${dataCurta(conta.due_date)}`}
       footer={
         <>
           <Button onClick={onFechar}>Cancelar</Button>
           <Button variant="primary" onClick={salvar} disabled={ocupado}>
-            {ocupado ? "Salvando..." : "Salvar"}
+            {ocupado
+              ? "Salvando..."
+              : alvos.length > 1
+                ? `Salvar nos ${alvos.length}`
+                : "Salvar"}
           </Button>
         </>
       }
     >
-      <div className="flex flex-col gap-3.5">
-        <Field label="Descrição">
-          <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} />
-        </Field>
+      <div className="flex flex-col gap-4">
+        {/*
+          O aviso vem antes dos campos porque a propagação é o padrão: gravar em
+          seis lançamentos de uma vez não se desfaz, e quem abre o editor tem de
+          saber disso antes de digitar, não depois.
+        */}
+        {outros.length > 0 && (
+          <div
+            className={cx(
+              "rounded-[14px] px-3.5 py-3 text-[12px] leading-relaxed transition-colors",
+              soEste ? "bg-ink-800 text-fg-dim" : "bg-brand-500/10 text-fg-dim"
+            )}
+          >
+            {soEste ? (
+              <>
+                Alterando <span className="font-bold text-fg">só este mês</span>.
+                Os outros {outros.length} em aberto ficam como estão.
+              </>
+            ) : (
+              <>
+                O que estiver em{" "}
+                <span className="font-bold text-fg">Vale para a conta toda</span>{" "}
+                será gravado também nos outros{" "}
+                <span className="font-bold text-fg tnum">{outros.length}</span>{" "}
+                {outros.length === 1 ? "mês em aberto" : "meses em aberto"}
+                {pagasDeFora > 0 && (
+                  <>
+                    {" "}
+                    · {pagasDeFora} {pagasDeFora === 1 ? "já paga fica" : "já pagas ficam"}{" "}
+                    de fora
+                  </>
+                )}
+                .
+              </>
+            )}
+            <button
+              onClick={() => setSoEste((s) => !s)}
+              className="ml-1.5 font-bold text-brand-400 underline decoration-brand-400/30 underline-offset-2 transition-colors hover:decoration-brand-400"
+            >
+              {soEste ? "voltar a alterar todos" : "alterar só este mês"}
+            </button>
+          </div>
+        )}
 
-        <div className="grid gap-3.5 sm:grid-cols-2">
-          <Field label="Valor (R$)">
-            <Input
-              inputMode="decimal"
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-            />
-          </Field>
-          <Field label="Vencimento">
-            <Input
-              type="date"
-              value={vencimento}
-              onChange={(e) => setVencimento(e.target.value)}
-            />
-          </Field>
-        </div>
+        <section className="flex flex-col gap-3.5">
+          {outros.length > 0 && !soEste && (
+            <p className="text-[10.5px] font-bold uppercase tracking-wider text-brand-400">
+              Vale para a conta toda
+            </p>
+          )}
 
-        <div className="grid gap-3.5 sm:grid-cols-2">
-          <Field label="Categoria">
-            <Select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
-              {listaCategorias.map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </Select>
+          <Field label="Descrição">
+            <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} />
           </Field>
-          <Field label="Situação">
-            <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="pending">Em aberto</option>
-              <option value="paid">Paga</option>
-            </Select>
-          </Field>
-        </div>
 
-        <Field label="Já abatido (R$)" hint="Deixe vazio para pagamento único.">
-          <Input
-            inputMode="decimal"
-            value={abatido}
-            onChange={(e) => setAbatido(e.target.value)}
-            placeholder="vazio"
-          />
-        </Field>
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <Field label="Valor (R$)">
+              <Input
+                inputMode="decimal"
+                value={valor}
+                onChange={(e) => setValor(e.target.value)}
+              />
+            </Field>
+            <Field label="Categoria">
+              <Select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+              >
+                {listaCategorias.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
 
-        <div className="grid gap-3.5 sm:grid-cols-2">
-          <Field label="Parcela nº">
-            <Input
-              type="number"
-              min={1}
-              value={parcelaNo}
-              onChange={(e) => setParcelaNo(e.target.value)}
-              placeholder="vazio"
-            />
-          </Field>
-          <Field label="Total de parcelas">
+          <Field label="Total de parcelas" hint="Vazio se não for parcelada.">
             <Input
               type="number"
               min={1}
@@ -760,25 +663,71 @@ function EditarConta({
               placeholder="vazio"
             />
           </Field>
-        </div>
 
-        <Field label="Observações">
-          <Textarea
-            rows={2}
-            value={observacoes}
-            onChange={(e) => setObservacoes(e.target.value)}
-          />
-        </Field>
+          <Field label="Observações">
+            <Textarea
+              rows={2}
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+            />
+          </Field>
 
-        <label className="flex cursor-pointer items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3">
-          <input
-            type="checkbox"
-            checked={recorrente}
-            onChange={(e) => setRecorrente(e.target.checked)}
-            className="h-4 w-4 accent-[var(--a)]"
-          />
-          <span className="text-sm font-semibold text-fg-dim">Conta fixa</span>
-        </label>
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3">
+            <input
+              type="checkbox"
+              checked={fixa}
+              onChange={(e) => setFixa(e.target.checked)}
+              className="h-4 w-4 accent-[var(--a)]"
+            />
+            <span className="text-sm font-semibold text-fg-dim">Conta fixa</span>
+          </label>
+        </section>
+
+        {/*
+          Campos de um mês só. Vencimento exato, situação e abatimento variam de
+          mês para mês por natureza: propagar "paga" para os outros marcaria como
+          pago o que ninguém pagou.
+        */}
+        <section className="flex flex-col gap-3.5 border-t border-line-soft pt-4">
+          <p className="text-[10.5px] font-bold uppercase tracking-wider text-fg-mute">
+            Só do mês de {mesCurto(conta.due_date)}
+          </p>
+
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            <Field
+              label="Vencimento"
+              hint={
+                outros.length && !soEste
+                  ? "O dia escolhido passa a valer nos outros meses em aberto."
+                  : undefined
+              }
+            >
+              <Input
+                type="date"
+                value={vencimento}
+                onChange={(e) => setVencimento(e.target.value)}
+              />
+            </Field>
+            <Field label="Situação">
+              <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+                <option value="pending">Em aberto</option>
+                <option value="paid">Paga</option>
+              </Select>
+            </Field>
+          </div>
+
+          <Field
+            label="Já abatido (R$)"
+            hint="Preenchido, a conta passa a ser abatida aos poucos."
+          >
+            <Input
+              inputMode="decimal"
+              value={abatido}
+              onChange={(e) => setAbatido(e.target.value)}
+              placeholder="vazio"
+            />
+          </Field>
+        </section>
 
         {erro && (
           <p className="rounded-[14px] bg-neg/12 px-3.5 py-3 text-xs font-medium text-neg">
