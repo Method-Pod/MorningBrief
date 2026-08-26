@@ -218,8 +218,12 @@ export function Modal({
 }) {
   const caixa = React.useRef<HTMLDivElement>(null);
 
+  /* Portal só depois de montar, para o HTML do servidor bater com o do cliente. */
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
   /*
-   * Foco e trava de rolagem: dependem só de `open`.
+   * Foco e trava de rolagem: dependem de `open` e de `mounted`.
    *
    * Estavam no mesmo efeito do teclado, que depende de `onClose`. Como o pai
    * passa `onClose={() => setX(false)}`, a identidade muda a cada render, o
@@ -242,6 +246,13 @@ export function Modal({
      * controles de dentro, então a armadilha continua valendo.
      *
      * Não sobrepõe quem já colocou o foco dentro via autoFocus.
+     *
+     * `mounted` está nas dependências porque o portal só existe no segundo
+     * render. Quando o pai monta o Modal já com open=true — o caso de um modal
+     * criado ao clicar, em vez de mantido montado com open alternando — o
+     * primeiro render devolve null, `caixa.current` ainda é null, e sem
+     * `mounted` o efeito nunca refazia: o foco ficava no body e o Esc e a
+     * armadilha de Tab só passavam a valer depois de um clique dentro.
      */
     const cx = caixa.current;
     if (cx && !cx.contains(document.activeElement)) cx.focus();
@@ -256,7 +267,7 @@ export function Modal({
       if (travas === 0) document.body.style.overflow = "";
       anterior?.focus?.();
     };
-  }, [open]);
+  }, [open, mounted]);
 
   /* Teclado num efeito próprio, porque depende de onClose. */
   React.useEffect(() => {
@@ -293,13 +304,10 @@ export function Modal({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  const [mounted, setMounted] = React.useState(false);
-  React.useEffect(() => setMounted(true), []);
-
   if (!open || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-6">
       <div className="fixed inset-0 bg-fg/35 fade" onClick={onClose} />
       <div
         ref={caixa}
@@ -309,7 +317,7 @@ export function Modal({
         /* -1: focável por script, fora da ordem natural do Tab */
         tabIndex={-1}
         className={cx(
-          "relative z-10 w-full rounded-[20px] bg-white shadow-[0_24px_60px_-20px_rgb(20_24_26/0.3)] pop",
+          "relative z-10 my-auto w-full rounded-[20px] bg-white shadow-[0_24px_60px_-20px_rgb(20_24_26/0.3)] pop",
           wide ? "max-w-3xl" : "max-w-lg"
         )}
       >
