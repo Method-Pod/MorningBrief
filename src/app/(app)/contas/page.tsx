@@ -5,9 +5,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  PartyPopper,
   Pencil,
-  Plus,
-  RotateCcw,
+  Repeat2,
   Search,
   Trash2,
   Wallet,
@@ -15,26 +15,50 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { BILL_CATEGORIES, type Bill, type BillStatus } from "@/lib/types";
-import { brl, dateBR, daysUntil, todayISO } from "@/lib/format";
+import { brl, dataCurta, daysUntil, rotuloMes, todayISO } from "@/lib/format";
 import {
-  Badge,
+  EvolucaoMensal,
+  PagoPendenteCategoria,
+  ParticipacaoCategoria,
+  type PontoMes,
+} from "@/components/charts";
+import {
   Button,
   Card,
-  Empty,
   Field,
   Input,
   Modal,
-  Segmented,
   Select,
   Skeleton,
   Textarea,
+  cx,
   useConfirm,
   useNotice,
 } from "@/components/ui";
 
-type Filter = "all" | "pending" | "overdue" | "paid";
+/* ------------------------------ filtros e ordem ------------------------------ */
 
-const blank = () => ({
+type Filtro = "todas" | "hoje" | "semana" | "atrasadas" | "pendentes" | "pagas";
+type Ordem = "vencimento" | "maior" | "menor" | "nome" | "recente";
+
+const FILTROS: { v: Filtro; label: string }[] = [
+  { v: "todas", label: "Todas" },
+  { v: "hoje", label: "Hoje" },
+  { v: "semana", label: "Semana" },
+  { v: "atrasadas", label: "Atrasadas" },
+  { v: "pendentes", label: "Pendentes" },
+  { v: "pagas", label: "Pagas" },
+];
+
+const ORDENS: { v: Ordem; label: string }[] = [
+  { v: "vencimento", label: "Próximo vencimento" },
+  { v: "maior", label: "Maior valor" },
+  { v: "menor", label: "Menor valor" },
+  { v: "nome", label: "Nome (A-Z)" },
+  { v: "recente", label: "Mais recente" },
+];
+
+const vazio = () => ({
   description: "",
   amount: "",
   due_date: todayISO(),
@@ -42,17 +66,21 @@ const blank = () => ({
   status: "pending" as BillStatus,
   recurring: false,
   notes: "",
+  parcelado: false,
+  installment_no: 1,
+  installment_total: 2,
 });
 
 export default function ContasPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = React.useState<Bill[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [filter, setFilter] = React.useState<Filter>("all");
+  const [filtro, setFiltro] = React.useState<Filtro>("todas");
+  const [ordem, setOrdem] = React.useState<Ordem>("vencimento");
   const [q, setQ] = React.useState("");
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Bill | null>(null);
-  const [form, setForm] = React.useState(blank());
+  const [form, setForm] = React.useState(vazio());
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const confirm = useConfirm();
@@ -60,8 +88,7 @@ export default function ContasPage() {
 
   const load = React.useCallback(async () => {
     const { data } = await supabase.from("bills").select("*").order("due_date");
-    // numeric do Postgres chega como string no JSON; normaliza aqui para o
-    // tipo Bill.amount: number deixar de ser mentira.
+    // numeric do Postgres chega como string no JSON
     setRows(
       ((data as Bill[]) ?? []).map((b) => ({ ...b, amount: Number(b.amount) }))
     );
@@ -72,14 +99,16 @@ export default function ContasPage() {
     load();
   }, [load]);
 
-  const startNew = () => {
+  /* ------------------------------ ações ------------------------------ */
+
+  const novo = () => {
     setEditing(null);
-    setForm(blank());
+    setForm(vazio());
     setErr("");
     setOpen(true);
   };
 
-  const startEdit = (b: Bill) => {
+  const editar = (b: Bill) => {
     setEditing(b);
     setForm({
       description: b.description,
@@ -89,29 +118,52 @@ export default function ContasPage() {
       status: b.status,
       recurring: b.recurring,
       notes: b.notes,
+      parcelado: b.installment_total != null,
+      installment_no: b.installment_no ?? 1,
+      installment_total: b.installment_total ?? 2,
     });
     setErr("");
     setOpen(true);
   };
 
-  const save = async (e: React.FormEvent) => {
+  const salvar = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr("");
-    const amount = Number(String(form.amount).replace(",", "."));
-    if (!form.description.trim()) return setErr("Informe a descrição.");
-    if (!Number.isFinite(amount) || amount <= 0)
+    const desc = form.description.trim();
+    const valor = parseFloat(
+      String(form.amount).replace(/\./g, "").replace(",", ".")
+    );
+    if (!desc) return setErr("Informe a descrição.");
+    if (!Number.isFinite(valor) || valor <= 0)
       return setErr("Informe um valor maior que zero.");
+    if (!form.due_date) return setErr("Informe a data de vencimento.");
+    if (form.parcelado && form.installment_no > form.installment_total)
+      return setErr("A parcela atual não pode ser maior que o total.");
 
     setBusy(true);
     const payload = {
-      description: form.description.trim(),
-      amount,
+      description: desc,
+      amount: valor,
       due_date: form.due_date,
       category: form.category,
       status: form.status,
-      recurring: form.recurring,
       notes: form.notes.trim(),
+      recurring: form.recurring,
       paid_at: form.status === "paid" ? new Date().toISOString() : null,
+      /*
+       * As colunas de parcela vêm da migration-003. Só entram no payload
+       * quando a conta é parcelada: assim, num banco onde a migração ainda
+       * não rodou, contas simples continuam sendo criadas normalmente em vez
+       * de todas falharem com "could not find the column".
+       */
+      ...(form.parcelado || editing?.installment_total != null
+        ? {
+            installment_no: form.parcelado ? Number(form.installment_no) : null,
+            installment_total: form.parcelado
+              ? Number(form.installment_total)
+              : null,
+          }
+        : {}),
     };
 
     let error;
@@ -131,279 +183,397 @@ export default function ContasPage() {
         .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
-    if (error) return setErr(error.message);
+    if (error) {
+      // PGRST204: coluna inexistente — quase sempre a migração 003 pendente
+      if (error.code === "PGRST204" && error.message.includes("installment"))
+        return setErr(
+          "Parcelamento precisa da migração 003 no banco. Rode supabase/migration-003.sql ou desmarque \"Parcelada\"."
+        );
+      return setErr(error.message);
+    }
     setOpen(false);
     load();
   };
 
-  const toggle = async (b: Bill) => {
-    const next: BillStatus = b.status === "paid" ? "pending" : "paid";
-    setRows((r) =>
-      r.map((x) => (x.id === b.id ? { ...x, status: next } : x))
-    );
+  const alternar = async (b: Bill) => {
+    const proximo: BillStatus = b.status === "paid" ? "pending" : "paid";
+    setRows((r) => r.map((x) => (x.id === b.id ? { ...x, status: proximo } : x)));
     const { error } = await supabase
       .from("bills")
       .update({
-        status: next,
-        paid_at: next === "paid" ? new Date().toISOString() : null,
+        status: proximo,
+        paid_at: proximo === "paid" ? new Date().toISOString() : null,
       })
       .eq("id", b.id);
-    notice.check(error, next === "paid" ? "marcar como paga" : "reabrir a conta");
+    notice.check(error, proximo === "paid" ? "marcar como paga" : "reabrir a conta");
     load();
   };
 
-  const remove = (b: Bill) =>
-    confirm.ask(`Excluir "${b.description}"? Isso não pode ser desfeito.`, async () => {
+  const excluir = (b: Bill) =>
+    confirm.ask(`Excluir "${b.description}"? Não pode ser desfeito.`, async () => {
       const { error } = await supabase.from("bills").delete().eq("id", b.id);
       if (!notice.check(error, "excluir a conta")) load();
     });
 
   /* ------------------------------ derivados ------------------------------ */
 
-  const counts = React.useMemo(() => {
-    const pending = rows.filter((r) => r.status === "pending");
+  const atrasada = (b: Bill) =>
+    b.status === "pending" && daysUntil(b.due_date) < 0;
+
+  const contagens = React.useMemo(() => {
+    const pend = rows.filter((b) => b.status === "pending");
     return {
-      all: rows.length,
-      pending: pending.length,
-      overdue: pending.filter((r) => daysUntil(r.due_date) < 0).length,
-      paid: rows.filter((r) => r.status === "paid").length,
+      todas: rows.length,
+      hoje: rows.filter((b) => b.due_date.slice(0, 10) === todayISO()).length,
+      semana: pend.filter((b) => {
+        const d = daysUntil(b.due_date);
+        return d >= 0 && d <= 7;
+      }).length,
+      atrasadas: pend.filter(atrasada).length,
+      pendentes: pend.length,
+      pagas: rows.filter((b) => b.status === "paid").length,
     };
   }, [rows]);
 
-  const view = React.useMemo(() => {
-    const term = q.trim().toLowerCase();
-    return rows
-      .filter((r) => {
-        if (filter === "pending") return r.status === "pending";
-        if (filter === "paid") return r.status === "paid";
-        if (filter === "overdue")
-          return r.status === "pending" && daysUntil(r.due_date) < 0;
-        return true;
-      })
-      .filter(
-        (r) =>
-          !term ||
-          r.description.toLowerCase().includes(term) ||
-          r.category.toLowerCase().includes(term) ||
-          r.notes.toLowerCase().includes(term)
-      )
-      .sort((a, b) => {
-        if (a.status !== b.status) return a.status === "pending" ? -1 : 1;
-        return a.due_date.localeCompare(b.due_date);
-      });
-  }, [rows, filter, q]);
-
-  const totals = React.useMemo(() => {
-    const sum = (list: Bill[]) =>
-      list.reduce((s, b) => s + Number(b.amount), 0);
-    const pending = rows.filter((r) => r.status === "pending");
-    return {
-      view: sum(view),
-      pending: sum(pending),
-      overdue: sum(pending.filter((r) => daysUntil(r.due_date) < 0)),
-      paid: sum(rows.filter((r) => r.status === "paid")),
+  const filtradas = React.useMemo(() => {
+    const termo = q.trim().toLowerCase();
+    const hoje = todayISO();
+    const passa = (b: Bill) => {
+      switch (filtro) {
+        case "hoje":
+          return b.due_date.slice(0, 10) === hoje;
+        case "semana": {
+          const d = daysUntil(b.due_date);
+          return b.status === "pending" && d >= 0 && d <= 7;
+        }
+        case "atrasadas":
+          return atrasada(b);
+        case "pendentes":
+          return b.status === "pending";
+        case "pagas":
+          return b.status === "paid";
+        default:
+          return true;
+      }
     };
-  }, [rows, view]);
+    const lista = rows
+      .filter(passa)
+      .filter(
+        (b) =>
+          !termo ||
+          b.description.toLowerCase().includes(termo) ||
+          b.category.toLowerCase().includes(termo) ||
+          b.notes.toLowerCase().includes(termo)
+      );
+
+    const ordenada = [...lista];
+    ordenada.sort((a, b) => {
+      switch (ordem) {
+        case "maior":
+          return b.amount - a.amount;
+        case "menor":
+          return a.amount - b.amount;
+        case "nome":
+          return a.description.localeCompare(b.description, "pt-BR");
+        case "recente":
+          return b.created_at.localeCompare(a.created_at);
+        default:
+          return a.due_date.localeCompare(b.due_date);
+      }
+    });
+    return ordenada;
+  }, [rows, filtro, ordem, q]);
+
+  /** Grupos por situação, na ordem em que pedem atenção. */
+  const grupos = React.useMemo(() => {
+    const g: { titulo: string; itens: Bill[]; tom: string }[] = [
+      {
+        titulo: "Vencidas",
+        tom: "text-neg",
+        itens: filtradas.filter(atrasada),
+      },
+      {
+        titulo: "Pendentes",
+        tom: "text-warn",
+        itens: filtradas.filter((b) => b.status === "pending" && !atrasada(b)),
+      },
+      {
+        titulo: "Pagas",
+        tom: "text-pos",
+        itens: filtradas.filter((b) => b.status === "paid"),
+      },
+    ];
+    return g.filter((x) => x.itens.length > 0);
+  }, [filtradas]);
+
+  /* Resumo e categorias refletem o filtro na tela, não o mês inteiro:
+     assim os números sempre explicam o que está sendo mostrado. */
+  const resumo = React.useMemo(() => {
+    const soma = (l: Bill[]) => l.reduce((s, b) => s + b.amount, 0);
+    const pend = filtradas.filter((b) => b.status === "pending");
+    const pagas = filtradas.filter((b) => b.status === "paid");
+    const venc = pend.filter(atrasada);
+    return {
+      total: soma(filtradas),
+      qtdTotal: filtradas.length,
+      pagas: soma(pagas),
+      qtdPagas: pagas.length,
+      pendentes: soma(pend),
+      qtdPendentes: pend.length,
+      vencidas: soma(venc),
+      qtdVencidas: venc.length,
+    };
+  }, [filtradas]);
+
+  const porCategoria = React.useMemo(() => {
+    const mapa = new Map<string, { pago: number; pendente: number }>();
+    filtradas.forEach((b) => {
+      const c = mapa.get(b.category) ?? { pago: 0, pendente: 0 };
+      if (b.status === "paid") c.pago += b.amount;
+      else c.pendente += b.amount;
+      mapa.set(b.category, c);
+    });
+    const lista = [...mapa.entries()].map(([categoria, v]) => ({
+      categoria,
+      ...v,
+      total: v.pago + v.pendente,
+    }));
+    lista.sort((a, b) => b.total - a.total);
+    return lista;
+  }, [filtradas]);
+
+  /** Últimos 12 meses, sempre sobre todas as contas — é tendência, não filtro. */
+  const evolucao = React.useMemo<PontoMes[]>(() => {
+    const hoje = new Date(todayISO() + "T00:00:00");
+    const pontos: PontoMes[] = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      pontos.push({
+        rotulo: rotuloMes(ym),
+        valor: rows
+          .filter((b) => b.due_date.startsWith(ym))
+          .reduce((s, b) => s + b.amount, 0),
+        mesAtual: i === 0,
+      });
+    }
+    return pontos;
+  }, [rows]);
+
+  const nadaPendente =
+    !loading && rows.length > 0 && contagens.pendentes === 0;
+
+  if (loading)
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-10 w-56" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-[104px] rounded-[22px]" />
+          ))}
+        </div>
+        <Skeleton className="h-[420px] rounded-[22px]" />
+      </div>
+    );
 
   return (
-    <div className="space-y-5 rise">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="rise">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3.5">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Contas a pagar</h1>
+          <h1 className="text-[26px] font-bold tracking-[-0.03em]">
+            Contas a pagar
+          </h1>
           <p className="mt-1 text-sm text-fg-mute">
-            {counts.pending} em aberto · {brl(totals.pending)}
-            {totals.overdue > 0 && (
-              <span className="text-neg"> · {brl(totals.overdue)} em atraso</span>
+            {contagens.pendentes} em aberto
+            {contagens.atrasadas > 0 && (
+              <span className="text-neg">
+                {" "}
+                · {contagens.atrasadas} vencida
+                {contagens.atrasadas > 1 ? "s" : ""}
+              </span>
             )}
           </p>
         </div>
-        <Button variant="primary" onClick={startNew}>
-          <Plus size={15} />
+        <Button variant="primary" onClick={novo}>
+          <Wallet size={15} />
           Nova conta
         </Button>
       </div>
 
-      {/* resumo */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Em aberto" value={brl(totals.pending)} sub={`${counts.pending} contas`} tone="warn" />
-        <Stat label="Em atraso" value={brl(totals.overdue)} sub={`${counts.overdue} contas`} tone="neg" />
-        <Stat label="Pago" value={brl(totals.paid)} sub={`${counts.paid} contas`} tone="pos" />
+      {nadaPendente && (
+        <div className="mb-4 flex items-center gap-3 rounded-[18px] bg-pos/12 px-4 py-3.5">
+          <PartyPopper size={18} className="shrink-0 text-pos" />
+          <div>
+            <p className="text-[13.5px] font-bold text-pos">Tudo em dia</p>
+            <p className="text-[12px] text-fg-dim">
+              Nenhuma conta pendente. Só as pagas na lista.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------ resumo ------------------------------ */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Numero rotulo="Total" valor={resumo.total} qtd={resumo.qtdTotal} />
+        <Numero rotulo="Pagas" valor={resumo.pagas} qtd={resumo.qtdPagas} tom="text-pos" />
+        <Numero
+          rotulo="Pendentes"
+          valor={resumo.pendentes}
+          qtd={resumo.qtdPendentes}
+          tom="text-warn"
+        />
+        <Numero
+          rotulo="Vencidas"
+          valor={resumo.vencidas}
+          qtd={resumo.qtdVencidas}
+          tom="text-neg"
+        />
       </div>
 
-      <Card className="overflow-hidden">
-        <div className="flex flex-wrap items-center gap-3 px-4 py-4">
-          <Segmented
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: "all", label: "Todas", count: counts.all },
-              { value: "pending", label: "Em aberto", count: counts.pending },
-              { value: "overdue", label: "Atrasadas", count: counts.overdue },
-              { value: "paid", label: "Pagas", count: counts.paid },
-            ]}
-          />
-          <div className="relative ml-auto w-full sm:w-64">
+      {/* ------------------------------ lista ------------------------------ */}
+      <Card className="mt-4 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2.5 px-[18px] pt-[18px]">
+          <div className="flex flex-wrap gap-1.5">
+            {FILTROS.map((f) => (
+              <button
+                key={f.v}
+                onClick={() => setFiltro(f.v)}
+                className={cx(
+                  "h-8 rounded-full px-3.5 text-[12.5px] font-semibold transition-colors",
+                  filtro === f.v
+                    ? "bg-brand-500 text-on-brand"
+                    : "bg-ink-800 text-fg-mute hover:text-fg-dim"
+                )}
+              >
+                {f.label}
+                <span className="ml-1.5 opacity-60 tnum">
+                  {contagens[f.v]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5 px-[18px] pb-3.5 pt-3">
+          <div className="relative min-w-[180px] flex-1">
             <Search
-              size={14}
+              size={15}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
             />
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Buscar conta..."
+              aria-label="Buscar conta"
               className="pl-9"
             />
           </div>
+          <Select
+            value={ordem}
+            onChange={(e) => setOrdem(e.target.value as Ordem)}
+            aria-label="Ordenar por"
+            className="w-[196px]"
+          >
+            {ORDENS.map((o) => (
+              <option key={o.v} value={o.v}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
         </div>
 
-        {loading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Skeleton key={i} className="h-14" />
-            ))}
+        {filtradas.length === 0 ? (
+          <div className="flex flex-col items-center px-6 py-14 text-center">
+            <div className="mb-3 grid h-11 w-11 place-items-center rounded-[14px] bg-ink-800 text-fg-mute">
+              <Wallet size={19} />
+            </div>
+            <p className="text-[13.5px] font-semibold text-fg-dim">
+              {rows.length ? "Nada neste filtro" : "Nenhuma conta cadastrada"}
+            </p>
+            <p className="mt-1 max-w-[330px] text-xs text-fg-mute">
+              {rows.length
+                ? "Troque o filtro ou limpe a busca."
+                : "Lance suas contas para acompanhar vencimentos e totais."}
+            </p>
+            {!rows.length && (
+              <Button variant="primary" size="sm" className="mt-4" onClick={novo}>
+                Nova conta
+              </Button>
+            )}
           </div>
-        ) : view.length === 0 ? (
-          <Empty
-            icon={<Wallet size={18} />}
-            title={q || filter !== "all" ? "Nada encontrado" : "Nenhuma conta cadastrada"}
-            sub={
-              q || filter !== "all"
-                ? "Ajuste a busca ou o filtro."
-                : "Lance suas contas para acompanhar vencimentos e totais."
-            }
-            action={
-              !q && filter === "all" ? (
-                <Button variant="primary" size="sm" onClick={startNew}>
-                  <Plus size={14} />
-                  Nova conta
-                </Button>
-              ) : undefined
-            }
-          />
         ) : (
-          <div className="overflow-x-auto border-t border-line-soft">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead>
-                <tr className="border-b border-line-soft text-left text-[11px] uppercase tracking-wider text-fg-mute">
-                  <th className="w-10 px-4 py-2.5" />
-                  <th className="px-2 py-2.5 font-medium">Descrição</th>
-                  <th className="px-3 py-2.5 font-medium">Categoria</th>
-                  <th className="px-3 py-2.5 font-medium">Vencimento</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Valor</th>
-                  <th className="w-24 px-4 py-2.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {view.map((b) => {
-                  const late = b.status === "pending" && daysUntil(b.due_date) < 0;
-                  const d = daysUntil(b.due_date);
-                  return (
-                    <tr
+          <div className="border-t border-line-soft">
+            <p className="px-[18px] pt-3 text-[11.5px] font-semibold text-fg-mute">
+              {filtradas.length} conta{filtradas.length === 1 ? "" : "s"}
+            </p>
+            {grupos.map((g) => (
+              <section key={g.titulo}>
+                <h2
+                  className={cx(
+                    "px-[18px] pb-1.5 pt-4 text-[10.5px] font-bold uppercase tracking-[0.1em]",
+                    g.tom
+                  )}
+                >
+                  {g.titulo}{" "}
+                  <span className="text-fg-mute tnum">({g.itens.length})</span>
+                </h2>
+                <ul className="px-2.5 pb-1">
+                  {g.itens.map((b) => (
+                    <Linha
                       key={b.id}
-                      className="group border-b border-line-soft/60 last:border-0 transition-colors hover:bg-ink-800/40"
-                    >
-                      <td className="px-4 py-3">
-                        <button
-                          onClick={() => toggle(b)}
-                          aria-label={b.status === "paid" ? "Marcar em aberto" : "Marcar como paga"}
-                          className={`grid h-5 w-5 place-items-center rounded-md border transition-all ${
-                            b.status === "paid"
-                              ? "border-pos bg-pos text-ink-950"
-                              : "border-ink-600 hover:border-brand-500"
-                          }`}
-                        >
-                          {b.status === "paid" && <CheckCircle2 size={12} />}
-                        </button>
-                      </td>
-                      <td className="px-2 py-3">
-                        <p
-                          className={`max-w-[260px] truncate font-medium ${b.status === "paid" ? "text-fg-mute line-through" : ""}`}
-                        >
-                          {b.description}
-                        </p>
-                        {b.notes && (
-                          <p className="max-w-[260px] truncate text-[11px] text-fg-mute">
-                            {b.notes}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <Badge>{b.category}</Badge>
-                        {b.recurring && (
-                          <Badge tone="violet" className="ml-1">
-                            <RotateCcw size={10} />
-                            fixa
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-fg-dim tnum">
-                            {dateBR(b.due_date)}
-                          </span>
-                          {b.status === "pending" &&
-                            (late ? (
-                              <Badge tone="neg">
-                                <AlertCircle size={10} />
-                                {Math.abs(d)}d
-                              </Badge>
-                            ) : d === 0 ? (
-                              <Badge tone="warn">
-                                <Clock size={10} />
-                                hoje
-                              </Badge>
-                            ) : d <= 7 ? (
-                              <Badge tone="warn">{d}d</Badge>
-                            ) : null)}
-                          {b.status === "paid" && (
-                            <Badge tone="pos">
-                              <CheckCircle2 size={10} />
-                              paga
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-right font-medium tnum ${late ? "text-neg" : ""}`}
-                      >
-                        {brl(Number(b.amount))}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                          <button
-                            onClick={() => startEdit(b)}
-                            aria-label="Editar"
-                            className="rounded-lg p-1.5 text-fg-mute hover:bg-ink-750 hover:text-fg"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => remove(b)}
-                            aria-label="Excluir"
-                            className="rounded-lg p-1.5 text-fg-mute hover:bg-neg/15 hover:text-neg"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-line bg-ink-900/60">
-                  <td colSpan={4} className="px-5 py-3 text-xs text-fg-mute">
-                    {view.length} conta{view.length === 1 ? "" : "s"} no filtro
-                  </td>
-                  <td className="px-3 py-3 text-right text-sm font-semibold tnum">
-                    {brl(totals.view)}
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
+                      b={b}
+                      atrasada={atrasada(b)}
+                      onAlternar={() => alternar(b)}
+                      onEditar={() => editar(b)}
+                      onExcluir={() => excluir(b)}
+                    />
+                  ))}
+                </ul>
+              </section>
+            ))}
+            <div className="mt-1 flex items-baseline justify-between border-t border-line-soft px-[18px] py-3.5">
+              <span className="text-[12px] text-fg-mute">
+                Soma do filtro
+              </span>
+              <span className="text-[16px] font-bold tracking-[-0.02em] tnum">
+                {brl(resumo.total)}
+              </span>
+            </div>
           </div>
         )}
+      </Card>
+
+      {/* ------------------------------ análises ------------------------------ */}
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <Card>
+          <Cabeca titulo="Gastos por categoria" />
+          <div className="px-[18px] pb-[18px] pt-3">
+            <ParticipacaoCategoria
+              dados={porCategoria.map((c) => ({
+                categoria: c.categoria,
+                valor: c.total,
+              }))}
+              total={resumo.total}
+            />
+          </div>
+        </Card>
+
+        <Card>
+          <Cabeca titulo="Pago vs pendente por categoria" />
+          <div className="px-[18px] pb-[18px] pt-3">
+            <PagoPendenteCategoria dados={porCategoria} />
+          </div>
+        </Card>
+      </div>
+
+      <Card className="mt-4">
+        <Cabeca
+          titulo="Evolução dos gastos"
+          sub="Últimos 12 meses, todas as contas"
+        />
+        <div className="px-2 pb-4 pt-3">
+          <EvolucaoMensal dados={evolucao} />
+        </div>
       </Card>
 
       {/* ------------------------------ modal ------------------------------ */}
@@ -415,13 +585,13 @@ export default function ContasPage() {
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={save} disabled={busy}>
+            <Button variant="primary" onClick={salvar} disabled={busy}>
               {busy ? "Salvando..." : "Salvar"}
             </Button>
           </>
         }
       >
-        <form onSubmit={save} className="space-y-4">
+        <form onSubmit={salvar} className="flex flex-col gap-3.5">
           <Field label="Descrição">
             <Input
               autoFocus
@@ -431,7 +601,7 @@ export default function ContasPage() {
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Valor (R$)">
               <Input
                 inputMode="decimal"
@@ -449,16 +619,14 @@ export default function ContasPage() {
             </Field>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="Categoria">
               <Select
                 value={form.category}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
               >
                 {BILL_CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
+                  <option key={c}>{c}</option>
                 ))}
               </Select>
             </Field>
@@ -484,23 +652,69 @@ export default function ContasPage() {
             />
           </Field>
 
-          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-line-soft bg-ink-900/50 px-3.5 py-3">
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3">
             <input
               type="checkbox"
               checked={form.recurring}
               onChange={(e) => setForm({ ...form, recurring: e.target.checked })}
-              className="h-4 w-4 accent-[#2f7bff]"
+              className="h-4 w-4 accent-[var(--a)]"
             />
             <span className="text-sm text-fg-dim">
               Conta fixa
               <span className="ml-1 text-[11px] text-fg-mute">
-                (só marca como recorrente; não duplica automaticamente)
+                (marca como recorrente; não duplica)
               </span>
             </span>
           </label>
 
+          <div className="rounded-[14px] bg-ink-800 p-3.5">
+            <label className="flex cursor-pointer items-center gap-2.5">
+              <input
+                type="checkbox"
+                checked={form.parcelado}
+                onChange={(e) =>
+                  setForm({ ...form, parcelado: e.target.checked })
+                }
+                className="h-4 w-4 accent-[var(--a)]"
+              />
+              <span className="text-sm text-fg-dim">
+                <span className="font-semibold text-fg">Parcelada</span>
+                <span className="ml-1 text-[11px] text-fg-mute">
+                  (mostra 2/4 na lista)
+                </span>
+              </span>
+            </label>
+            {form.parcelado && (
+              <div className="mt-3.5 grid gap-3.5 border-t border-line-soft pt-3.5 sm:grid-cols-2">
+                <Field label="Parcela">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.installment_no}
+                    onChange={(e) =>
+                      setForm({ ...form, installment_no: Number(e.target.value) })
+                    }
+                  />
+                </Field>
+                <Field label="De">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={form.installment_total}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        installment_total: Number(e.target.value),
+                      })
+                    }
+                  />
+                </Field>
+              </div>
+            )}
+          </div>
+
           {err && (
-            <p className="rounded-xl border border-neg/30 bg-neg/10 p-3 text-xs text-neg">
+            <p className="rounded-[14px] bg-neg/12 px-3.5 py-3 text-xs font-medium text-neg">
               {err}
             </p>
           )}
@@ -513,25 +727,149 @@ export default function ContasPage() {
   );
 }
 
-function Stat({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  tone: "warn" | "neg" | "pos";
-}) {
-  const c = { warn: "text-warn", neg: "text-neg", pos: "text-pos" }[tone];
+/* ------------------------------ peças ------------------------------ */
+
+function Cabeca({ titulo, sub }: { titulo: string; sub?: string }) {
   return (
-    <Card className="p-4">
-      <p className={`text-[11px] font-medium uppercase tracking-wider ${c}`}>
-        {label}
+    <div className="px-[18px] pt-[17px]">
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
+        {titulo}
+      </h2>
+      {sub && <p className="mt-0.5 text-[11.5px] text-fg-mute">{sub}</p>}
+    </div>
+  );
+}
+
+function Numero({
+  rotulo,
+  valor,
+  qtd,
+  tom,
+}: {
+  rotulo: string;
+  valor: number;
+  qtd: number;
+  tom?: string;
+}) {
+  return (
+    <Card className="p-[18px]">
+      <p
+        className={cx(
+          "text-[10.5px] font-bold uppercase tracking-[0.1em]",
+          tom ?? "text-fg-mute"
+        )}
+      >
+        {rotulo}
       </p>
-      <p className="mt-2.5 text-xl font-semibold tracking-tight tnum">{value}</p>
-      <p className="mt-1 text-[11px] text-fg-mute">{sub}</p>
+      <p className="mt-2.5 text-[20px] font-bold tracking-[-0.03em] tnum">
+        {brl(valor)}
+      </p>
+      <p className="mt-1 text-[11.5px] text-fg-mute">
+        {qtd} conta{qtd === 1 ? "" : "s"}
+      </p>
     </Card>
+  );
+}
+
+function Linha({
+  b,
+  atrasada,
+  onAlternar,
+  onEditar,
+  onExcluir,
+}: {
+  b: Bill;
+  atrasada: boolean;
+  onAlternar: () => void;
+  onEditar: () => void;
+  onExcluir: () => void;
+}) {
+  const d = daysUntil(b.due_date);
+  const paga = b.status === "paid";
+
+  return (
+    <li className="group flex items-center gap-3 rounded-[14px] px-3 py-2.5 transition-colors hover:bg-ink-800">
+      <button
+        onClick={onAlternar}
+        aria-label={paga ? "Marcar em aberto" : "Marcar como paga"}
+        className={cx(
+          "grid h-[22px] w-[22px] shrink-0 place-items-center rounded-md border-[1.8px] transition-all",
+          paga
+            ? "border-pos bg-pos text-white"
+            : "border-ink-600 text-transparent hover:border-brand-500"
+        )}
+      >
+        <CheckCircle2 size={13} />
+      </button>
+
+      <div className="min-w-0 flex-1">
+        <p
+          className={cx(
+            "truncate text-[13.5px] font-semibold",
+            paga && "text-fg-mute line-through"
+          )}
+        >
+          {b.description}
+        </p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-fg-mute">
+          <span className="tnum">{dataCurta(b.due_date)}</span>
+          <span className="opacity-40">·</span>
+          <span>{b.category}</span>
+          {b.installment_total != null && (
+            <span className="rounded-full bg-brand-500/12 px-1.5 font-semibold text-brand-400 tnum">
+              {b.installment_no}/{b.installment_total}
+            </span>
+          )}
+          {b.recurring && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-ink-750 px-1.5 font-semibold">
+              <Repeat2 size={9} />
+              recorrente
+            </span>
+          )}
+          {!paga && atrasada && (
+            <span className="inline-flex items-center gap-1 font-bold text-neg">
+              <AlertCircle size={10} />
+              {Math.abs(d)}d em atraso
+            </span>
+          )}
+          {!paga && d === 0 && (
+            <span className="inline-flex items-center gap-1 font-bold text-warn">
+              <Clock size={10} />
+              vence hoje
+            </span>
+          )}
+          {!paga && d > 0 && d <= 7 && (
+            <span className="font-bold text-warn">em {d}d</span>
+          )}
+        </div>
+      </div>
+
+      <span
+        className={cx(
+          "shrink-0 text-[14.5px] font-bold tracking-[-0.02em] tnum",
+          atrasada && "text-neg",
+          paga && "text-fg-mute"
+        )}
+      >
+        {brl(b.amount)}
+      </span>
+
+      <div className="flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+        <button
+          onClick={onEditar}
+          aria-label="Editar"
+          className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-white hover:text-fg"
+        >
+          <Pencil size={14} />
+        </button>
+        <button
+          onClick={onExcluir}
+          aria-label="Excluir"
+          className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-neg/15 hover:text-neg"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    </li>
   );
 }

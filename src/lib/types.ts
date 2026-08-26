@@ -32,6 +32,9 @@ export type Bill = {
   recurring: boolean;
   notes: string;
   created_at: string;
+  /* Parcelas: nulo nas duas = conta simples. Ver migration-003.sql. */
+  installment_no: number | null;
+  installment_total: number | null;
 };
 
 export type Task = {

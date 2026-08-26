@@ -75,3 +75,21 @@ export const localTime = (iso: string | null | undefined) => {
     minute: "2-digit",
   });
 };
+
+const MES_ABREV = [
+  "jan", "fev", "mar", "abr", "mai", "jun",
+  "jul", "ago", "set", "out", "nov", "dez",
+];
+
+/** "2026-08-04" -> "04 de ago." — mais legível numa lista que dd/mm/aaaa. */
+export const dataCurta = (iso: string | null | undefined) => {
+  if (!iso) return "—";
+  const [, m, d] = iso.slice(0, 10).split("-");
+  return `${d} de ${MES_ABREV[Number(m) - 1] ?? "?"}.`;
+};
+
+/** "2026-08" -> "ago/26" — rótulo do eixo da evolução mensal. */
+export const rotuloMes = (ym: string) => {
+  const [y, m] = ym.split("-");
+  return `${MES_ABREV[Number(m) - 1] ?? "?"}/${y.slice(2)}`;
+};
