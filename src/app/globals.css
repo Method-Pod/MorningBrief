@@ -1,35 +1,101 @@
 @import "tailwindcss";
 
-@theme {
-  --color-ink-950: #04060c;
-  --color-ink-900: #070a12;
-  --color-ink-850: #0a0e18;
-  --color-ink-800: #0e131f;
-  --color-ink-750: #131928;
-  --color-ink-700: #1a2133;
-  --color-ink-600: #232c42;
+/* ============================================================
+   Tema claro, minimalista, sans-serif.
+   O accent é trocável em tempo de execução via [data-accent] no <html>.
+   As classes utilitárias apontam para --a*, então trocar o atributo
+   repinta a interface inteira sem recompilar nada.
 
-  --color-line: #1c2436;
-  --color-line-soft: #151c2b;
+   Cor crítica de contraste é escolhida à mão por tema, não derivada:
+   verde e amarelo são claros e precisam de tinta escura em cima, e o
+   accent puro como texto não alcança 4.5:1 sobre fundo claro.
+   ============================================================ */
 
-  --color-fg: #e8eef7;
-  --color-fg-dim: #9aa7bd;
-  --color-fg-mute: #64708a;
-
-  --color-brand-400: #5b9bff;
-  --color-brand-500: #2f7bff;
-  --color-brand-600: #1b5ce0;
-
-  --color-pos: #2fd98a;
-  --color-neg: #ff5c6c;
-  --color-warn: #ffb340;
-
-  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, sans-serif;
+:root {
+  --a: #287ee7;
+  --a-ink: #fff;
+  --a-2: #1f66bd;
+  --a-text: #1b5eb0;
+  --a-soft: #e8f1fd;
+  --a-bg: #f1f4f7;
+  --a-sink: #f7f9fb;
+  --a-line: #e3e8ee;
+  --a-line-soft: #edf1f5;
+}
+:root[data-accent="red"] {
+  --a: #e72828;
+  --a-ink: #fff;
+  --a-2: #c11f1f;
+  --a-text: #b31d1d;
+  --a-soft: #fdeaea;
+  --a-bg: #f5f2f2;
+  --a-sink: #faf7f7;
+  --a-line: #eae3e3;
+  --a-line-soft: #f3eeee;
+}
+:root[data-accent="blue"] {
+  --a: #287ee7;
+  --a-ink: #fff;
+  --a-2: #1f66bd;
+  --a-text: #1b5eb0;
+  --a-soft: #e8f1fd;
+  --a-bg: #f1f4f7;
+  --a-sink: #f7f9fb;
+  --a-line: #e3e8ee;
+  --a-line-soft: #edf1f5;
+}
+:root[data-accent="green"] {
+  --a: #28e75e;
+  --a-ink: #0a2412;
+  --a-2: #17c04d;
+  --a-text: #0f6b31;
+  --a-soft: #e6faec;
+  --a-bg: #f1f6f2;
+  --a-sink: #f7fbf8;
+  --a-line: #e2ece5;
+  --a-line-soft: #edf4ef;
+}
+:root[data-accent="yellow"] {
+  --a: #e7e128;
+  --a-ink: #23210a;
+  --a-2: #c9c31c;
+  --a-text: #6b6605;
+  --a-soft: #fbfae2;
+  --a-bg: #f5f5ee;
+  --a-sink: #faf9f3;
+  --a-line: #eae9db;
+  --a-line-soft: #f3f2e9;
 }
 
-* {
-  border-color: var(--color-line-soft);
+@theme {
+  /* superfícies — nomes antigos mantidos para não reescrever cada página */
+  --color-ink-950: var(--a-bg);
+  --color-ink-900: #ffffff;
+  --color-ink-850: #ffffff;
+  --color-ink-800: var(--a-sink);
+  --color-ink-750: var(--a-sink);
+  --color-ink-700: var(--a-line);
+  --color-ink-600: #c8cfd2;
+
+  --color-line: var(--a-line);
+  --color-line-soft: var(--a-line-soft);
+
+  --color-fg: #14181a;
+  --color-fg-dim: #4d565b;
+  --color-fg-mute: #666e74;
+
+  /* brand-400 = accent como TEXTO · brand-500 = preenchimento · brand-600 = hover */
+  --color-brand-400: var(--a-text);
+  --color-brand-500: var(--a);
+  --color-brand-600: var(--a-2);
+  --color-on-brand: var(--a-ink);
+
+  --color-pos: #1f9d63;
+  --color-neg: #cf4a3f;
+  --color-warn: #b8820c;
+
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
 }
 
 html,
@@ -38,60 +104,44 @@ body {
 }
 
 body {
-  background:
-    radial-gradient(900px 520px at 12% -10%, #10245c 0%, transparent 60%),
-    radial-gradient(760px 460px at 92% 8%, #0b1c48 0%, transparent 58%),
-    var(--color-ink-950);
+  background: var(--a-bg);
   color: var(--color-fg);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: "tnum" 0;
 }
 
 /* ---------- scrollbar ---------- */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e2739;
+  background: #d5dbd7;
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #2b3852;
+  background: #c0c8c3;
   background-clip: content-box;
 }
 
 /* ---------- primitivas ---------- */
 @utility card {
-  background: linear-gradient(180deg, #0d121d 0%, #090d16 100%);
-  border: 1px solid var(--color-line);
-  border-radius: 1rem;
+  background: #fff;
+  border-radius: 1.375rem;
+  box-shadow: 0 1px 2px rgb(20 24 26 / 0.05);
 }
 
 @utility surface {
-  background: #0b0f19;
-  border: 1px solid var(--color-line-soft);
+  background: var(--a-sink);
   border-radius: 0.875rem;
-}
-
-@utility focus-ring {
-  outline: none;
-  box-shadow: 0 0 0 2px #04060c, 0 0 0 4px var(--color-brand-500);
 }
 
 .tnum {
   font-variant-numeric: tabular-nums;
-}
-
-input,
-textarea,
-select {
-  color-scheme: dark;
 }
 
 input::placeholder,
@@ -102,7 +152,7 @@ textarea::placeholder {
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(6px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
@@ -110,13 +160,13 @@ textarea::placeholder {
   }
 }
 .rise {
-  animation: rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.34s cubic-bezier(0.2, 1, 0.3, 1) both;
 }
 
 @keyframes pop {
   from {
     opacity: 0;
-    transform: scale(0.97) translateY(8px);
+    transform: scale(0.98) translateY(6px);
   }
   to {
     opacity: 1;
@@ -124,7 +174,7 @@ textarea::placeholder {
   }
 }
 .pop {
-  animation: pop 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: pop 0.18s cubic-bezier(0.2, 1, 0.3, 1) both;
 }
 
 @keyframes fade {
@@ -136,5 +186,14 @@ textarea::placeholder {
   }
 }
 .fade {
-  animation: fade 0.15s ease both;
+  animation: fade 0.14s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

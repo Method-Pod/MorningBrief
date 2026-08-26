@@ -1,24 +1,31 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-geist",
+  variable: "--font-jakarta",
 });
 
 export const metadata: Metadata = {
   title: "Morning Brief",
   description:
-    "Seu painel de manhã: contas a pagar, demandas, recorrências, anotações e calendário em um só lugar.",
+    "Seu painel do dia: demandas, recorrências, anotações, agenda e contas a pagar em um só lugar.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#04060c",
+  themeColor: "#f1f4f7",
   width: "device-width",
   initialScale: 1,
 };
+
+/**
+ * Aplica o accent salvo antes da primeira pintura. Sem isso a página abre no
+ * azul padrão e pisca para a cor escolhida no primeiro frame de hidratação.
+ */
+const ACCENT_BOOT = `try{var a=localStorage.getItem('mb.accent');
+if(['red','blue','green','yellow'].indexOf(a)>-1)document.documentElement.dataset.accent=a}catch(e){}`;
 
 export default function RootLayout({
   children,
@@ -26,7 +33,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="pt-BR" className={inter.variable}>
+    <html lang="pt-BR" data-accent="blue" className={jakarta.variable}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: ACCENT_BOOT }} />
+      </head>
       <body className="min-h-dvh font-sans antialiased">{children}</body>
     </html>
   );

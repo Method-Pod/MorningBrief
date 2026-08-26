@@ -121,20 +121,14 @@ function LoginForm() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-[880px] overflow-hidden rounded-3xl border border-line bg-ink-900/70 shadow-[0_60px_160px_-70px_rgba(0,0,0,1)] backdrop-blur-xl rise">
+      <div className="w-full max-w-[880px] overflow-hidden rounded-[26px] bg-white shadow-[0_24px_70px_-24px_rgb(20_24_26/0.22)] rise">
         <div className="grid lg:grid-cols-[1.05fr_1fr]">
           {/* ---------- painel esquerdo ---------- */}
-          <div className="relative hidden flex-col justify-between border-r border-line-soft bg-ink-950/50 p-9 lg:flex">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-70"
-              style={{
-                background:
-                  "radial-gradient(520px 320px at 20% 10%, #17337d 0%, transparent 62%), radial-gradient(420px 300px at 90% 90%, #0d2a6b 0%, transparent 60%)",
-              }}
-            />
+          <div className="relative hidden flex-col justify-between bg-brand-500/[0.07] p-9 lg:flex">
+
             <div className="relative">
               <div className="flex items-center gap-2.5">
-                <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand-500 text-white shadow-[0_10px_26px_-8px_rgba(47,123,255,1)]">
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand-500 text-on-brand">
                   <Sunrise size={19} />
                 </div>
                 <span className="text-base font-semibold tracking-tight">
@@ -173,7 +167,7 @@ function LoginForm() {
           {/* ---------- formulário ---------- */}
           <div className="p-7 sm:p-9">
             <div className="mb-7 flex items-center gap-2.5 lg:hidden">
-              <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand-500 text-white">
+              <div className="grid h-9 w-9 place-items-center rounded-xl bg-brand-500 text-on-brand">
                 <Sunrise size={19} />
               </div>
               <span className="text-base font-semibold tracking-tight">

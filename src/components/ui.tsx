@@ -63,14 +63,11 @@ export function Button({
     icon: "h-9 w-9 text-sm",
   }[size];
   const variants = {
-    primary:
-      "bg-brand-500 text-white hover:bg-brand-400 shadow-[0_6px_20px_-8px_rgba(47,123,255,.85)]",
-    outline:
-      "border border-line bg-ink-800/60 text-fg-dim hover:text-fg hover:border-ink-600 hover:bg-ink-750",
+    primary: "bg-brand-500 text-on-brand hover:bg-brand-600",
+    outline: "bg-white text-fg-dim shadow-[0_1px_2px_rgb(20_24_26/0.05)] hover:text-fg hover:shadow-[0_6px_20px_-8px_rgb(20_24_26/0.16)]",
     ghost: "text-fg-mute hover:text-fg hover:bg-ink-800",
-    subtle: "bg-ink-750 text-fg-dim hover:bg-ink-700 hover:text-fg",
-    danger:
-      "border border-neg/30 bg-neg/10 text-neg hover:bg-neg/20 hover:border-neg/50",
+    subtle: "bg-ink-800 text-fg-dim hover:bg-brand-500/12 hover:text-brand-400",
+    danger: "bg-neg/10 text-neg hover:bg-neg/20",
   }[variant];
   return <button className={cx(base, sizes, variants, className)} {...rest} />;
 }
@@ -78,7 +75,7 @@ export function Button({
 /* ------------------------------ Inputs ------------------------------ */
 
 const fieldBase =
-  "w-full rounded-xl border border-line bg-ink-900/80 px-3.5 text-sm text-fg placeholder:text-fg-mute transition-colors focus:border-brand-500/70 focus:outline-none focus:ring-2 focus:ring-brand-500/20";
+  "w-full rounded-[14px] border border-transparent bg-ink-800 px-3.5 text-sm text-fg placeholder:text-fg-mute transition-colors focus:border-brand-500 focus:bg-white focus:outline-none";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
@@ -142,12 +139,12 @@ export function Badge({
   children: React.ReactNode;
 }) {
   const tones = {
-    neutral: "bg-ink-750 text-fg-dim border-line",
-    brand: "bg-brand-500/12 text-brand-400 border-brand-500/25",
-    pos: "bg-pos/12 text-pos border-pos/25",
-    neg: "bg-neg/12 text-neg border-neg/25",
-    warn: "bg-warn/12 text-warn border-warn/25",
-    violet: "bg-violet-500/12 text-violet-300 border-violet-500/25",
+    neutral: "bg-ink-800 text-fg-dim border-transparent",
+    brand: "bg-brand-500/12 text-brand-400 border-transparent",
+    pos: "bg-pos/12 text-pos border-transparent",
+    neg: "bg-neg/12 text-neg border-transparent",
+    warn: "bg-warn/12 text-warn border-transparent",
+    violet: "bg-violet-500/12 text-violet-700 border-transparent",
   }[tone];
   return (
     <span
@@ -174,7 +171,7 @@ export function Segmented<T extends string>({
   options: { value: T; label: string; count?: number }[];
 }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-xl border border-line bg-ink-900/70 p-1">
+    <div className="inline-flex items-center gap-1 rounded-[14px] bg-ink-800 p-1">
       {options.map((o) => (
         <button
           key={o.value}
@@ -182,7 +179,7 @@ export function Segmented<T extends string>({
           className={cx(
             "h-7 rounded-lg px-3 text-xs font-medium transition-all",
             value === o.value
-              ? "bg-brand-500 text-white shadow-[0_4px_14px_-6px_rgba(47,123,255,.9)]"
+              ? "bg-white text-brand-400 shadow-[0_1px_2px_rgb(20_24_26/0.05)]"
               : "text-fg-mute hover:text-fg-dim"
           )}
         >
@@ -234,14 +231,14 @@ export function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:items-center sm:p-6">
       <div
-        className="fixed inset-0 bg-ink-950/80 backdrop-blur-sm fade"
+        className="fixed inset-0 bg-fg/35 fade"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
         className={cx(
-          "relative z-10 w-full rounded-2xl border border-line bg-ink-850 shadow-[0_40px_100px_-30px_rgba(0,0,0,.9)] pop",
+          "relative z-10 w-full rounded-[20px] bg-white shadow-[0_24px_60px_-20px_rgb(20_24_26/0.3)] pop",
           wide ? "max-w-3xl" : "max-w-lg"
         )}
       >
@@ -284,7 +281,7 @@ export function Empty({
 }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div className="mb-3 grid h-12 w-12 place-items-center rounded-2xl border border-line bg-ink-800 text-fg-mute">
+      <div className="mb-3 grid h-12 w-12 place-items-center rounded-[14px] bg-ink-800 text-fg-mute">
         {icon}
       </div>
       <p className="text-sm font-medium text-fg-dim">{title}</p>
@@ -297,7 +294,7 @@ export function Empty({
 /* ------------------------------ Skeleton ------------------------------ */
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cx("animate-pulse rounded-lg bg-ink-750/70", className)} />;
+  return <div className={cx("animate-pulse rounded-lg bg-black/[0.06]", className)} />;
 }
 
 /* ------------------------------ Confirm ------------------------------ */
