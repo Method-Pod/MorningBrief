@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
@@ -9,9 +10,9 @@ import {
   PartyPopper,
   Pencil,
   Repeat2,
-  CheckSquare,
   HandCoins,
   Search,
+  SlidersHorizontal,
   Tag,
   Trash2,
   Wallet,
@@ -28,11 +29,7 @@ import {
   GerenciarCategorias,
   useCategorias,
 } from "@/components/Categorias";
-import {
-  AbaterModal,
-  BarraLote,
-  ProgressoAbatida,
-} from "@/components/ContasLote";
+import { AbaterModal, ProgressoAbatida } from "@/components/ContasLote";
 import { brl, dataCurta, daysUntil, rotuloMes, todayISO } from "@/lib/format";
 import {
   CalendarioPagamentos,
@@ -126,8 +123,6 @@ export default function ContasPage() {
   const notice = useNotice();
   const categorias = useCategorias(supabase);
   const [gerindoCategorias, setGerindoCategorias] = React.useState(false);
-  const [modoSelecao, setModoSelecao] = React.useState(false);
-  const [selecao, setSelecao] = React.useState<Set<string>>(new Set());
   const [abatendo, setAbatendo] = React.useState<Bill | null>(null);
   const [emLote, setEmLote] = React.useState(false);
 
@@ -337,57 +332,6 @@ export default function ContasPage() {
     setAbatendo(null);
     load();
   };
-
-  /* ------------------------------ lote ------------------------------ */
-
-  const acaoEmLote = async (
-    acao: "pagar" | "reabrir" | "categoria" | "vencimento" | "excluir",
-    valor?: string
-  ) => {
-    const ids = [...selecao];
-    if (!ids.length) return;
-
-    if (acao === "excluir") {
-      confirm.ask(
-        `Excluir ${ids.length} conta${ids.length > 1 ? "s" : ""}? Não pode ser desfeito.`,
-        async () => {
-          setEmLote(true);
-          const { error } = await supabase.from("bills").delete().in("id", ids);
-          setEmLote(false);
-          if (!notice.check(error, "excluir as contas")) {
-            setSelecao(new Set());
-            load();
-          }
-        }
-      );
-      return;
-    }
-
-    const patch: Record<string, unknown> =
-      acao === "pagar"
-        ? { status: "paid", paid_at: new Date().toISOString() }
-        : acao === "reabrir"
-          ? { status: "pending", paid_at: null }
-          : acao === "categoria"
-            ? { category: valor }
-            : { due_date: valor };
-
-    setEmLote(true);
-    const { error } = await supabase.from("bills").update(patch).in("id", ids);
-    setEmLote(false);
-    if (!notice.check(error, "aplicar a alteração")) {
-      setSelecao(new Set());
-      load();
-    }
-  };
-
-  const alternarSelecao = (id: string) =>
-    setSelecao((v) => {
-      const n = new Set(v);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
 
   const excluir = (b: Bill) =>
     confirm.ask(`Excluir "${b.description}"? Não pode ser desfeito.`, async () => {
@@ -618,16 +562,12 @@ export default function ContasPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            onClick={() => {
-              setModoSelecao((v) => !v);
-              setSelecao(new Set());
-            }}
-            className={modoSelecao ? "text-brand-400" : undefined}
-          >
-            <CheckSquare size={15} />
-            {modoSelecao ? "Sair da seleção" : "Selecionar"}
-          </Button>
+          <Link href="/contas/gerenciar">
+            <Button>
+              <SlidersHorizontal size={15} />
+              Gerenciar
+            </Button>
+          </Link>
           <Button onClick={() => setGerindoCategorias(true)}>
             <Tag size={15} />
             Categorias
@@ -787,24 +727,6 @@ export default function ContasPage() {
                       </span>
                     </button>
                   </h2>
-                  {aberto && modoSelecao && (
-                    <button
-                      onClick={() => {
-                        const ids = g.itens.map((b) => b.id);
-                        const todos = ids.every((id) => selecao.has(id));
-                        setSelecao((v) => {
-                          const n = new Set(v);
-                          ids.forEach((id) => (todos ? n.delete(id) : n.add(id)));
-                          return n;
-                        });
-                      }}
-                      className="px-[18px] pb-1 text-[11px] font-semibold text-brand-400 hover:underline"
-                    >
-                      {g.itens.every((b) => selecao.has(b.id))
-                        ? "Desmarcar grupo"
-                        : "Selecionar grupo"}
-                    </button>
-                  )}
                   {aberto && (
                     <ul className="px-2.5 pb-1">
                       {g.itens.map((b) => (
@@ -812,9 +734,6 @@ export default function ContasPage() {
                           key={b.id}
                           b={b}
                           atrasada={atrasada(b)}
-                          selecionavel={modoSelecao}
-                          selecionada={selecao.has(b.id)}
-                          onSelecionar={() => alternarSelecao(b.id)}
                           onAlternar={() => alternar(b)}
                           onAbater={() => setAbatendo(b)}
                           onEditar={() => editar(b)}
@@ -1102,14 +1021,6 @@ export default function ContasPage() {
         ocupado={emLote}
       />
 
-      <BarraLote
-        selecionadas={filtradas.filter((b) => selecao.has(b.id))}
-        categorias={categorias.nomes}
-        onLimpar={() => setSelecao(new Set())}
-        onAcao={acaoEmLote}
-        ocupado={emLote}
-      />
-
       {confirm.node}
       {notice.node}
     </div>
@@ -1163,9 +1074,6 @@ function Numero({
 function Linha({
   b,
   atrasada,
-  selecionavel,
-  selecionada,
-  onSelecionar,
   onAlternar,
   onAbater,
   onEditar,
@@ -1173,9 +1081,6 @@ function Linha({
 }: {
   b: Bill;
   atrasada: boolean;
-  selecionavel: boolean;
-  selecionada: boolean;
-  onSelecionar: () => void;
   onAlternar: () => void;
   onAbater: () => void;
   onEditar: () => void;
@@ -1186,21 +1091,7 @@ function Linha({
   const abatida = ehAbatida(b);
 
   return (
-    <li
-      className={cx(
-        "group flex items-center gap-3 rounded-[14px] px-3 py-2.5 transition-colors",
-        selecionada ? "bg-brand-500/10" : "hover:bg-ink-800"
-      )}
-    >
-      {selecionavel && (
-        <input
-          type="checkbox"
-          checked={selecionada}
-          onChange={onSelecionar}
-          aria-label={`Selecionar ${b.description}`}
-          className="h-4 w-4 shrink-0 accent-[var(--a)]"
-        />
-      )}
+    <li className="group flex items-center gap-3 rounded-[14px] px-3 py-2.5 transition-colors hover:bg-ink-800">
       <button
         onClick={onAlternar}
         aria-label={paga ? "Marcar em aberto" : "Marcar como paga"}
