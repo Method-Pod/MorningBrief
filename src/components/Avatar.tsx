@@ -10,23 +10,59 @@ const BUCKET = "avatars";
 const LIMITE_MB = 2;
 const TIPOS = ["image/jpeg", "image/png", "image/webp"];
 
-/** Lê a foto do metadata do usuário. Único lugar de verdade sobre a URL. */
+/*
+ * Store da foto fora do React, com assinantes.
+ *
+ * Dois motivos:
+ *
+ * 1. A foto aparece em dois lugares — barra lateral e página de Conta. Com um
+ *    useState por componente, trocar na Conta não avisaria a barra, e a foto
+ *    nova só apareceria na próxima navegação.
+ *
+ * 2. Não dá para ler de getClaims(). getClaims decodifica o access_token, e
+ *    updateUser({ data }) grava o metadata no servidor sem emitir token novo:
+ *    o JWT continua com o metadata antigo por até uma hora. Era exatamente
+ *    por isso que a foto era enviada com sucesso e nunca aparecia. getSession()
+ *    lê o objeto de sessão guardado, que updateUser atualiza, e não custa rede.
+ */
+let atual: string | null = null;
+let carregou = false;
+const assinantes = new Set<() => void>();
+
+const avisar = () => assinantes.forEach((fn) => fn());
+
+export function definirFoto(url: string | null) {
+  atual = url;
+  carregou = true;
+  avisar();
+}
+
 export function useAvatar() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [url, setUrl] = React.useState<string | null>(null);
-
-  const recarregar = React.useCallback(async () => {
-    // user_metadata vem dentro do JWT, então não precisa consultar o servidor
-    const { data } = await supabase.auth.getClaims();
-    const v = data?.claims?.user_metadata?.avatar_url;
-    setUrl(typeof v === "string" && v ? v : null);
-  }, [supabase]);
+  const [url, setUrl] = React.useState<string | null>(atual);
 
   React.useEffect(() => {
-    recarregar();
-  }, [recarregar]);
+    const notificar = () => setUrl(atual);
+    assinantes.add(notificar);
 
-  return { url, setUrl, recarregar };
+    if (!carregou) {
+      (async () => {
+        const { data } = await supabase.auth.getSession();
+        const v = data.session?.user?.user_metadata?.avatar_url;
+        atual = typeof v === "string" && v ? v : null;
+        carregou = true;
+        avisar();
+      })();
+    } else {
+      notificar();
+    }
+
+    return () => {
+      assinantes.delete(notificar);
+    };
+  }, [supabase]);
+
+  return { url, setUrl: definirFoto };
 }
 
 export function Iniciais({
@@ -40,7 +76,12 @@ export function Iniciais({
   tamanho?: number;
   className?: string;
 }) {
+  const [falhou, setFalhou] = React.useState(false);
+  React.useEffect(() => setFalhou(false), [url]);
+
   const iniciais = (nome || "?").slice(0, 2).toUpperCase();
+  const mostraFoto = !!url && !falhou;
+
   return (
     <span
       className={cx(
@@ -49,8 +90,9 @@ export function Iniciais({
       )}
       style={{ width: tamanho, height: tamanho, fontSize: tamanho * 0.34 }}
     >
-      {url ? (
-        // <img> puro: a URL é do Storage, fora dos domínios do next/image
+      {mostraFoto ? (
+        // <img> puro: a URL é do Storage, fora dos domínios do next/image.
+        // onError volta para as iniciais em vez de deixar um quadro vazio.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={url}
@@ -59,6 +101,7 @@ export function Iniciais({
           height={tamanho}
           loading="eager"
           decoding="sync"
+          onError={() => setFalhou(true)}
           className="h-full w-full object-cover"
           style={{ aspectRatio: "1 / 1" }}
         />
@@ -83,14 +126,28 @@ export function TrocarFoto({
   const [ocupado, setOcupado] = React.useState(false);
   const [erro, setErro] = React.useState("");
 
+  /*
+   * Depois de gravar o metadata, pede um token novo.
+   *
+   * Sem isso, qualquer leitura que decodifique o JWT continuaria com o
+   * metadata antigo até o refresh automático. Custa uma ida de rede, mas só
+   * acontece ao trocar a foto.
+   */
+  const renovarToken = async () => {
+    try {
+      await supabase.auth.refreshSession();
+    } catch {
+      // se falhar, getSession ainda tem o user atualizado
+    }
+  };
+
   const enviar = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const arquivo = e.target.files?.[0];
     e.target.value = ""; // permite reenviar o mesmo arquivo
     if (!arquivo) return;
     setErro("");
 
-    if (!TIPOS.includes(arquivo.type))
-      return setErro("Use JPG, PNG ou WebP.");
+    if (!TIPOS.includes(arquivo.type)) return setErro("Use JPG, PNG ou WebP.");
     if (arquivo.size > LIMITE_MB * 1024 * 1024)
       return setErro(`A imagem precisa ter menos de ${LIMITE_MB} MB.`);
 
@@ -106,7 +163,12 @@ export function TrocarFoto({
      * política de Storage exige que a primeira pasta seja o próprio id — é o
      * que impede subir na pasta de outro.
      */
-    const ext = arquivo.type === "image/png" ? "png" : arquivo.type === "image/webp" ? "webp" : "jpg";
+    const ext =
+      arquivo.type === "image/png"
+        ? "png"
+        : arquivo.type === "image/webp"
+          ? "webp"
+          : "jpg";
     const caminho = `${uid}/perfil.${ext}`;
 
     const { error: envio } = await supabase.storage
@@ -129,8 +191,13 @@ export function TrocarFoto({
     const { error: meta } = await supabase.auth.updateUser({
       data: { avatar_url: publica },
     });
+    if (meta) {
+      setOcupado(false);
+      return setErro(meta.message);
+    }
+
+    await renovarToken();
     setOcupado(false);
-    if (meta) return setErro(meta.message);
     onTrocou(publica);
   };
 
@@ -148,8 +215,12 @@ export function TrocarFoto({
     const { error } = await supabase.auth.updateUser({
       data: { avatar_url: null },
     });
+    if (error) {
+      setOcupado(false);
+      return setErro(error.message);
+    }
+    await renovarToken();
     setOcupado(false);
-    if (error) return setErro(error.message);
     onTrocou(null);
   };
 
