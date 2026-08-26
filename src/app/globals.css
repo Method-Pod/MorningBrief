@@ -135,6 +135,23 @@ body {
   box-shadow: 0 1px 2px rgb(20 24 26 / 0.05);
 }
 
+/*
+ * Camada própria para a barra lateral fixa.
+ *
+ * Sem promoção, o Chrome re-rasteriza o conteúdo sticky a cada scroll: texto
+ * continua nítido, mas imagem e SVG — a foto de perfil e os ícones pequenos —
+ * escorregam um subpixel. translateZ(0) manda a barra para a GPU, e ela passa
+ * a ser apenas recomposta em vez de redesenhada.
+ *
+ * Seguro aqui porque nada dentro do aside usa position:fixed: a gaveta do
+ * mobile é irmã dele e os modais vão para um portal no body. Em outro lugar,
+ * este transform criaria containing block e quebraria filhos fixos.
+ */
+@utility camada-fixa {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
 @utility surface {
   background: var(--a-sink);
   border-radius: 0.875rem;

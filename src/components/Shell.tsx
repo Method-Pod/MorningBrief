@@ -219,7 +219,7 @@ export function Shell({
         overflow-y-auto salva a barra em tela baixa, onde nav + tema + conta
         passam da altura da janela.
       */}
-      <aside className="sticky top-0 hidden h-dvh w-[224px] shrink-0 flex-col overflow-y-auto bg-white pt-6 pb-5 lg:flex">
+      <aside className="camada-fixa sticky top-0 hidden h-dvh w-[224px] shrink-0 flex-col overflow-y-auto bg-white pt-6 pb-5 lg:flex">
         <div className="mb-6">{wordmark}</div>
         {nav}
         {rodape}

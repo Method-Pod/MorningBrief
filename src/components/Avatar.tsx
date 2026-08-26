@@ -56,7 +56,10 @@ export function Iniciais({
           alt={`Foto de ${nome}`}
           width={tamanho}
           height={tamanho}
+          loading="eager"
+          decoding="sync"
           className="h-full w-full object-cover"
+          style={{ aspectRatio: "1 / 1" }}
         />
       ) : (
         iniciais
