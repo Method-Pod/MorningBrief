@@ -35,7 +35,7 @@ import {
   Modal,
   Segmented,
   Select,
-  Skeleton,
+  Carregando,
   Textarea,
   useConfirm,
   useNotice,
@@ -249,11 +249,7 @@ export default function RecorrentesPage() {
       />
 
       {loading ? (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-40" />
-          ))}
-        </div>
+        <Carregando altura="32vh" />
       ) : view.length === 0 ? (
         <Card>
           <Empty

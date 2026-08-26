@@ -22,8 +22,8 @@ import {
   Field,
   Input,
   Modal,
+  Carregando,
   Select,
-  Skeleton,
   cx,
   useConfirm,
   useNotice,
@@ -231,13 +231,7 @@ export default function HabitosPage() {
     ? "Esta semana"
     : `${dataCurta(semana[0]).replace(".", "")} – ${dataCurta(semana[6])}`;
 
-  if (loading)
-    return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-[300px] rounded-[22px]" />
-      </div>
-    );
+  if (loading) return <Carregando />;
 
   return (
     <div className="rise">

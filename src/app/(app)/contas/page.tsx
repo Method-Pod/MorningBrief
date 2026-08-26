@@ -35,7 +35,7 @@ import {
   Input,
   Modal,
   Select,
-  Skeleton,
+  Carregando,
   Textarea,
   cx,
   useConfirm,
@@ -433,18 +433,7 @@ export default function ContasPage() {
   const nadaPendente =
     !loading && rows.length > 0 && contagens.pendentes === 0;
 
-  if (loading)
-    return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-10 w-56" />
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-[104px] rounded-[22px]" />
-          ))}
-        </div>
-        <Skeleton className="h-[420px] rounded-[22px]" />
-      </div>
-    );
+  if (loading) return <Carregando />;
 
   return (
     <div className="rise">

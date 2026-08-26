@@ -38,7 +38,7 @@ import {
   Modal,
   Segmented,
   Select,
-  Skeleton,
+  Carregando,
   Textarea,
   useConfirm,
   useNotice,
@@ -323,11 +323,7 @@ export default function DemandasPage() {
       </div>
 
       {loading ? (
-        <div className="grid gap-4 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-64" />
-          ))}
-        </div>
+        <Carregando altura="32vh" />
       ) : rows.length === 0 ? (
         <Card>
           <Empty

@@ -27,7 +27,7 @@ import {
   todayISO,
 } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
-import { Card, Skeleton, useNotice, cx } from "@/components/ui";
+import { Card, Carregando, useNotice, cx } from "@/components/ui";
 import { useIdentity } from "@/components/identity";
 
 const PRIO_DOT: Record<string, string> = {
@@ -251,7 +251,7 @@ export default function HomePage() {
     };
   }, [tasks, bills, recurring, events, notes, today]);
 
-  if (loading) return <HomeSkeleton />;
+  if (loading) return <Carregando />;
 
   const R = 34;
   const C = 2 * Math.PI * R;
@@ -726,24 +726,3 @@ const StickyIcon = () => (
     <path d="M15 21v-4a1 1 0 0 1 1-1h4" />
   </svg>
 );
-
-function HomeSkeleton() {
-  return (
-    <div className="space-y-4">
-      <Skeleton className="h-10 w-64" />
-      <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <Skeleton className="h-[260px] rounded-[22px]" />
-        <Skeleton className="h-[260px] rounded-[22px]" />
-      </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <Skeleton className="h-[240px] rounded-[22px]" />
-        <Skeleton className="h-[240px] rounded-[22px]" />
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-[200px] rounded-[22px]" />
-        ))}
-      </div>
-    </div>
-  );
-}

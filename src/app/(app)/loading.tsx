@@ -1,42 +1,28 @@
 /*
  * Estado de espera da área logada.
  *
- * Sem este arquivo, o Next mantém a página anterior congelada na tela até os
- * dados da próxima chegarem — clicar no menu não produzia reação nenhuma, o
- * que é a sensação de travamento. Com ele, a troca é instantânea: o esqueleto
- * entra no clique e o conteúdo o substitui quando fica pronto.
+ * Sem este arquivo o Next mantém a página anterior congelada até os dados da
+ * próxima chegarem, e clicar no menu não produz reação nenhuma. Ele também
+ * habilita o prefetch completo do <Link>.
  *
- * Ele também habilita o prefetch completo do <Link>: o Next passa a baixar
- * antecipadamente o layout e este esqueleto, então a resposta ao clique não
- * depende mais de rede.
- *
- * Deliberadamente genérico. Um esqueleto que imita cada tela erraria em
- * metade delas e produziria um salto de layout quando o conteúdo real
- * entrasse; blocos neutros na mesma grade não prometem uma forma específica.
+ * Três pontos em vez de esqueleto: o esqueleto era um bloco grande entrando e
+ * saindo em milissegundos, o que se via como piscada. E `surgir-tarde` só
+ * revela o indicador depois de 150ms, então navegação rápida não mostra nada.
  */
 export default function Loading() {
   return (
-    <div className="animate-pulse">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3.5">
-        <div>
-          <div className="h-8 w-48 rounded-lg bg-black/[0.06]" />
-          <div className="mt-2 h-4 w-64 rounded bg-black/[0.05]" />
-        </div>
-        <div className="h-[38px] w-36 rounded-[14px] bg-black/[0.06]" />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-[104px] rounded-[22px] bg-black/[0.05]" />
-        ))}
-      </div>
-
-      <div className="mt-4 h-[360px] rounded-[22px] bg-black/[0.05]" />
-
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <div className="h-[220px] rounded-[22px] bg-black/[0.05]" />
-        <div className="h-[220px] rounded-[22px] bg-black/[0.05]" />
-      </div>
+    <div
+      role="status"
+      aria-label="Carregando"
+      className="surgir-tarde flex min-h-[42vh] items-center justify-center gap-2"
+    >
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="ponto h-2.5 w-2.5 rounded-full bg-brand-500"
+          style={{ animationDelay: `${i * 0.14}s` }}
+        />
+      ))}
     </div>
   );
 }

@@ -16,7 +16,7 @@ import { createClient } from "@/lib/supabase/client";
 import { dateTimeBR } from "@/lib/format";
 import { ACCENTS, useAccent } from "@/components/accent";
 import { TrocarFoto, useAvatar } from "@/components/Avatar";
-import { Button, Card, Input, Skeleton, cx } from "@/components/ui";
+import { Button, Card, Carregando, Input, cx } from "@/components/ui";
 
 type Perfil = {
   email: string;
@@ -114,14 +114,7 @@ export default function ContaPage() {
     router.refresh();
   };
 
-  if (!perfil)
-    return (
-      <div className="space-y-4">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-[220px] rounded-[22px]" />
-        <Skeleton className="h-[180px] rounded-[22px]" />
-      </div>
-    );
+  if (!perfil) return <Carregando />;
 
   // as iniciais do avatar seguem o nome escolhido, não o handle do e-mail
   const nome = perfil.apelido || perfil.email.split("@")[0] || "você";

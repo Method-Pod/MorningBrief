@@ -13,7 +13,7 @@ import {
   Field,
   Input,
   Modal,
-  Skeleton,
+  Carregando,
   Textarea,
   useConfirm,
   useNotice,
@@ -175,11 +175,7 @@ export default function AnotacoesPage() {
       </div>
 
       {loading ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <Skeleton key={i} className="h-44" />
-          ))}
-        </div>
+        <Carregando altura="32vh" />
       ) : view.length === 0 ? (
         <Card>
           <Empty
