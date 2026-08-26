@@ -16,13 +16,17 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
+  FREQUENCY_LABEL,
   PRIORITY_LABEL,
   STATUS_LABEL,
+  WEEKDAYS,
+  type Frequency,
   type Priority,
   type Task,
   type TaskStatus,
 } from "@/lib/types";
 import { dateBR, daysUntil, todayISO } from "@/lib/format";
+import { frequencyDescription } from "@/lib/recurring";
 import {
   Badge,
   Button,
@@ -51,6 +55,15 @@ const TONE: Record<Priority, "neutral" | "brand" | "warn" | "neg"> = {
   urgent: "neg",
 };
 
+const FREQS: Frequency[] = [
+  "daily",
+  "weekly",
+  "biweekly",
+  "monthly",
+  "quarterly",
+  "yearly",
+];
+
 const blank = () => ({
   title: "",
   description: "",
@@ -58,6 +71,11 @@ const blank = () => ({
   priority: "medium" as Priority,
   status: "todo" as TaskStatus,
   due_date: "",
+  // recorrencia: quando marcada, a demanda passa a ser uma regra que se repete
+  recurring: false,
+  frequency: "weekly" as Frequency,
+  weekday: new Date().getDay(),
+  day_of_month: new Date().getDate(),
 });
 
 export default function DemandasPage() {
@@ -73,6 +91,7 @@ export default function DemandasPage() {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const [drag, setDrag] = React.useState<string | null>(null);
+  const today = todayISO();
   const confirm = useConfirm();
   const notice = useNotice();
 
@@ -105,6 +124,10 @@ export default function DemandasPage() {
       priority: t.priority,
       status: t.status,
       due_date: t.due_date?.slice(0, 10) ?? "",
+      recurring: false,
+      frequency: "weekly",
+      weekday: new Date().getDay(),
+      day_of_month: new Date().getDate(),
     });
     setErr("");
     setOpen(true);
@@ -116,32 +139,89 @@ export default function DemandasPage() {
     if (!form.title.trim()) return setErr("Informe o título da demanda.");
     setBusy(true);
 
-    const payload = {
+    const base = {
       title: form.title.trim(),
       description: form.description.trim(),
       client: form.client.trim(),
       priority: form.priority,
+    };
+
+    if (editing) {
+      const { error } = await supabase
+        .from("tasks")
+        .update({
+          ...base,
+          status: form.status,
+          due_date: form.due_date || null,
+          completed_at:
+            form.status === "done" ? new Date().toISOString() : null,
+        })
+        .eq("id", editing.id);
+      setBusy(false);
+      if (error) return setErr(error.message);
+      setOpen(false);
+      return load();
+    }
+
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      setBusy(false);
+      return setErr(SESSION_EXPIRED);
+    }
+
+    /*
+     * Demanda recorrente: cria a regra e já materializa a ocorrência de hoje.
+     *
+     * Sem gerar agora, a regra ficaria invisível até cair a próxima data —
+     * a pessoa marca "repetir", salva, e nada aparece. Gravar last_run_on
+     * como hoje evita que o dashboard gere uma segunda cópia ao abrir.
+     */
+    if (form.recurring) {
+      const weekly = form.frequency === "weekly" || form.frequency === "biweekly";
+      const monthly = ["monthly", "quarterly", "yearly"].includes(form.frequency);
+
+      const { data: rule, error: ruleError } = await supabase
+        .from("recurring_tasks")
+        .insert({
+          ...base,
+          user_id: uid,
+          frequency: form.frequency,
+          weekday: weekly ? Number(form.weekday) : null,
+          day_of_month: monthly
+            ? Math.min(31, Math.max(1, Number(form.day_of_month) || 1))
+            : null,
+          active: true,
+          last_run_on: today,
+        })
+        .select("id")
+        .single();
+
+      if (ruleError || !rule) {
+        setBusy(false);
+        return setErr(ruleError?.message ?? "Não foi possível criar a recorrência.");
+      }
+
+      const { error: taskError } = await supabase.from("tasks").insert({
+        ...base,
+        user_id: uid,
+        status: "todo",
+        due_date: today,
+        origin_id: rule.id,
+      });
+
+      setBusy(false);
+      if (taskError) return setErr(taskError.message);
+      setOpen(false);
+      return load();
+    }
+
+    const { error } = await supabase.from("tasks").insert({
+      ...base,
+      user_id: uid,
       status: form.status,
       due_date: form.due_date || null,
       completed_at: form.status === "done" ? new Date().toISOString() : null,
-    };
-
-    let error;
-    if (editing) {
-      ({ error } = await supabase
-        .from("tasks")
-        .update(payload)
-        .eq("id", editing.id));
-    } else {
-      const uid = await currentUserId(supabase);
-      if (!uid) {
-        setBusy(false);
-        return setErr(SESSION_EXPIRED);
-      }
-      ({ error } = await supabase
-        .from("tasks")
-        .insert({ ...payload, user_id: uid }));
-    }
+    });
     setBusy(false);
     if (error) return setErr(error.message);
     setOpen(false);
@@ -469,16 +549,6 @@ export default function DemandasPage() {
                 placeholder="Opcional"
               />
             </Field>
-            <Field label="Prazo">
-              <Input
-                type="date"
-                value={form.due_date}
-                onChange={(e) => setForm({ ...form, due_date: e.target.value })}
-              />
-            </Field>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Prioridade">
               <Select
                 value={form.priority}
@@ -493,21 +563,135 @@ export default function DemandasPage() {
                 ))}
               </Select>
             </Field>
-            <Field label="Status">
-              <Select
-                value={form.status}
-                onChange={(e) =>
-                  setForm({ ...form, status: e.target.value as TaskStatus })
-                }
-              >
-                {COLUMNS.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABEL[s]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
           </div>
+
+          {/* Prazo e status só fazem sentido em demanda avulsa: numa recorrente
+              quem manda na data é a frequência, e ela sempre nasce "a fazer". */}
+          {!form.recurring && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Prazo">
+                <Input
+                  type="date"
+                  value={form.due_date}
+                  onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                />
+              </Field>
+              <Field label="Status">
+                <Select
+                  value={form.status}
+                  onChange={(e) =>
+                    setForm({ ...form, status: e.target.value as TaskStatus })
+                  }
+                >
+                  {COLUMNS.map((s) => (
+                    <option key={s} value={s}>
+                      {STATUS_LABEL[s]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+          )}
+
+          {editing?.origin_id && (
+            <p className="rounded-[14px] bg-brand-500/10 px-3.5 py-3 text-xs text-brand-400">
+              Esta demanda foi gerada por uma recorrência. Editar aqui muda só
+              esta ocorrência — para mudar a regra, vá em Recorrentes.
+            </p>
+          )}
+
+          {!editing && (
+            <div className="rounded-[14px] bg-ink-800 p-3.5">
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={form.recurring}
+                  onChange={(e) =>
+                    setForm({ ...form, recurring: e.target.checked })
+                  }
+                  className="mt-0.5 h-4 w-4 accent-[var(--a)]"
+                />
+                <span className="text-sm text-fg-dim">
+                  <span className="font-semibold text-fg">Demanda recorrente</span>
+                  <span className="mt-0.5 block text-[11.5px] text-fg-mute">
+                    Cria a regra e já lança a demanda de hoje. Depois ela volta
+                    sozinha em cada data.
+                  </span>
+                </span>
+              </label>
+
+              {form.recurring && (
+                <div className="mt-3.5 grid gap-4 border-t border-line-soft pt-3.5 sm:grid-cols-2">
+                  <Field label="Frequência">
+                    <Select
+                      value={form.frequency}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          frequency: e.target.value as Frequency,
+                        })
+                      }
+                    >
+                      {FREQS.map((f) => (
+                        <option key={f} value={f}>
+                          {FREQUENCY_LABEL[f]}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+
+                  {(form.frequency === "weekly" ||
+                    form.frequency === "biweekly") && (
+                    <Field label="Dia da semana">
+                      <Select
+                        value={String(form.weekday)}
+                        onChange={(e) =>
+                          setForm({ ...form, weekday: Number(e.target.value) })
+                        }
+                      >
+                        {WEEKDAYS.map((w, i) => (
+                          <option key={w} value={i}>
+                            {w}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                  )}
+
+                  {["monthly", "quarterly", "yearly"].includes(
+                    form.frequency
+                  ) && (
+                    <Field
+                      label="Dia do mês"
+                      hint="Em meses curtos, cai no último dia."
+                    >
+                      <Input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={form.day_of_month}
+                        onChange={(e) =>
+                          setForm({
+                            ...form,
+                            day_of_month: Number(e.target.value),
+                          })
+                        }
+                      />
+                    </Field>
+                  )}
+
+                  <p className="text-[11.5px] text-fg-mute sm:col-span-2">
+                    {frequencyDescription({
+                      frequency: form.frequency,
+                      weekday: form.weekday,
+                      day_of_month: form.day_of_month,
+                    })}
+                    .
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {err && (
             <p className="rounded-xl border border-neg/30 bg-neg/10 p-3 text-xs text-neg">

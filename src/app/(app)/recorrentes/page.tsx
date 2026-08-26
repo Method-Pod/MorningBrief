@@ -91,13 +91,6 @@ export default function RecorrentesPage() {
     load();
   }, [load]);
 
-  const startNew = () => {
-    setEditing(null);
-    setForm(blank());
-    setErr("");
-    setOpen(true);
-  };
-
   const startEdit = (r: RecurringTask) => {
     setEditing(r);
     setForm({
@@ -222,14 +215,16 @@ export default function RecorrentesPage() {
             Demandas recorrentes
           </h1>
           <p className="mt-1 text-sm text-fg-mute">
-            {activeCount} ativa{activeCount === 1 ? "" : "s"} · geram demandas
-            automaticamente quando você abre o dashboard
+            {activeCount} ativa{activeCount === 1 ? "" : "s"} · a demanda volta
+            sozinha em cada data. Para criar, marque a caixa em Nova demanda.
           </p>
         </div>
-        <Button variant="primary" onClick={startNew}>
-          <Plus size={15} />
-          Nova recorrência
-        </Button>
+        <Link href="/demandas">
+          <Button variant="primary">
+            <Plus size={15} />
+            Nova demanda recorrente
+          </Button>
+        </Link>
       </div>
 
       {dueToday > 0 && (
@@ -267,14 +262,16 @@ export default function RecorrentesPage() {
             sub={
               rows.length
                 ? "Troque o filtro para ver as outras."
-                : "Cadastre o que se repete — relatório semanal, fechamento mensal, follow-up de cliente — e o app cria a demanda na data certa."
+                : "Marque \"Demanda recorrente\" ao criar uma demanda e a regra aparece aqui."
             }
             action={
               !rows.length ? (
-                <Button variant="primary" size="sm" onClick={startNew}>
-                  <Plus size={14} />
-                  Nova recorrência
-                </Button>
+                <Link href="/demandas">
+                  <Button variant="primary" size="sm">
+                    <Plus size={14} />
+                    Criar em Nova demanda
+                  </Button>
+                </Link>
               ) : undefined
             }
           />

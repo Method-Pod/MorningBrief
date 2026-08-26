@@ -60,7 +60,10 @@ export function nextOccurrence(r: RecurringTask, fromISO = todayISO()): string |
   return null;
 }
 
-export function frequencyDescription(r: RecurringTask): string {
+/** Só lê frequency/weekday/day_of_month, então aceita o formulário direto. */
+export function frequencyDescription(
+  r: Pick<RecurringTask, "frequency" | "weekday" | "day_of_month">
+): string {
   const WD = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
   switch (r.frequency) {
     case "daily":
