@@ -1,0 +1,140 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #04060c;
+  --color-ink-900: #070a12;
+  --color-ink-850: #0a0e18;
+  --color-ink-800: #0e131f;
+  --color-ink-750: #131928;
+  --color-ink-700: #1a2133;
+  --color-ink-600: #232c42;
+
+  --color-line: #1c2436;
+  --color-line-soft: #151c2b;
+
+  --color-fg: #e8eef7;
+  --color-fg-dim: #9aa7bd;
+  --color-fg-mute: #64708a;
+
+  --color-brand-400: #5b9bff;
+  --color-brand-500: #2f7bff;
+  --color-brand-600: #1b5ce0;
+
+  --color-pos: #2fd98a;
+  --color-neg: #ff5c6c;
+  --color-warn: #ffb340;
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  border-color: var(--color-line-soft);
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(900px 520px at 12% -10%, #10245c 0%, transparent 60%),
+    radial-gradient(760px 460px at 92% 8%, #0b1c48 0%, transparent 58%),
+    var(--color-ink-950);
+  color: var(--color-fg);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "tnum" 0;
+}
+
+/* ---------- scrollbar ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e2739;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2b3852;
+  background-clip: content-box;
+}
+
+/* ---------- primitivas ---------- */
+@utility card {
+  background: linear-gradient(180deg, #0d121d 0%, #090d16 100%);
+  border: 1px solid var(--color-line);
+  border-radius: 1rem;
+}
+
+@utility surface {
+  background: #0b0f19;
+  border: 1px solid var(--color-line-soft);
+  border-radius: 0.875rem;
+}
+
+@utility focus-ring {
+  outline: none;
+  box-shadow: 0 0 0 2px #04060c, 0 0 0 4px var(--color-brand-500);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+input,
+textarea,
+select {
+  color-scheme: dark;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-fg-mute);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.pop {
+  animation: pop 0.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fade {
+  animation: fade 0.15s ease both;
+}
