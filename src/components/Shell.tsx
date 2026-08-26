@@ -212,7 +212,14 @@ export function Shell({
   return (
     <div className="flex min-h-dvh">
       {/* -------- barra lateral, desktop -------- */}
-      <aside className="hidden w-[224px] shrink-0 flex-col bg-white pt-6 pb-5 lg:flex">
+      {/*
+        sticky em vez de fixed: o aside continua no fluxo, então mantém a
+        largura na grade flex sem precisar de margem compensatória no <main>.
+        h-dvh dá altura definida para o mt-auto do rodapé funcionar, e o
+        overflow-y-auto salva a barra em tela baixa, onde nav + tema + conta
+        passam da altura da janela.
+      */}
+      <aside className="sticky top-0 hidden h-dvh w-[224px] shrink-0 flex-col overflow-y-auto bg-white pt-6 pb-5 lg:flex">
         <div className="mb-6">{wordmark}</div>
         {nav}
         {rodape}
