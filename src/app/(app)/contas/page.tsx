@@ -13,6 +13,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { BILL_CATEGORIES, type Bill, type BillStatus } from "@/lib/types";
 import { brl, dateBR, daysUntil, todayISO } from "@/lib/format";
 import {
@@ -28,6 +29,7 @@ import {
   Skeleton,
   Textarea,
   useConfirm,
+  useNotice,
 } from "@/components/ui";
 
 type Filter = "all" | "pending" | "overdue" | "paid";
@@ -54,10 +56,15 @@ export default function ContasPage() {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const confirm = useConfirm();
+  const notice = useNotice();
 
   const load = React.useCallback(async () => {
     const { data } = await supabase.from("bills").select("*").order("due_date");
-    setRows((data as Bill[]) ?? []);
+    // numeric do Postgres chega como string no JSON; normaliza aqui para o
+    // tipo Bill.amount: number deixar de ser mentira.
+    setRows(
+      ((data as Bill[]) ?? []).map((b) => ({ ...b, amount: Number(b.amount) }))
+    );
     setLoading(false);
   }, [supabase]);
 
@@ -114,10 +121,14 @@ export default function ContasPage() {
         .update(payload)
         .eq("id", editing.id));
     } else {
-      const { data: u } = await supabase.auth.getUser();
+      const uid = await currentUserId(supabase);
+      if (!uid) {
+        setBusy(false);
+        return setErr(SESSION_EXPIRED);
+      }
       ({ error } = await supabase
         .from("bills")
-        .insert({ ...payload, user_id: u.user!.id }));
+        .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
     if (error) return setErr(error.message);
@@ -130,20 +141,21 @@ export default function ContasPage() {
     setRows((r) =>
       r.map((x) => (x.id === b.id ? { ...x, status: next } : x))
     );
-    await supabase
+    const { error } = await supabase
       .from("bills")
       .update({
         status: next,
         paid_at: next === "paid" ? new Date().toISOString() : null,
       })
       .eq("id", b.id);
+    notice.check(error, next === "paid" ? "marcar como paga" : "reabrir a conta");
     load();
   };
 
   const remove = (b: Bill) =>
     confirm.ask(`Excluir "${b.description}"? Isso não pode ser desfeito.`, async () => {
-      await supabase.from("bills").delete().eq("id", b.id);
-      load();
+      const { error } = await supabase.from("bills").delete().eq("id", b.id);
+      if (!notice.check(error, "excluir a conta")) load();
     });
 
   /* ------------------------------ derivados ------------------------------ */
@@ -496,6 +508,7 @@ export default function ContasPage() {
       </Modal>
 
       {confirm.node}
+      {notice.node}
     </div>
   );
 }

@@ -50,3 +50,28 @@ export const greeting = () => {
   if (h < 18) return "Boa tarde";
   return "Boa noite";
 };
+
+/**
+ * Dia local (YYYY-MM-DD) de um timestamptz.
+ *
+ * O PostgREST devolve timestamptz em UTC. Cortar a string com slice(0,10) dá o
+ * dia em UTC, não no fuso de quem olha: um evento às 22h em Brasília é gravado
+ * como 01h30 do dia seguinte em UTC, e aparecia um dia adiantado no calendário.
+ * Aqui o instante é convertido para o fuso do navegador antes de virar data.
+ */
+export const localDay = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
+};
+
+/** Hora local HH:MM de um timestamptz. */
+export const localTime = (iso: string | null | undefined) => {
+  if (!iso) return "";
+  return new Date(iso).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};

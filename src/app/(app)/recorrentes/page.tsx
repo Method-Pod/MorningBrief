@@ -14,6 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   FREQUENCY_LABEL,
   PRIORITY_LABEL,
@@ -37,6 +38,7 @@ import {
   Skeleton,
   Textarea,
   useConfirm,
+  useNotice,
   cx,
 } from "@/components/ui";
 
@@ -73,6 +75,7 @@ export default function RecorrentesPage() {
   const [err, setErr] = React.useState("");
   const [toast, setToast] = React.useState("");
   const confirm = useConfirm();
+  const notice = useNotice();
 
   const today = todayISO();
 
@@ -146,10 +149,14 @@ export default function RecorrentesPage() {
         .update(payload)
         .eq("id", editing.id));
     } else {
-      const { data: u } = await supabase.auth.getUser();
+      const uid = await currentUserId(supabase);
+      if (!uid) {
+        setBusy(false);
+        return setErr(SESSION_EXPIRED);
+      }
       ({ error } = await supabase
         .from("recurring_tasks")
-        .insert({ ...payload, user_id: u.user!.id }));
+        .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
     if (error) return setErr(error.message);
@@ -161,18 +168,20 @@ export default function RecorrentesPage() {
     setRows((v) =>
       v.map((x) => (x.id === r.id ? { ...x, active: !x.active } : x))
     );
-    await supabase
+    const { error } = await supabase
       .from("recurring_tasks")
       .update({ active: !r.active })
       .eq("id", r.id);
+    notice.check(error, r.active ? "pausar a recorrência" : "ativar a recorrência");
     load();
   };
 
   /** Gera a demanda agora, sem esperar a data. */
   const runNow = async (r: RecurringTask) => {
-    const { data: u } = await supabase.auth.getUser();
+    const uid = await currentUserId(supabase);
+    if (!uid) return setToast(SESSION_EXPIRED);
     const { error } = await supabase.from("tasks").insert({
-      user_id: u.user!.id,
+      user_id: uid,
       title: r.title,
       description: r.description,
       client: r.client,
@@ -194,8 +203,11 @@ export default function RecorrentesPage() {
     confirm.ask(
       `Excluir a recorrência "${r.title}"? As demandas já geradas continuam em Demandas.`,
       async () => {
-        await supabase.from("recurring_tasks").delete().eq("id", r.id);
-        load();
+        const { error } = await supabase
+          .from("recurring_tasks")
+          .delete()
+          .eq("id", r.id);
+        if (!notice.check(error, "excluir a recorrência")) load();
       }
     );
 
@@ -530,6 +542,7 @@ export default function RecorrentesPage() {
       </Modal>
 
       {confirm.node}
+      {notice.node}
     </div>
   );
 }

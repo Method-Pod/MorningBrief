@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   PRIORITY_LABEL,
   STATUS_LABEL,
@@ -35,6 +36,7 @@ import {
   Skeleton,
   Textarea,
   useConfirm,
+  useNotice,
   cx,
 } from "@/components/ui";
 
@@ -72,6 +74,7 @@ export default function DemandasPage() {
   const [err, setErr] = React.useState("");
   const [drag, setDrag] = React.useState<string | null>(null);
   const confirm = useConfirm();
+  const notice = useNotice();
 
   const load = React.useCallback(async () => {
     const { data } = await supabase
@@ -130,10 +133,14 @@ export default function DemandasPage() {
         .update(payload)
         .eq("id", editing.id));
     } else {
-      const { data: u } = await supabase.auth.getUser();
+      const uid = await currentUserId(supabase);
+      if (!uid) {
+        setBusy(false);
+        return setErr(SESSION_EXPIRED);
+      }
       ({ error } = await supabase
         .from("tasks")
-        .insert({ ...payload, user_id: u.user!.id }));
+        .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
     if (error) return setErr(error.message);
@@ -144,20 +151,21 @@ export default function DemandasPage() {
   const move = async (t: Task, status: TaskStatus) => {
     if (t.status === status) return;
     setRows((r) => r.map((x) => (x.id === t.id ? { ...x, status } : x)));
-    await supabase
+    const { error } = await supabase
       .from("tasks")
       .update({
         status,
         completed_at: status === "done" ? new Date().toISOString() : null,
       })
       .eq("id", t.id);
+    notice.check(error, "mover a demanda");
     load();
   };
 
   const remove = (t: Task) =>
     confirm.ask(`Excluir "${t.title}"?`, async () => {
-      await supabase.from("tasks").delete().eq("id", t.id);
-      load();
+      const { error } = await supabase.from("tasks").delete().eq("id", t.id);
+      if (!notice.check(error, "excluir a demanda")) load();
     });
 
   /* ------------------------------ derivados ------------------------------ */
@@ -510,6 +518,7 @@ export default function DemandasPage() {
       </Modal>
 
       {confirm.node}
+      {notice.node}
     </div>
   );
 }

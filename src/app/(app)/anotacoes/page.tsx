@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Pencil, Pin, PinOff, Plus, Search, StickyNote, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NOTE_COLORS, type Note } from "@/lib/types";
 import { dateTimeBR } from "@/lib/format";
 import {
@@ -15,6 +16,7 @@ import {
   Skeleton,
   Textarea,
   useConfirm,
+  useNotice,
   cx,
 } from "@/components/ui";
 
@@ -40,6 +42,7 @@ export default function AnotacoesPage() {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const confirm = useConfirm();
+  const notice = useNotice();
 
   const load = React.useCallback(async () => {
     const { data } = await supabase
@@ -95,10 +98,14 @@ export default function AnotacoesPage() {
         .update(payload)
         .eq("id", editing.id));
     } else {
-      const { data: u } = await supabase.auth.getUser();
+      const uid = await currentUserId(supabase);
+      if (!uid) {
+        setBusy(false);
+        return setErr(SESSION_EXPIRED);
+      }
       ({ error } = await supabase
         .from("notes")
-        .insert({ ...payload, user_id: u.user!.id }));
+        .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
     if (error) return setErr(error.message);
@@ -110,14 +117,18 @@ export default function AnotacoesPage() {
     setRows((r) =>
       r.map((x) => (x.id === n.id ? { ...x, pinned: !x.pinned } : x))
     );
-    await supabase.from("notes").update({ pinned: !n.pinned }).eq("id", n.id);
+    const { error } = await supabase
+      .from("notes")
+      .update({ pinned: !n.pinned })
+      .eq("id", n.id);
+    notice.check(error, n.pinned ? "desafixar a nota" : "fixar a nota");
     load();
   };
 
   const remove = (n: Note) =>
     confirm.ask(`Excluir "${n.title || "esta anotação"}"?`, async () => {
-      await supabase.from("notes").delete().eq("id", n.id);
-      load();
+      const { error } = await supabase.from("notes").delete().eq("id", n.id);
+      if (!notice.check(error, "excluir a anotação")) load();
     });
 
   const view = React.useMemo(() => {
@@ -313,6 +324,7 @@ export default function AnotacoesPage() {
       </Modal>
 
       {confirm.node}
+      {notice.node}
     </div>
   );
 }

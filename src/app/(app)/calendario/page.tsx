@@ -14,9 +14,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import type { Bill, CalendarEvent, Task } from "@/lib/types";
 import { PRIORITY_LABEL } from "@/lib/types";
-import { brl, dateBR, todayISO } from "@/lib/format";
+import { brl, dateBR, localDay, localTime, todayISO } from "@/lib/format";
 import {
   Badge,
   Button,
@@ -29,6 +30,7 @@ import {
   Skeleton,
   Textarea,
   useConfirm,
+  useNotice,
   cx,
 } from "@/components/ui";
 
@@ -80,6 +82,7 @@ export default function CalendarioPage() {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const confirm = useConfirm();
+  const notice = useNotice();
 
   const load = React.useCallback(async () => {
     const [e, b, t] = await Promise.all([
@@ -108,7 +111,7 @@ export default function CalendarioPage() {
       if (!map.has(iso)) map.set(iso, { events: [], bills: [], tasks: [] });
       return map.get(iso)!;
     };
-    events.forEach((e) => put(e.start_at.slice(0, 10)).events.push(e));
+    events.forEach((e) => put(localDay(e.start_at)).events.push(e));
     bills.forEach((b) => put(b.due_date.slice(0, 10)).bills.push(b));
     tasks.forEach((t) => {
       if (t.due_date) put(t.due_date.slice(0, 10)).tasks.push(t);
@@ -144,7 +147,7 @@ export default function CalendarioPage() {
   const monthStats = React.useMemo(() => {
     const prefix = `${cursor.y}-${pad(cursor.m + 1)}`;
     return {
-      events: events.filter((e) => e.start_at.startsWith(prefix)).length,
+      events: events.filter((e) => localDay(e.start_at).startsWith(prefix)).length,
       bills: bills.filter((b) => b.due_date.startsWith(prefix)),
       tasks: tasks.filter((t) => t.due_date?.startsWith(prefix)).length,
     };
@@ -165,7 +168,7 @@ export default function CalendarioPage() {
     setForm({
       title: e.title,
       description: e.description,
-      date: e.start_at.slice(0, 10),
+      date: localDay(e.start_at),
       time: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
       end_time: e.end_at
         ? `${pad(new Date(e.end_at).getHours())}:${pad(new Date(e.end_at).getMinutes())}`
@@ -209,10 +212,15 @@ export default function CalendarioPage() {
         .update(payload)
         .eq("id", editing.id));
     } else {
-      const { data: u } = await supabase.auth.getUser();
+      const uid = await currentUserId(supabase);
+      if (!uid) {
+        setBusy(false);
+        setErr(SESSION_EXPIRED);
+        return;
+      }
       ({ error } = await supabase
         .from("events")
-        .insert({ ...payload, user_id: u.user!.id }));
+        .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
     if (error) return setErr(error.message);
@@ -223,8 +231,8 @@ export default function CalendarioPage() {
 
   const remove = (e: CalendarEvent) =>
     confirm.ask(`Excluir "${e.title}"?`, async () => {
-      await supabase.from("events").delete().eq("id", e.id);
-      load();
+      const { error } = await supabase.from("events").delete().eq("id", e.id);
+      if (!notice.check(error, "excluir o evento")) load();
     });
 
   const shift = (n: number) =>
@@ -464,12 +472,9 @@ export default function CalendarioPage() {
                               ) : (
                                 <span className="inline-flex items-center gap-1">
                                   <Clock size={9} />
-                                  {new Date(e.start_at).toLocaleTimeString(
-                                    "pt-BR",
-                                    { hour: "2-digit", minute: "2-digit" }
-                                  )}
+                                  {localTime(e.start_at)}
                                   {e.end_at &&
-                                    ` – ${new Date(e.end_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`}
+                                    ` – ${localTime(e.end_at)}`}
                                 </span>
                               )}
                               {e.location && (
@@ -702,6 +707,7 @@ export default function CalendarioPage() {
       </Modal>
 
       {confirm.node}
+      {notice.node}
     </div>
   );
 }

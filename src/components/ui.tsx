@@ -337,3 +337,42 @@ export function useConfirm() {
 
   return { ask, node };
 }
+
+/* ------------------------------ Notice ------------------------------ */
+
+/**
+ * Aviso flutuante para falha de banco.
+ *
+ * Antes, exclusões e atualizações descartavam o `error` devolvido pelo
+ * Supabase: se o RLS ou a rede recusasse, a lista recarregava igual e a pessoa
+ * achava que tinha dado certo. Agora a falha aparece.
+ */
+export function useNotice() {
+  const [msg, setMsg] = React.useState("");
+
+  React.useEffect(() => {
+    if (!msg) return;
+    const id = setTimeout(() => setMsg(""), 5000);
+    return () => clearTimeout(id);
+  }, [msg]);
+
+  const show = (m: string) => setMsg(m);
+
+  /** Passa o erro do Supabase; devolve true quando houve falha. */
+  const check = (error: { message: string } | null, quando: string) => {
+    if (!error) return false;
+    show(`Não foi possível ${quando}: ${error.message}`);
+    return true;
+  };
+
+  const node = msg ? (
+    <div
+      role="status"
+      className="fixed bottom-5 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full bg-neg px-4 py-3 text-center text-xs font-medium text-white shadow-[0_6px_20px_-8px_rgb(20_24_26/0.4)] pop"
+    >
+      {msg}
+    </div>
+  ) : null;
+
+  return { show, check, node };
+}

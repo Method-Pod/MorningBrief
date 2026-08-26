@@ -14,11 +14,20 @@ import {
   Zap,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import type { Bill, CalendarEvent, Note, RecurringTask, Task } from "@/lib/types";
 import { STATUS_LABEL, type TaskStatus } from "@/lib/types";
-import { brl, dateBR, daysUntil, greeting, todayISO } from "@/lib/format";
+import {
+  brl,
+  dateBR,
+  daysUntil,
+  greeting,
+  localDay,
+  localTime,
+  todayISO,
+} from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
-import { Card, Skeleton, cx } from "@/components/ui";
+import { Card, Skeleton, useNotice, cx } from "@/components/ui";
 
 const PRIO_DOT: Record<string, string> = {
   urgent: "bg-neg",
@@ -53,6 +62,7 @@ export default function HomePage() {
   const [generated, setGenerated] = React.useState(0);
   const [draft, setDraft] = React.useState("");
   const [adding, setAdding] = React.useState(false);
+  const notice = useNotice();
 
   const today = todayISO();
 
@@ -64,7 +74,10 @@ export default function HomePage() {
       supabase.from("events").select("*").order("start_at"),
       supabase.from("notes").select("*").order("updated_at", { ascending: false }),
     ]);
-    setBills((b.data as Bill[]) ?? []);
+    // numeric do Postgres vem como string no JSON; normaliza na fronteira
+    setBills(
+      ((b.data as Bill[]) ?? []).map((x) => ({ ...x, amount: Number(x.amount) }))
+    );
     setTasks((t.data as Task[]) ?? []);
     setRecurring((r.data as RecurringTask[]) ?? []);
     setEvents((e.data as CalendarEvent[]) ?? []);
@@ -77,11 +90,34 @@ export default function HomePage() {
     async (rows: RecurringTask[]) => {
       const due = rows.filter((r) => isDueOn(r, today));
       if (!due.length) return 0;
-      const { data: u } = await supabase.auth.getUser();
-      const uid = u.user?.id;
+      const uid = await currentUserId(supabase);
       if (!uid) return 0;
+
+      /*
+       * Reivindica a recorrência ANTES de criar a demanda.
+       *
+       * O update só encontra a linha se last_run_on ainda não é hoje, então
+       * duas abas abertas ao mesmo tempo disputam e apenas uma leva. Antes a
+       * ordem era inversa — inserir e depois marcar — e as duas abas inseriam
+       * antes de qualquer uma marcar, gerando a demanda em dobro.
+       *
+       * O `or` é necessário porque em SQL `last_run_on <> hoje` é falso quando
+       * a coluna é NULL: a recorrência que nunca rodou não seria reivindicada.
+       */
+      const claimed: RecurringTask[] = [];
+      for (const r of due) {
+        const { data } = await supabase
+          .from("recurring_tasks")
+          .update({ last_run_on: today })
+          .eq("id", r.id)
+          .or(`last_run_on.is.null,last_run_on.neq.${today}`)
+          .select("id");
+        if (data && data.length) claimed.push(r);
+      }
+      if (!claimed.length) return 0;
+
       const { error } = await supabase.from("tasks").insert(
-        due.map((r) => ({
+        claimed.map((r) => ({
           user_id: uid,
           title: r.title,
           description: r.description,
@@ -92,13 +128,22 @@ export default function HomePage() {
           origin_id: r.id,
         }))
       );
-      if (error) return 0;
-      await supabase
-        .from("recurring_tasks")
-        .update({ last_run_on: today })
-        .in("id", due.map((r) => r.id));
-      return due.length;
+
+      if (error) {
+        // 23505 = índice único tasks_origin_day_uniq. A demanda já existe,
+        // então não é falha: outra aba chegou primeiro.
+        if (error.code === "23505") return 0;
+        // devolve a reivindicação para a próxima abertura tentar de novo
+        await supabase
+          .from("recurring_tasks")
+          .update({ last_run_on: null })
+          .in("id", claimed.map((r) => r.id));
+        notice.show(`Não foi possível gerar as recorrências: ${error.message}`);
+        return 0;
+      }
+      return claimed.length;
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [supabase, today]
   );
 
@@ -125,15 +170,20 @@ export default function HomePage() {
     const title = draft.trim();
     if (!title || adding) return;
     setAdding(true);
-    const { data: u } = await supabase.auth.getUser();
-    if (u.user) {
-      await supabase.from("tasks").insert({
-        user_id: u.user.id,
-        title,
-        priority: "medium",
-        status: "todo",
-        due_date: today,
-      });
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      notice.show(SESSION_EXPIRED);
+      setAdding(false);
+      return;
+    }
+    const { error } = await supabase.from("tasks").insert({
+      user_id: uid,
+      title,
+      priority: "medium",
+      status: "todo",
+      due_date: today,
+    });
+    if (!notice.check(error, "adicionar a tarefa")) {
       setDraft("");
       await load();
     }
@@ -145,13 +195,14 @@ export default function HomePage() {
     setTasks((v) =>
       v.map((x) => (x.id === t.id ? { ...x, status: done ? "todo" : "done" } : x))
     );
-    await supabase
+    const { error } = await supabase
       .from("tasks")
       .update({
         status: done ? "todo" : "done",
         completed_at: done ? null : new Date().toISOString(),
       })
       .eq("id", t.id);
+    notice.check(error, done ? "reabrir a tarefa" : "concluir a tarefa");
     load();
   };
 
@@ -176,9 +227,9 @@ export default function HomePage() {
       }),
       dueRec: recurring.filter((r) => isDueOn(r, today)),
       actRec: recurring.filter((r) => r.active),
-      evToday: events.filter((e) => e.start_at.slice(0, 10) === today),
+      evToday: events.filter((e) => localDay(e.start_at) === today),
       up: events
-        .filter((e) => e.start_at.slice(0, 10) >= today)
+        .filter((e) => localDay(e.start_at) >= today)
         .slice(0, 4),
       pinned: notes.filter((n) => n.pinned).slice(0, 2),
     };
@@ -523,7 +574,7 @@ export default function HomePage() {
               <Ghost>Agenda livre.</Ghost>
             ) : (
               m.up.map((e) => {
-                const isToday = e.start_at.slice(0, 10) === today;
+                const isToday = localDay(e.start_at) === today;
                 return (
                   <Row key={e.id}>
                     <span
@@ -533,13 +584,10 @@ export default function HomePage() {
                     <span className="min-w-0 flex-1 text-sm font-medium">
                       <span className="block truncate">{e.title}</span>
                       <span className="mt-0.5 block text-[11.5px] font-normal text-fg-mute">
-                        {isToday ? "hoje" : dateBR(e.start_at.slice(0, 10)).slice(0, 5)}
+                        {isToday ? "hoje" : dateBR(localDay(e.start_at)).slice(0, 5)}
                         {e.all_day
                           ? " · dia inteiro"
-                          : ` · ${new Date(e.start_at).toLocaleTimeString("pt-BR", {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}`}
+                          : ` · ${localTime(e.start_at)}`}
                         {e.location && ` · ${e.location}`}
                       </span>
                     </span>
@@ -585,6 +633,8 @@ export default function HomePage() {
           </div>
         </Card>
       </div>
+
+      {notice.node}
     </div>
   );
 }
