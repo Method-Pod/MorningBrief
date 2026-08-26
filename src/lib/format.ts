@@ -108,3 +108,32 @@ export const ultimosDias = (fim: string, n = 7) => {
   }
   return dias;
 };
+
+/**
+ * Semana de segunda a domingo que contém `iso`, deslocada em `semanas`.
+ *
+ * Uma janela móvel dos últimos 7 dias deixa as iniciais fora de ordem
+ * (Q S S D S T Q) e torna a grade ilegível. Com a semana fixa, a ordem das
+ * colunas nunca muda e "nesta semana" corresponde à semana de verdade.
+ */
+export const semanaDe = (iso: string, semanas = 0) => {
+  const d = new Date(iso + "T00:00:00");
+  const dow = d.getDay(); // 0=dom
+  const paraSegunda = dow === 0 ? -6 : 1 - dow;
+  const segunda = new Date(
+    d.getFullYear(),
+    d.getMonth(),
+    d.getDate() + paraSegunda + semanas * 7
+  );
+  return Array.from({ length: 7 }, (_, i) => {
+    const x = new Date(
+      segunda.getFullYear(),
+      segunda.getMonth(),
+      segunda.getDate() + i
+    );
+    return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}-${String(x.getDate()).padStart(2, "0")}`;
+  });
+};

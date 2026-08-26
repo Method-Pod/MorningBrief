@@ -1,11 +1,21 @@
 "use client";
 
 import * as React from "react";
-import { Check, Flame, Pencil, Plus, Power, Repeat2, Trash2 } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Flame,
+  Pencil,
+  Plus,
+  Power,
+  Repeat2,
+  Trash2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { HABIT_COLORS, type Habit, type HabitLog } from "@/lib/types";
-import { todayISO, ultimosDias } from "@/lib/format";
+import { dataCurta, semanaDe, todayISO, ultimosDias } from "@/lib/format";
 import {
   Button,
   Card,
@@ -28,7 +38,8 @@ const COR: Record<string, string> = {
   slate: "#666e74",
 };
 
-const SIGLA = ["D", "S", "T", "Q", "Q", "S", "S"];
+/** semanaDe devolve segunda→domingo, então os nomes seguem a mesma ordem. */
+const DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 
 const vazio = () => ({ name: "", color: "blue", target_per_week: 7, active: true });
 
@@ -37,6 +48,7 @@ export default function HabitosPage() {
   const [habits, setHabits] = React.useState<Habit[]>([]);
   const [logs, setLogs] = React.useState<HabitLog[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [semanas, setSemanas] = React.useState(0);
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Habit | null>(null);
   const [form, setForm] = React.useState(vazio());
@@ -46,11 +58,11 @@ export default function HabitosPage() {
   const notice = useNotice();
 
   const hoje = todayISO();
-  const semana = React.useMemo(() => ultimosDias(hoje, 7), [hoje]);
+  const semana = React.useMemo(() => semanaDe(hoje, semanas), [hoje, semanas]);
 
   const load = React.useCallback(async () => {
-    // 60 dias cobrem a sequência mais longa que a tela mostra
-    const desde = ultimosDias(todayISO(), 60)[0];
+    // 90 dias cobrem a sequência mais longa e algumas semanas para trás
+    const desde = ultimosDias(todayISO(), 90)[0];
     const [h, l] = await Promise.all([
       supabase.from("habits").select("*").order("created_at"),
       supabase.from("habit_logs").select("*").gte("day", desde),
@@ -69,13 +81,11 @@ export default function HabitosPage() {
     () => new Set(logs.map((l) => `${l.habit_id}|${l.day.slice(0, 10)}`)),
     [logs]
   );
-
   const marcado = (id: string, dia: string) => feitos.has(`${id}|${dia}`);
 
   const alternar = async (h: Habit, dia: string) => {
     const jaTinha = marcado(h.id, dia);
 
-    // otimista: a grade responde no clique
     setLogs((v) =>
       jaTinha
         ? v.filter((l) => !(l.habit_id === h.id && l.day.slice(0, 10) === dia))
@@ -108,8 +118,7 @@ export default function HabitosPage() {
         .from("habit_logs")
         .insert({ user_id: uid, habit_id: h.id, day: dia });
       // 23505 = unique(habit_id, day): já estava marcado, não é falha
-      if (error && error.code !== "23505")
-        notice.check(error, "marcar o hábito");
+      if (error && error.code !== "23505") notice.check(error, "marcar o hábito");
     }
     load();
   };
@@ -162,13 +171,7 @@ export default function HabitosPage() {
         .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
-    if (error) {
-      if (error.code === "PGRST205")
-        return setErr(
-          "A tabela de hábitos ainda não existe. Rode supabase/PENDENTE.sql no SQL Editor."
-        );
-      return setErr(error.message);
-    }
+    if (error) return setErr(error.message);
     setOpen(false);
     load();
   };
@@ -194,13 +197,14 @@ export default function HabitosPage() {
     load();
   };
 
-  /** Dias seguidos até hoje, olhando para trás. */
+  /** Dias seguidos terminando hoje (ou ontem, se hoje ainda não foi marcado). */
   const sequencia = React.useCallback(
     (id: string) => {
+      const dias = ultimosDias(hoje, 90).reverse();
+      const inicio = marcado(id, dias[0]) ? 0 : 1;
       let n = 0;
-      const dias = ultimosDias(hoje, 60).reverse();
-      for (const d of dias) {
-        if (marcado(id, d)) n++;
+      for (let i = inicio; i < dias.length; i++) {
+        if (marcado(id, dias[i])) n++;
         else break;
       }
       return n;
@@ -211,13 +215,18 @@ export default function HabitosPage() {
 
   const ativos = habits.filter((h) => h.active);
   const feitosHoje = ativos.filter((h) => marcado(h.id, hoje)).length;
+  const semanaAtual = semanas === 0;
+
+  /** "24 de ago. – 30 de ago." */
+  const rotuloSemana = semanaAtual
+    ? "Esta semana"
+    : `${dataCurta(semana[0]).replace(".", "")} – ${dataCurta(semana[6])}`;
 
   if (loading)
     return (
       <div className="flex flex-col gap-4">
         <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-[120px] rounded-[22px]" />
-        <Skeleton className="h-[260px] rounded-[22px]" />
+        <Skeleton className="h-[300px] rounded-[22px]" />
       </div>
     );
 
@@ -258,37 +267,67 @@ export default function HabitosPage() {
         </Card>
       ) : (
         <Card className="overflow-hidden">
-          {/* cabeçalho de dias, alinhado com a grade abaixo */}
-          <div className="flex items-center gap-3 border-b border-line-soft px-4 py-3">
+          {/* ---------------- navegação de semana ---------------- */}
+          <div className="flex items-center justify-between gap-2 px-4 py-3">
+            <button
+              onClick={() => setSemanas((s) => s - 1)}
+              aria-label="Semana anterior"
+              className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="text-[13px] font-bold">{rotuloSemana}</span>
+            <button
+              onClick={() => setSemanas((s) => Math.min(0, s + 1))}
+              disabled={semanaAtual}
+              aria-label="Próxima semana"
+              className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+
+          {/* ---------------- cabeçalho dos dias ---------------- */}
+          <div className="flex items-end gap-3 border-y border-line-soft px-4 py-2.5">
             <span className="min-w-0 flex-1 text-[10.5px] font-bold uppercase tracking-[0.1em] text-fg-mute">
               Hábito
             </span>
             <div className="flex shrink-0 gap-1">
-              {semana.map((d) => {
-                const wd = new Date(d + "T00:00:00").getDay();
+              {semana.map((d, i) => {
                 const ehHoje = d === hoje;
                 return (
-                  <span
-                    key={d}
-                    className={cx(
-                      "grid w-7 place-items-center text-[10px] font-bold sm:w-9",
-                      ehHoje ? "text-brand-400" : "text-fg-mute"
-                    )}
-                  >
-                    {SIGLA[wd]}
-                  </span>
+                  <div key={d} className="w-8 text-center sm:w-9">
+                    <p
+                      className={cx(
+                        "text-[9.5px] font-bold uppercase",
+                        ehHoje ? "text-brand-400" : "text-fg-mute"
+                      )}
+                    >
+                      {DIAS[i]}
+                    </p>
+                    <p
+                      className={cx(
+                        "mx-auto mt-1 grid h-5 w-5 place-items-center rounded-full text-[11.5px] font-bold tnum",
+                        ehHoje
+                          ? "bg-brand-500 text-on-brand"
+                          : "text-fg-dim"
+                      )}
+                    >
+                      {Number(d.slice(8))}
+                    </p>
+                  </div>
                 );
               })}
             </div>
-            <span className="hidden w-[76px] shrink-0 text-right text-[10.5px] font-bold uppercase tracking-[0.1em] text-fg-mute sm:block">
-              Sequência
-            </span>
           </div>
 
+          {/* ---------------- linhas ---------------- */}
           <ul>
             {habits.map((h) => {
               const seq = sequencia(h.id);
               const naSemana = semana.filter((d) => marcado(h.id, d)).length;
+              const meta = h.target_per_week;
+              const cor = COR[h.color] ?? COR.blue;
               return (
                 <li
                   key={h.id}
@@ -301,15 +340,37 @@ export default function HabitosPage() {
                     <div className="flex items-center gap-2">
                       <span
                         className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ background: COR[h.color] ?? COR.blue }}
+                        style={{ background: cor }}
                       />
                       <p className="truncate text-[13.5px] font-semibold">
                         {h.name}
                       </p>
                     </div>
-                    <p className="mt-0.5 text-[11px] text-fg-mute tnum">
-                      {naSemana}/{h.target_per_week} nesta semana
-                      {!h.active && " · pausado"}
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-fg-mute">
+                      <span
+                        className={cx(
+                          "font-bold tnum",
+                          naSemana >= meta && "text-pos"
+                        )}
+                      >
+                        {naSemana}/{meta}
+                      </span>
+                      <span>na semana</span>
+                      {seq > 0 && (
+                        <>
+                          <span className="opacity-40">·</span>
+                          <span className="inline-flex items-center gap-1 font-bold text-warn">
+                            <Flame size={10} />
+                            {seq} {seq === 1 ? "dia" : "dias"} seguidos
+                          </span>
+                        </>
+                      )}
+                      {!h.active && (
+                        <>
+                          <span className="opacity-40">·</span>
+                          <span>pausado</span>
+                        </>
+                      )}
                     </p>
                   </div>
 
@@ -317,53 +378,53 @@ export default function HabitosPage() {
                     {semana.map((d) => {
                       const on = marcado(h.id, d);
                       const futuro = d > hoje;
+                      const travado = futuro || !h.active;
                       return (
-                        <button
-                          key={d}
-                          disabled={futuro || !h.active}
-                          onClick={() => alternar(h, d)}
-                          aria-label={`${h.name} em ${d}`}
-                          aria-pressed={on}
-                          className={cx(
-                            "grid h-7 w-7 place-items-center rounded-[9px] border-[1.5px] transition-colors sm:h-9 sm:w-9",
-                            on
-                              ? "border-transparent text-white"
-                              : "border-line text-transparent hover:border-brand-500",
-                            (futuro || !h.active) &&
-                              "cursor-not-allowed opacity-40 hover:border-line"
-                          )}
-                          style={on ? { background: COR[h.color] ?? COR.blue } : undefined}
-                        >
-                          <Check size={14} />
-                        </button>
+                        <div key={d} className="grid w-8 place-items-center sm:w-9">
+                          <button
+                            disabled={travado}
+                            onClick={() => alternar(h, d)}
+                            aria-label={`${h.name} — ${dataCurta(d)}${
+                              on ? ", feito" : ""
+                            }`}
+                            aria-pressed={on}
+                            title={dataCurta(d)}
+                            className={cx(
+                              "grid h-7 w-7 place-items-center rounded-full border-[1.5px] transition-colors sm:h-8 sm:w-8",
+                              on
+                                ? "border-transparent text-white"
+                                : "border-line bg-white text-transparent",
+                              !travado && !on && "hover:border-brand-500",
+                              travado && "cursor-not-allowed opacity-35"
+                            )}
+                            style={on ? { background: cor } : undefined}
+                          >
+                            <Check size={13} strokeWidth={3} />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
-
-                  <span className="hidden w-[76px] shrink-0 items-center justify-end gap-1 text-right text-[13px] font-bold tnum sm:flex">
-                    {seq > 0 && <Flame size={13} className="text-warn" />}
-                    {seq}d
-                  </span>
 
                   <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
                     <button
                       onClick={() => pausar(h)}
                       aria-label={h.active ? "Pausar" : "Retomar"}
-                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-ink-800 hover:text-fg"
+                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
                     >
                       <Power size={14} />
                     </button>
                     <button
                       onClick={() => editar(h)}
                       aria-label="Editar"
-                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-ink-800 hover:text-fg"
+                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
                     >
                       <Pencil size={14} />
                     </button>
                     <button
                       onClick={() => excluir(h)}
                       aria-label="Excluir"
-                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-neg/15 hover:text-neg"
+                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
                     >
                       <Trash2 size={14} />
                     </button>
