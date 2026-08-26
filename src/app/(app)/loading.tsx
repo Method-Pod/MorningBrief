@@ -20,7 +20,7 @@ export default function Loading() {
         <span
           key={i}
           className="ponto h-2.5 w-2.5 rounded-full bg-brand-500"
-          style={{ animationDelay: `${i * 0.14}s` }}
+          style={{ animationDelay: `${i * 0.18}s` }}
         />
       ))}
     </div>
