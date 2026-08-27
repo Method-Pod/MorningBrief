@@ -19,6 +19,7 @@ import {
   FREQUENCY_LABEL,
   PRIORITY_LABEL,
   WEEKDAYS,
+  WEEKDAYS_SIGLA,
   type Frequency,
   type Priority,
   type RecurringTask,
@@ -58,6 +59,7 @@ const blank = () => ({
   priority: "medium" as Priority,
   frequency: "weekly" as Frequency,
   weekday: 1,
+  weekdays: [1] as number[],
   day_of_month: 1,
   active: true,
 });
@@ -99,6 +101,8 @@ export default function RecorrentesPage() {
       priority: r.priority,
       frequency: r.frequency,
       weekday: r.weekday ?? 1,
+      weekdays:
+        r.weekdays && r.weekdays.length ? r.weekdays : [r.weekday ?? 1],
       day_of_month: r.day_of_month ?? 1,
       active: r.active,
     });
@@ -122,9 +126,21 @@ export default function RecorrentesPage() {
       client: form.client.trim(),
       priority: form.priority,
       frequency: form.frequency,
-      weekday: needsWeekday ? Number(form.weekday) : null,
+      /* No semanal, `weekday` guarda o primeiro dia marcado — é o que mantém a
+         regra válida num banco sem a migração de vários dias. */
+      weekday: needsWeekday
+        ? form.frequency === "weekly"
+          ? Math.min(...form.weekdays)
+          : Number(form.weekday)
+        : null,
       day_of_month: needsDom ? Number(form.day_of_month) : null,
       active: form.active,
+      /* A coluna de vários dias só entra quando há mais de um. Ver o comentário
+         equivalente em demandas: sem isso, um banco sem DIAS-DA-SEMANA.sql
+         deixaria de aceitar qualquer regra recorrente. */
+      ...(form.frequency === "weekly" && form.weekdays.length > 1
+        ? { weekdays: form.weekdays }
+        : {}),
     };
 
     let error;
@@ -144,7 +160,14 @@ export default function RecorrentesPage() {
         .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
-    if (error) return setErr(error.message);
+    if (error) {
+      /* PGRST204/42703: a coluna de vários dias não existe no banco ainda. */
+      if (/weekdays/.test(error.message))
+        return setErr(
+          "Vários dias da semana precisa de supabase/DIAS-DA-SEMANA.sql no banco. Rode o arquivo ou deixe um dia só marcado."
+        );
+      return setErr(error.message);
+    }
     setOpen(false);
     load();
   };
@@ -463,7 +486,54 @@ export default function RecorrentesPage() {
               </Select>
             </Field>
 
-            {needsWeekday && (
+            {form.frequency === "weekly" && (
+              <Field
+                label="Dias da semana"
+                hint={
+                  form.weekdays.length > 1
+                    ? "A demanda volta em cada dia marcado."
+                    : undefined
+                }
+              >
+                {/* Caixinhas em vez de select: os sete dias e o que está
+                    marcado se leem de uma vez. Mesmo formato usado em Nova
+                    demanda. */}
+                <div className="flex gap-1">
+                  {WEEKDAYS_SIGLA.map((sigla, i) => {
+                    const marcado = form.weekdays.includes(i);
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        aria-label={WEEKDAYS[i]}
+                        aria-pressed={marcado}
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            /* Nunca deixa ficar sem nenhum dia marcado. */
+                            weekdays: marcado
+                              ? form.weekdays.length > 1
+                                ? form.weekdays.filter((d) => d !== i)
+                                : form.weekdays
+                              : [...form.weekdays, i].sort((a, b) => a - b),
+                          })
+                        }
+                        className={cx(
+                          "h-9 flex-1 rounded-[12px] text-[12.5px] font-bold transition-colors",
+                          marcado
+                            ? "bg-brand-500 text-on-brand"
+                            : "bg-ink-800 text-fg-mute hover:text-fg-dim"
+                        )}
+                      >
+                        {sigla}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Field>
+            )}
+
+            {form.frequency === "biweekly" && (
               <Field label="Dia da semana">
                 <Select
                   value={String(form.weekday)}

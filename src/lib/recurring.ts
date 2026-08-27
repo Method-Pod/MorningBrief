@@ -12,6 +12,21 @@ const daysBetween = (a: string, b: string) =>
   Math.round((toDate(b).getTime() - toDate(a).getTime()) / DAY);
 const daysInMonth = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
 
+/**
+ * Os dias da semana em que a regra dispara.
+ *
+ * `weekdays` manda quando existe; senão cai no `weekday` de sempre, que é o que
+ * as regras criadas antes da migração têm. A lista nunca é vazia: o banco não
+ * aceita, e aqui um array vazio também cai no fallback, para uma regra semanal
+ * nunca ficar sem nenhum dia e parar de disparar sem aviso.
+ */
+export function diasDaSemanaDe(
+  r: Pick<RecurringTask, "weekday" | "weekdays">
+): number[] {
+  if (r.weekdays && r.weekdays.length) return r.weekdays;
+  return [r.weekday ?? 1];
+}
+
 /** Dia do mês pedido, encolhido para o último dia quando o mês é curto. */
 function effectiveDom(r: RecurringTask, d: Date) {
   const dom = r.day_of_month ?? 1;
@@ -30,7 +45,14 @@ export function isDueOn(r: RecurringTask, iso: string): boolean {
     case "daily":
       return true;
     case "weekly":
-      return d.getDay() === (r.weekday ?? 1);
+      return diasDaSemanaDe(r).includes(d.getDay());
+    /*
+     * Quinzenal segue com um dia só.
+     *
+     * O intervalo mínimo de 14 dias é medido do último disparo, então com dois
+     * dias na mesma semana o segundo nunca alcançaria o intervalo e a regra
+     * viraria, na prática, "um dia a cada quinze" com o dia oscilando.
+     */
     case "biweekly":
       return d.getDay() === (r.weekday ?? 1) && gap >= 14;
     case "monthly":
@@ -60,16 +82,30 @@ export function nextOccurrence(r: RecurringTask, fromISO = todayISO()): string |
   return null;
 }
 
-/** Só lê frequency/weekday/day_of_month, então aceita o formulário direto. */
+/** Só lê frequency/weekday(s)/day_of_month, então aceita o formulário direto. */
 export function frequencyDescription(
-  r: Pick<RecurringTask, "frequency" | "weekday" | "day_of_month">
+  r: Pick<RecurringTask, "frequency" | "weekday" | "weekdays" | "day_of_month">
 ): string {
   const WD = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
   switch (r.frequency) {
     case "daily":
       return "Todos os dias";
-    case "weekly":
-      return `Toda ${WD[r.weekday ?? 1]}`;
+    case "weekly": {
+      const nums = diasDaSemanaDe(r).slice().sort((a, b) => a - b);
+      const dias = nums.map((d) => WD[d]);
+      if (dias.length === 7) return "Todos os dias da semana";
+      /* Domingo e sábado são masculinos: "Todo sábado", não "Toda sábado". */
+      if (dias.length === 1)
+        return `${nums[0] === 0 || nums[0] === 6 ? "Todo" : "Toda"} ${dias[0]}`;
+      /*
+       * Com vários dias, o prefixo sai da frente em vez de concordar com o
+       * primeiro: "Toda segunda, quarta e sábado" erraria o gênero do último,
+       * e não existe artigo que sirva para a lista toda.
+       */
+      return `Toda semana: ${dias.slice(0, -1).join(", ")} e ${
+        dias[dias.length - 1]
+      }`;
+    }
     case "biweekly":
       return `A cada 15 dias, ${WD[r.weekday ?? 1]}`;
     case "monthly":

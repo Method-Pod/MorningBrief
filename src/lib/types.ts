@@ -74,6 +74,15 @@ export type RecurringTask = {
   priority: Priority;
   frequency: Frequency;
   weekday: number | null;
+  /*
+   * Dias da semana da regra semanal: 0 = domingo ... 6 = sábado.
+   * Ver supabase/DIAS-DA-SEMANA.sql.
+   *
+   * Nulo nas regras criadas antes da migração, que seguem valendo pelo
+   * `weekday`. Nunca lista vazia — o check no banco não aceita, porque uma
+   * regra semanal sem nenhum dia nunca dispararia, em silêncio.
+   */
+  weekdays: number[] | null;
   day_of_month: number | null;
   active: boolean;
   last_run_on: string | null;
@@ -133,6 +142,9 @@ export const FREQUENCY_LABEL: Record<Frequency, string> = {
   quarterly: "Trimestral",
   yearly: "Anual",
 };
+
+/** Inicial de cada dia, para as caixinhas de seleção. Mesma ordem de WEEKDAYS. */
+export const WEEKDAYS_SIGLA = ["D", "S", "T", "Q", "Q", "S", "S"];
 
 export const WEEKDAYS = [
   "Domingo",
