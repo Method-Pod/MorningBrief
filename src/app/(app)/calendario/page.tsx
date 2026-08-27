@@ -51,12 +51,19 @@ const MONTHS = [
 const DOW = ["D", "S", "T", "Q", "Q", "S", "S"];
 const DOW_FULL = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+/*
+ * `key` é o que está gravado no banco e não muda; `nome` é só o rótulo.
+ *
+ * As chaves são as do Tailwind e apareciam cruas na tela: ninguém sabe de cor
+ * que "rose" é rosa e "amber" é amarelo. A bolinha ao lado resolve de vez, e o
+ * nome em português ajuda quem lê antes de olhar.
+ */
 const EVENT_COLORS = [
-  { key: "blue", cls: "bg-brand-500" },
-  { key: "violet", cls: "bg-violet-500" },
-  { key: "emerald", cls: "bg-pos" },
-  { key: "amber", cls: "bg-warn" },
-  { key: "rose", cls: "bg-neg" },
+  { key: "blue", nome: "azul", cls: "bg-brand-500" },
+  { key: "violet", nome: "violeta", cls: "bg-violet-500" },
+  { key: "emerald", nome: "verde", cls: "bg-pos" },
+  { key: "amber", nome: "âmbar", cls: "bg-warn" },
+  { key: "rose", nome: "rosa", cls: "bg-neg" },
 ];
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -203,8 +210,17 @@ export default function CalendarioPage() {
     setOpen(true);
   };
 
-  const save = async (ev: React.FormEvent) => {
-    ev.preventDefault();
+  /**
+   * `escopo` só importa ao editar uma ocorrência de repetição.
+   *
+   * "uma" altera o lançamento aberto. "serie" leva as mudanças para as outras
+   * ocorrências dali para frente.
+   */
+  const save = async (
+    ev: React.FormEvent | null,
+    escopo: "uma" | "serie" = "uma"
+  ) => {
+    ev?.preventDefault();
     setErr("");
     if (!form.title.trim()) return setErr("Informe o título do evento.");
     setBusy(true);
@@ -233,6 +249,69 @@ export default function CalendarioPage() {
         .from("events")
         .update(payload)
         .eq("id", editing.id));
+
+      /*
+       * "Todas": leva as mudanças para as outras ocorrências da repetição.
+       *
+       * A DATA não vai — cada ocorrência tem a sua, e propagá-la empilharia a
+       * repetição toda num único dia. O que vai é a HORA: mudar de 20:00 para
+       * 21:00 move todas para 21:00 nas datas delas.
+       *
+       * Vai para todas, inclusive as que já passaram. É o que "todas" diz, e
+       * uma repetição de horário trocado pela metade seria pior que o problema:
+       * o histórico mostraria dois horários para o mesmo compromisso.
+       */
+      if (!error && escopo === "serie" && editing.series_id) {
+        const { data: irmas, error: erroBusca } = await supabase
+          .from("events")
+          .select("id, start_at")
+          .eq("series_id", editing.series_id)
+          .neq("id", editing.id);
+
+        if (erroBusca) error = erroBusca;
+        else {
+          const duracao =
+            endAt ? endAt.getTime() - startAt.getTime() : null;
+          const comuns = {
+            title: payload.title,
+            description: payload.description,
+            all_day: payload.all_day,
+            color: payload.color,
+            location: payload.location,
+          };
+
+          /*
+           * Uma requisição por ocorrência, e não um update em lote, porque cada
+           * start_at novo depende da data que aquela linha já tem: só a hora
+           * muda. Um update único não calcularia isso por linha.
+           */
+          for (const irma of (irmas as { id: string; start_at: string }[]) ?? []) {
+            const dia = localDay(irma.start_at);
+            const novoInicio = new Date(
+              `${dia}T${form.all_day ? "00:00" : form.time || "00:00"}:00`
+            );
+            const { error: erroUpdate } = await supabase
+              .from("events")
+              .update({
+                ...comuns,
+                start_at: novoInicio.toISOString(),
+                end_at:
+                  duracao === null
+                    ? null
+                    : new Date(novoInicio.getTime() + duracao).toISOString(),
+              })
+              .eq("id", irma.id);
+            if (erroUpdate) {
+              error = erroUpdate;
+              break;
+            }
+          }
+          if (!error && irmas?.length)
+            notice.show(
+              `Alterado em ${irmas.length + 1} ocorrências da repetição.`
+            );
+        }
+      }
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {
@@ -714,9 +793,31 @@ export default function CalendarioPage() {
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={save} disabled={busy}>
-              {busy ? "Salvando..." : "Salvar"}
-            </Button>
+            {editing?.series_id ? (
+              /*
+               * Duas saídas quando a ocorrência é de uma repetição, porque as
+               * duas intenções são legítimas e o app não tem como adivinhar:
+               * remarcar um encontro específico, ou corrigir a repetição toda.
+               * Com um botão só, uma das duas viraria trabalho manual nas
+               * outras ocorrências.
+               */
+              <>
+                <Button onClick={() => save(null, "uma")} disabled={busy}>
+                  {busy ? "Salvando..." : "Salvar só esta"}
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => save(null, "serie")}
+                  disabled={busy}
+                >
+                  {busy ? "Salvando..." : "Salvar em todas"}
+                </Button>
+              </>
+            ) : (
+              <Button variant="primary" onClick={() => save(null)} disabled={busy}>
+                {busy ? "Salvando..." : "Salvar"}
+              </Button>
+            )}
           </>
         }
       >
@@ -808,7 +909,8 @@ export default function CalendarioPage() {
                   <span className="font-semibold text-fg">
                     {EVENT_RECURRENCE_LABEL[editing.recurrence] ?? ""}
                   </span>
-                  . Salvar altera só esta.
+                  . Ao salvar, escolha entre só esta e todas. A data fica sempre
+                  só nesta; a hora vai junto.
                 </span>
                 <button
                   type="button"
@@ -830,16 +932,28 @@ export default function CalendarioPage() {
               />
             </Field>
             <Field label="Cor">
-              <Select
-                value={form.color}
-                onChange={(e) => setForm({ ...form, color: e.target.value })}
-              >
-                {EVENT_COLORS.map((c) => (
-                  <option key={c.key} value={c.key}>
-                    {c.key}
-                  </option>
-                ))}
-              </Select>
+              <div className="relative">
+                {/* A bolinha mostra a cor escolhida sem depender do nome. */}
+                <span
+                  aria-hidden
+                  className={cx(
+                    "pointer-events-none absolute left-3.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full",
+                    EVENT_COLORS.find((c) => c.key === form.color)?.cls ??
+                      "bg-brand-500"
+                  )}
+                />
+                <Select
+                  value={form.color}
+                  onChange={(e) => setForm({ ...form, color: e.target.value })}
+                  className="!pl-[34px]"
+                >
+                  {EVENT_COLORS.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.nome}
+                    </option>
+                  ))}
+                </Select>
+              </div>
             </Field>
           </div>
 
