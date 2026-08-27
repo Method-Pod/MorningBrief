@@ -8,6 +8,21 @@ import { Input, cx } from "./ui";
 
 export type Parcela = { due_date: string; amount: number };
 
+/**
+ * Rótulo, vencimento e valor. Mesma grade no cabeçalho e em cada linha.
+ *
+ * Em telas estreitas são duas colunas, com rótulo e data juntos na primeira:
+ * em 375px a lista tem 258px, e três colunas deixavam o campo de data com 90px
+ * — estreito demais para caber dd/mm/aaaa e o ícone do calendário. Agrupados,
+ * a data fica com ~120px.
+ *
+ * O agrupamento é desfeito em `sm` por `sm:contents` no invólucro, que devolve
+ * rótulo e data à grade como itens diretos.
+ */
+const COLUNAS =
+  "grid grid-cols-[minmax(0,1fr)_80px] items-center gap-2 sm:grid-cols-[38px_minmax(0,1fr)_104px]";
+const PAR_ROTULO_DATA = "flex min-w-0 items-center gap-1.5 sm:contents";
+
 /** Teto de parcelas: cada uma vira uma linha no banco. */
 export const MAX_PARCELAS = 120;
 
@@ -85,10 +100,20 @@ export function EditorParcelas({
   const total = de + parcelas.length - 1;
   const soma = parcelas.reduce((t, p) => t + (Number(p.amount) || 0), 0);
 
-  /* Rascunho por linha: guardar só o número faria "1," virar "1" no meio da
-     digitação, e o campo perderia a vírgula a cada tecla. */
+  /*
+   * Rascunho por linha, porque guardar só o número faria "1," virar "1" no meio
+   * da digitação e o campo perderia a vírgula a cada tecla.
+   *
+   * O rascunho é limpo quando a lista muda de fora — é o "recalcular iguais".
+   * Sem isso o campo seguia exibindo o valor digitado enquanto o dado por baixo
+   * já era outro: a soma dizia R$ 10.000 e a linha mostrava 2.500.
+   */
   const [rascunhos, setRascunhos] = React.useState<Record<number, string>>({});
-  React.useEffect(() => setRascunhos({}), [parcelas.length, de]);
+  const meuUltimoEnvio = React.useRef<Parcela[] | null>(null);
+
+  React.useEffect(() => {
+    if (parcelas !== meuUltimoEnvio.current) setRascunhos({});
+  }, [parcelas]);
 
   const mudar = (i: number, campo: keyof Parcela, valor: string) => {
     const copia = parcelas.map((p, j) =>
@@ -100,6 +125,9 @@ export function EditorParcelas({
         : p
     );
     if (campo === "amount") setRascunhos((r) => ({ ...r, [i]: valor }));
+    /* Marca a lista que sai daqui, para o efeito acima não confundir a própria
+       digitação com uma troca vinda de fora e apagar o rascunho a cada tecla. */
+    meuUltimoEnvio.current = copia;
     onChange(copia);
   };
 
@@ -119,29 +147,57 @@ export function EditorParcelas({
         </button>
       </div>
 
-      <ul className="flex max-h-[38vh] flex-col overflow-y-auto pr-0.5">
+      {/*
+        Grade, e cada campo dentro da sua célula.
+        
+        Era flex com largura na própria classe do Input, e não funcionava: o
+        componente aplica w-full, que venceu w-[92px] na ordem do CSS gerado. O
+        campo de valor esticava para 425px e vazava para fora da lista, e o de
+        data era esmagado a 30px — ficavam as duas colunas invisíveis, com barra
+        de rolagem lateral. Numa célula de grade o w-full é exatamente o que se
+        quer, e não há classe concorrente.
+      */}
+      <div className={cx(COLUNAS, "-mx-2 sm:mx-0")}>
+        <div className={PAR_ROTULO_DATA}>
+          <span className="hidden sm:block" />
+          <span className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
+            Vencimento
+          </span>
+        </div>
+        <span className="text-right text-[10px] font-medium uppercase tracking-wider text-fg-mute">
+          Valor
+        </span>
+      </div>
+
+      <ul className="-mx-2 flex max-h-[38vh] flex-col overflow-y-auto pr-0.5 sm:mx-0">
         {parcelas.map((p, i) => (
           <li
             key={i}
-            className="flex items-center gap-2 border-b border-line-soft py-1.5 last:border-0"
+            className={cx(COLUNAS, "border-b border-line-soft py-1.5 last:border-0")}
           >
-            <span className="w-[42px] shrink-0 text-[11px] font-bold text-fg-mute tnum">
-              {de + i}/{total}
-            </span>
-            <Input
-              type="date"
-              value={p.due_date}
-              onChange={(e) => mudar(i, "due_date", e.target.value)}
-              aria-label={`Vencimento da parcela ${de + i}`}
-              className="h-9 min-w-0 flex-1 px-2 text-[12px]"
-            />
-            <Input
-              inputMode="decimal"
-              value={rascunhos[i] ?? paraCampo(Number(p.amount) || 0)}
-              onChange={(e) => mudar(i, "amount", e.target.value)}
-              aria-label={`Valor da parcela ${de + i}`}
-              className="h-9 w-[92px] shrink-0 px-2 text-right text-[12px] tnum"
-            />
+            <div className={PAR_ROTULO_DATA}>
+              <span className="w-[26px] shrink-0 text-[11px] font-bold text-fg-mute tnum sm:w-auto">
+                {de + i}/{total}
+              </span>
+              <div className="min-w-0 flex-1 sm:flex-none">
+                <Input
+                  type="date"
+                  value={p.due_date}
+                  onChange={(e) => mudar(i, "due_date", e.target.value)}
+                  aria-label={`Vencimento da parcela ${de + i}`}
+                  className="h-9 !px-2 text-[12px]"
+                />
+              </div>
+            </div>
+            <div className="min-w-0">
+              <Input
+                inputMode="decimal"
+                value={rascunhos[i] ?? paraCampo(Number(p.amount) || 0)}
+                onChange={(e) => mudar(i, "amount", e.target.value)}
+                aria-label={`Valor da parcela ${de + i}`}
+                className="h-9 !px-2 text-right text-[12px] tnum"
+              />
+            </div>
           </li>
         ))}
       </ul>
