@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Bill, RecurringTask } from "./types";
+import type { Bill, CalendarEvent, EventRecurrence, RecurringTask } from "./types";
 import { isDueOn } from "./recurring";
 import { todayISO } from "./format";
 
@@ -235,4 +235,153 @@ export function datasPendentes(
     }
   }
   return datas;
+}
+
+/* --------------------------- eventos recorrentes --------------------------- */
+
+/** Último instante do mês seguinte ao de `hoje`: o fim da janela. */
+export function fimDaJanelaDeEventos(hoje: string): Date {
+  const [y, m] = hoje.split("-").map(Number);
+  /* Dia 0 do mês +2 é o último dia do mês +1. */
+  return new Date(y, m + 1, 0, 23, 59, 59, 999);
+}
+
+/**
+ * As próximas ocorrências de um evento que repete, até o fim da janela.
+ *
+ * Não inclui a data de partida — devolve só o que vem depois dela, que é o que
+ * falta criar.
+ *
+ * A duração é preservada: o fim de cada ocorrência fica à mesma distância do
+ * início que no evento original, então uma reunião de uma hora continua de uma
+ * hora em todas as repetições.
+ *
+ * No mensal o dia é preservado e encolhido quando o mês é curto — dia 31 vira
+ * 28 em fevereiro. E soma sempre a partir da data de partida, não somando um
+ * mês repetidamente: encadear perderia o dia depois de passar por fevereiro.
+ */
+export function ocorrenciasDeEvento({
+  inicio,
+  fim,
+  recorrencia,
+  limite,
+}: {
+  inicio: string;
+  fim: string | null;
+  recorrencia: EventRecurrence;
+  limite: Date;
+}): { start_at: string; end_at: string | null }[] {
+  if (recorrencia === "none") return [];
+
+  const base = new Date(inicio);
+  const duracao = fim ? new Date(fim).getTime() - base.getTime() : null;
+  const saida: { start_at: string; end_at: string | null }[] = [];
+
+  /* Teto de segurança: a janela é de dois meses, então nenhuma regra passa de
+     ~10 ocorrências. Sem ele, uma data de partida inválida daria laço infinito. */
+  for (let n = 1; n <= 64; n++) {
+    let proximo: Date;
+    if (recorrencia === "monthly") {
+      const alvo = new Date(base);
+      alvo.setDate(1);
+      alvo.setMonth(base.getMonth() + n);
+      const ultimoDia = new Date(
+        alvo.getFullYear(),
+        alvo.getMonth() + 1,
+        0
+      ).getDate();
+      alvo.setDate(Math.min(base.getDate(), ultimoDia));
+      alvo.setHours(base.getHours(), base.getMinutes(), 0, 0);
+      proximo = alvo;
+    } else {
+      const passo = recorrencia === "biweekly" ? 14 : 7;
+      proximo = new Date(base.getTime() + n * passo * DIA);
+    }
+
+    if (proximo > limite) break;
+    saida.push({
+      start_at: proximo.toISOString(),
+      end_at:
+        duracao === null
+          ? null
+          : new Date(proximo.getTime() + duracao).toISOString(),
+    });
+  }
+
+  return saida;
+}
+
+/**
+ * Mantém as repetições do calendário preenchidas até o fim do mês que vem.
+ *
+ * A janela é de dois meses — o atual e o seguinte — e não de um ano: cada
+ * ocorrência é uma linha no banco, e encher doze meses de uma repetição semanal
+ * são mais de cinquenta linhas por evento que ninguém vai olhar hoje. Como isto
+ * roda todo dia, a janela anda sozinha e o calendário nunca fica vazio à frente.
+ *
+ * Estende a partir da ÚLTIMA ocorrência de cada série, então apagar uma
+ * ocorrência do meio não a faz voltar. Para encerrar uma repetição, exclua a
+ * série — é o que o botão de excluir oferece quando o evento tem série.
+ *
+ * Devolve quantas ocorrências foram criadas, ou null se falhou.
+ */
+export async function estenderEventosRecorrentes(
+  supabase: SupabaseClient,
+  opcoes: { userId?: string; hoje?: string } = {}
+): Promise<number | null> {
+  const hoje = opcoes.hoje ?? todayISO();
+  const limite = fimDaJanelaDeEventos(hoje);
+
+  let consulta = supabase
+    .from("events")
+    .select("*")
+    .not("series_id", "is", null)
+    .neq("recurrence", "none");
+  if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
+
+  const { data, error } = await consulta;
+  /* PGRST204/42703: a migração EVENTOS-RECORRENTES.sql ainda não rodou. Sem
+     recorrência não há nada a estender, e o calendário segue funcionando. */
+  if (error) return null;
+
+  const eventos = (data as CalendarEvent[]) ?? [];
+  if (!eventos.length) return 0;
+
+  /* Última ocorrência de cada série. */
+  const ultima = new Map<string, CalendarEvent>();
+  eventos.forEach((e) => {
+    if (!e.series_id) return;
+    const atual = ultima.get(e.series_id);
+    if (!atual || e.start_at > atual.start_at) ultima.set(e.series_id, e);
+  });
+
+  const novas = [...ultima.values()].flatMap((e) =>
+    ocorrenciasDeEvento({
+      inicio: e.start_at,
+      fim: e.end_at,
+      recorrencia: e.recurrence,
+      limite,
+    }).map((o) => ({
+      user_id: e.user_id,
+      title: e.title,
+      description: e.description,
+      all_day: e.all_day,
+      color: e.color,
+      location: e.location,
+      recurrence: e.recurrence,
+      series_id: e.series_id,
+      ...o,
+    }))
+  );
+
+  if (!novas.length) return 0;
+
+  const { data: criadas, error: erroInsert } = await supabase
+    .from("events")
+    .insert(novas)
+    .select("id");
+
+  /* 23505 = events_serie_inicio_uniq: outra passada chegou primeiro. */
+  if (erroInsert) return erroInsert.code === "23505" ? 0 : null;
+  return criadas?.length ?? 0;
 }

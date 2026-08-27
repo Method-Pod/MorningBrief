@@ -91,6 +91,24 @@ export type CalendarEvent = {
   color: string;
   location: string;
   created_at: string;
+  /*
+   * Repetição do evento. Ver supabase/EVENTOS-RECORRENTES.sql.
+   *
+   * 'none' é o evento único. As ocorrências de uma repetição compartilham
+   * `series_id`, que é um id próprio e não o título: dois eventos podem se
+   * chamar igual sem serem a mesma repetição.
+   */
+  recurrence: EventRecurrence;
+  series_id: string | null;
+};
+
+export type EventRecurrence = "none" | "weekly" | "biweekly" | "monthly";
+
+export const EVENT_RECURRENCE_LABEL: Record<EventRecurrence, string> = {
+  none: "Não repete",
+  weekly: "Toda semana",
+  biweekly: "A cada 15 dias",
+  monthly: "Todo mês",
 };
 
 export const PRIORITY_LABEL: Record<Priority, string> = {

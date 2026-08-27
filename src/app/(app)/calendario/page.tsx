@@ -15,8 +15,19 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import type { Bill, CalendarEvent, Task } from "@/lib/types";
-import { PRIORITY_LABEL } from "@/lib/types";
+import {
+  estenderEventosRecorrentes,
+  fimDaJanelaDeEventos,
+  ocorrenciasDeEvento,
+} from "@/lib/manutencao";
+import {
+  EVENT_RECURRENCE_LABEL,
+  PRIORITY_LABEL,
+  type Bill,
+  type CalendarEvent,
+  type EventRecurrence,
+  type Task,
+} from "@/lib/types";
 import { brl, dateBR, localDay, localTime, todayISO } from "@/lib/format";
 import {
   Badge,
@@ -60,6 +71,7 @@ const blank = (date: string) => ({
   all_day: false,
   color: "blue",
   location: "",
+  recurrence: "none" as EventRecurrence,
 });
 
 export default function CalendarioPage() {
@@ -96,8 +108,18 @@ export default function CalendarioPage() {
   }, [supabase]);
 
   React.useEffect(() => {
-    load();
-  }, [load]);
+    (async () => {
+      await load();
+      /*
+       * Empurra a janela das repetições depois de pintar.
+       *
+       * Depois, e não antes: a extensão custa uma ida de rede e o calendário
+       * do mês atual já está completo sem ela. Se criou algo, recarrega.
+       */
+      const criadas = await estenderEventosRecorrentes(supabase);
+      if (criadas && criadas > 0) load();
+    })();
+  }, [load, supabase]);
 
   /* ------------------------------ índice por dia ------------------------------ */
 
@@ -175,6 +197,7 @@ export default function CalendarioPage() {
       all_day: e.all_day,
       color: e.color,
       location: e.location,
+      recurrence: e.recurrence ?? "none",
     });
     setErr("");
     setOpen(true);
@@ -217,22 +240,105 @@ export default function CalendarioPage() {
         setErr(SESSION_EXPIRED);
         return;
       }
-      ({ error } = await supabase
-        .from("events")
-        .insert({ ...payload, user_id: uid }));
+      /*
+       * Evento que repete nasce com a janela já preenchida.
+       *
+       * A janela é o mês atual e o seguinte, e não um ano: cada ocorrência é
+       * uma linha, e uma repetição semanal por doze meses são mais de cinquenta
+       * linhas que ninguém vai olhar hoje. A manutenção diária empurra a janela
+       * adiante, então o calendário nunca fica vazio à frente.
+       *
+       * O series_id sai do navegador porque as ocorrências são inseridas de uma
+       * vez: sem um id decidido antes, cada linha viria com um id diferente e
+       * não haveria série.
+       */
+      const repete = form.recurrence !== "none";
+      const serie = repete ? crypto.randomUUID() : null;
+      const extras = repete
+        ? ocorrenciasDeEvento({
+            inicio: payload.start_at,
+            fim: payload.end_at,
+            recorrencia: form.recurrence,
+            limite: fimDaJanelaDeEventos(today),
+          })
+        : [];
+
+      /*
+       * As colunas de repetição só entram quando há repetição.
+       *
+       * Elas vêm de EVENTOS-RECORRENTES.sql. Mandá-las sempre faria o evento
+       * simples falhar com "could not find the column" num banco onde a
+       * migração ainda não rodou — quebrando o que já funcionava para entregar
+       * o que é novo.
+       */
+      const colunasDeRepeticao = repete
+        ? { recurrence: form.recurrence, series_id: serie }
+        : {};
+
+      ({ error } = await supabase.from("events").insert([
+        { ...payload, ...colunasDeRepeticao, user_id: uid },
+        ...extras.map((o) => ({
+          ...payload,
+          ...o,
+          ...colunasDeRepeticao,
+          user_id: uid,
+        })),
+      ]));
+
+      if (!error && extras.length)
+        notice.show(
+          `${extras.length + 1} ocorrências criadas, até o fim do mês que vem.`
+        );
     }
     setBusy(false);
-    if (error) return setErr(error.message);
+    if (error) {
+      /* 42703/PGRST204: a migração de recorrência ainda não rodou. */
+      if (/recurrence|series_id/.test(error.message))
+        return setErr(
+          "Evento recorrente precisa de supabase/EVENTOS-RECORRENTES.sql no banco. Rode o arquivo ou deixe em \"Não repete\"."
+        );
+      return setErr(error.message);
+    }
     setOpen(false);
     setSelected(form.date);
     load();
   };
 
   const remove = (e: CalendarEvent) =>
-    confirm.ask(`Excluir "${e.title}"?`, async () => {
-      const { error } = await supabase.from("events").delete().eq("id", e.id);
-      if (!notice.check(error, "excluir o evento")) load();
-    });
+    confirm.ask(
+      e.series_id
+        ? `Excluir só esta ocorrência de "${e.title}"? As outras repetições ficam.`
+        : `Excluir "${e.title}"?`,
+      async () => {
+        const { error } = await supabase.from("events").delete().eq("id", e.id);
+        if (!notice.check(error, "excluir o evento")) load();
+      }
+    );
+
+  /*
+   * Excluir a repetição inteira.
+   *
+   * Existe separado porque apagar uma ocorrência do meio não encerra a
+   * repetição: a manutenção estende a partir da última, então a série
+   * continuaria nascendo. Encerrar é apagar a série.
+   */
+  const removerSerie = (e: CalendarEvent) => {
+    if (!e.series_id) return;
+    const quantas = events.filter((x) => x.series_id === e.series_id).length;
+    confirm.ask(
+      `Excluir a repetição de "${e.title}"? São ${quantas} ocorrências, e ela para de se repetir.`,
+      async () => {
+        const { error } = await supabase
+          .from("events")
+          .delete()
+          .eq("series_id", e.series_id);
+        if (!notice.check(error, "excluir a repetição")) {
+          setOpen(false);
+          load();
+        }
+      }
+    );
+  };
 
   const shift = (n: number) =>
     setCursor((c) => {
@@ -659,6 +765,61 @@ export default function CalendarioPage() {
             />
             <span className="text-sm text-fg-dim">Dia inteiro</span>
           </label>
+
+          {/*
+            Repetição só na criação.
+            
+            Editar mexe numa ocorrência, não na regra: oferecer "toda semana"
+            aqui sugeriria que a mudança vale para as outras, e não vale. Para
+            trocar a regra, exclua a repetição e crie de novo.
+          */}
+          {!editing ? (
+            <Field
+              label="Repete"
+              hint={
+                form.recurrence === "none"
+                  ? undefined
+                  : "Preenche o mês atual e o próximo. A cada dia a janela avança sozinha."
+              }
+            >
+              <Select
+                value={form.recurrence}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    recurrence: e.target.value as EventRecurrence,
+                  })
+                }
+              >
+                {(
+                  Object.keys(EVENT_RECURRENCE_LABEL) as EventRecurrence[]
+                ).map((r) => (
+                  <option key={r} value={r}>
+                    {EVENT_RECURRENCE_LABEL[r]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : (
+            editing.series_id && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-[14px] bg-ink-800 px-3.5 py-3">
+                <span className="text-[12px] text-fg-dim">
+                  Ocorrência de uma repetição{" "}
+                  <span className="font-semibold text-fg">
+                    {EVENT_RECURRENCE_LABEL[editing.recurrence] ?? ""}
+                  </span>
+                  . Salvar altera só esta.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removerSerie(editing)}
+                  className="text-[11.5px] font-bold text-neg underline decoration-neg/30 underline-offset-2 transition-colors hover:decoration-neg"
+                >
+                  excluir a repetição
+                </button>
+              </div>
+            )
+          )}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Local">

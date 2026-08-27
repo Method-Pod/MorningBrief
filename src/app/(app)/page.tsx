@@ -30,6 +30,7 @@ import {
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import { HORAS_RETENCAO, limparConcluidas } from "@/lib/limpeza";
 import {
+  estenderEventosRecorrentes,
   lancarProximoMesDasFixas,
   reporRecorrentesPerdidas,
 } from "@/lib/manutencao";
@@ -126,14 +127,16 @@ export default function HomePage() {
        * mesmas: com o app fechado é o cron que roda, e ao abrir é a página —
        * quem chegar primeiro faz, e a outra passada não encontra nada a fazer.
        */
-      const [criadas, lancadas] = await Promise.all([
+      const [criadas, lancadas, eventos] = await Promise.all([
         reporRecorrentesPerdidas(supabase),
         lancarProximoMesDasFixas(supabase),
+        estenderEventosRecorrentes(supabase),
       ]);
       if (!alive) return;
       if (apagadas && apagadas > 0) setLimpas(apagadas);
       if ((criadas ?? 0) > 0) setGenerated(criadas ?? 0);
-      if ((criadas ?? 0) > 0 || (lancadas ?? 0) > 0) await load();
+      if ((criadas ?? 0) > 0 || (lancadas ?? 0) > 0 || (eventos ?? 0) > 0)
+        await load();
       setLoading(false);
     })();
     return () => {
