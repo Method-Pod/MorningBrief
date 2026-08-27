@@ -199,7 +199,7 @@ export default function GerenciarPage() {
   };
 
   return (
-    <div className="rise max-w-[860px]">
+    <div className="rise">
       <div className="flex items-start gap-3">
         <Link
           href="/contas"
@@ -335,35 +335,47 @@ function LinhaSerie({
           : dataCurta(s.contas[0].due_date);
 
   return (
-    <li className="group flex flex-col gap-2.5 border-b border-line-soft px-[18px] py-3.5 last:border-0 lg:flex-row lg:items-center lg:gap-4">
-      <div className="flex min-w-0 items-start justify-between gap-3 lg:flex-1">
-        <div className="min-w-0">
-          <p className="truncate text-[13.5px] font-semibold">{s.descricao}</p>
-          <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-fg-mute">
-            <span>{cadencia}</span>
-            <span className="opacity-40">·</span>
-            <span>{s.categoria}</span>
-            {s.emAberto.length > 0 && (
-              <>
-                <span className="opacity-40">·</span>
-                <span className="font-bold text-warn tnum">
-                  {s.emAberto.length} em aberto
-                </span>
-              </>
-            )}
-          </p>
-        </div>
-        <p className="shrink-0 text-right text-[13.5px] font-bold tnum">
-          {brl(s.valor)}
+    <li
+      className={cx(
+        "group grid items-start gap-x-3 gap-y-2.5 border-b border-line-soft px-[18px] py-3.5 last:border-0",
+        // Até 1279px: nome e valor na primeira linha, bolhas e ações na segunda.
+        "grid-cols-[minmax(0,1fr)_auto]",
+        /*
+         * Quatro colunas só a partir de 1280px. Em 1024 a barra lateral come
+         * 224px e sobram 736 para o cartão: a coluna do nome fica em 244px e a
+         * linha de meta quebra em duas, deixando uma linha de 86px entre linhas
+         * de 69px. Empilhado nessa faixa há espaço para tudo em uma linha só.
+         */
+        "xl:grid-cols-[minmax(0,520px)_minmax(212px,1fr)_132px_68px] xl:items-center xl:gap-x-4 xl:gap-y-0"
+      )}
+    >
+      <div className="min-w-0 xl:col-start-1 xl:row-start-1">
+        <p className="truncate text-[13.5px] font-semibold">{s.descricao}</p>
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-fg-mute">
+          <span>{cadencia}</span>
+          <span className="opacity-40">·</span>
+          <span>{s.categoria}</span>
+          {s.emAberto.length > 0 && (
+            <>
+              <span className="opacity-40">·</span>
+              <span className="font-bold text-warn tnum">
+                {s.emAberto.length} em aberto
+              </span>
+            </>
+          )}
         </p>
       </div>
+
+      <p className="text-right text-[13.5px] font-bold tnum xl:col-start-3 xl:row-start-1">
+        {brl(s.valor)}
+      </p>
 
       {/*
         Faixa de meses: um botão por lançamento, na ordem do calendário.
         Mostra a série inteira sem precisar expandir nada, e é por onde se abre
         um mês específico quando ele foge do padrão dos outros.
       */}
-      <div className="flex flex-wrap items-center gap-1 lg:shrink-0">
+      <div className="flex flex-wrap items-center gap-1 xl:col-start-2 xl:row-start-1">
         {s.contas.map((b) => {
           const paga = b.status === "paid";
           const falta = restanteDe(b);
@@ -395,7 +407,7 @@ function LinhaSerie({
         })}
       </div>
 
-      <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+      <div className="flex shrink-0 justify-end gap-0.5 transition-opacity xl:col-start-4 xl:row-start-1 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
         <button
           onClick={onEditarSerie}
           aria-label={`Editar ${s.descricao}`}
