@@ -148,6 +148,58 @@ export function PagoPendenteCategoria({
 
 export type PontoMes = { rotulo: string; valor: number; mesAtual?: boolean };
 
+/**
+ * Curva suave que não passa dos pontos (monótona, Fritsch–Carlson).
+ *
+ * A versão anterior calculava os pontos de controle a partir dos vizinhos, no
+ * estilo Catmull-Rom. Numa sequência de meses zerados seguida de subida isso
+ * empurrava a curva para baixo da linha do zero: o gráfico mostrava uma barriga
+ * abaixo do eixo em jun/26, sugerindo gasto negativo onde não houve gasto
+ * nenhum. O mesmo artefato aparecia como calombo em qualquer trecho plano
+ * seguido de subida.
+ *
+ * A inclinação em cada ponto é zerada quando ele é um extremo local — é o que
+ * mantém trecho plano realmente plano — e limitada a três vezes a menor
+ * inclinação vizinha, que é a condição de monotonicidade de Fritsch–Carlson.
+ */
+function caminhoMonotono(pts: readonly (readonly [number, number])[]) {
+  const n = pts.length;
+  if (n === 0) return "";
+  if (n === 1) return `M ${pts[0][0]} ${pts[0][1]}`;
+
+  /* Inclinação de cada segmento. */
+  const d: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = pts[i + 1][0] - pts[i][0];
+    d.push(dx === 0 ? 0 : (pts[i + 1][1] - pts[i][1]) / dx);
+  }
+
+  /* Tangente em cada ponto. */
+  const m: number[] = new Array(n);
+  m[0] = d[0];
+  m[n - 1] = d[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) {
+      m[i] = 0; // extremo local: tangente horizontal, sem ultrapassagem
+    } else {
+      const media = (d[i - 1] + d[i]) / 2;
+      const limite = 3 * Math.min(Math.abs(d[i - 1]), Math.abs(d[i]));
+      m[i] = Math.sign(media) * Math.min(Math.abs(media), limite);
+    }
+  }
+
+  let caminho = `M ${pts[0][0]} ${pts[0][1]}`;
+  for (let i = 0; i < n - 1; i++) {
+    const dx = pts[i + 1][0] - pts[i][0];
+    const c1x = pts[i][0] + dx / 3;
+    const c1y = pts[i][1] + (m[i] * dx) / 3;
+    const c2x = pts[i + 1][0] - dx / 3;
+    const c2y = pts[i + 1][1] - (m[i + 1] * dx) / 3;
+    caminho += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${pts[i + 1][0]} ${pts[i + 1][1]}`;
+  }
+  return caminho;
+}
+
 export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
   const [ativo, setAtivo] = React.useState<number | null>(null);
   const box = React.useRef<HTMLDivElement>(null);
@@ -219,19 +271,7 @@ export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
   let area = "";
   if (L > 0 && !vazio) {
     const pts = dados.map((d, i) => [X(i), Y(d.valor)] as const);
-    linha = `M ${pts[0][0]} ${pts[0][1]}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[i - 1] ?? pts[i];
-      const p1 = pts[i];
-      const p2 = pts[i + 1];
-      const p3 = pts[i + 2] ?? p2;
-      const t = 0.18;
-      linha += ` C ${p1[0] + (p2[0] - p0[0]) * t} ${
-        p1[1] + (p2[1] - p0[1]) * t
-      }, ${p2[0] - (p3[0] - p1[0]) * t} ${p2[1] - (p3[1] - p1[1]) * t}, ${
-        p2[0]
-      } ${p2[1]}`;
-    }
+    linha = caminhoMonotono(pts);
     area = `${linha} L ${pts[pts.length - 1][0]} ${pt + ai} L ${pts[0][0]} ${
       pt + ai
     } Z`;
