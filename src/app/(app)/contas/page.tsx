@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock,
   PartyPopper,
@@ -18,6 +19,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { limparPagasDeMesesAnteriores } from "@/lib/limpeza";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   ehAbatida,
@@ -114,6 +116,8 @@ export default function ContasPage() {
   const [ordem, setOrdem] = React.useState<Ordem>("vencimento");
   const [q, setQ] = React.useState("");
   const [dia, setDia] = React.useState<string | null>(null);
+  /** "AAAA-MM" em foco. A lista, o resumo, os gráficos e o calendário seguem. */
+  const [mes, setMes] = React.useState(() => todayISO().slice(0, 7));
   const [lancando, setLancando] = React.useState<string | null>(null);
   /* Pagas nasce fechado: é o grupo que só cresce e não pede ação. */
   const [fechados, setFechados] = React.useState<Set<string>>(
@@ -152,9 +156,19 @@ export default function ContasPage() {
     setLoading(false);
   }, [supabase]);
 
+  /*
+   * Limpa as pagas de meses anteriores antes de listar.
+   *
+   * Em série, não em paralelo: rodando junto, a listagem poderia trazer as
+   * linhas que a limpeza está apagando e a tela mostraria por um instante
+   * contas que já saíram.
+   */
   React.useEffect(() => {
-    load();
-  }, [load]);
+    (async () => {
+      await limparPagasDeMesesAnteriores(supabase);
+      load();
+    })();
+  }, [load, supabase]);
 
   /* ------------------------------ ações ------------------------------ */
 
@@ -421,10 +435,64 @@ export default function ContasPage() {
   const atrasada = (b: Bill) =>
     b.status === "pending" && daysUntil(b.due_date) < 0;
 
+  /*
+   * Trocar o mês limpa o dia escolhido no calendário.
+   *
+   * O dia manda por cima do recorte do mês, então mantê-lo deixaria a lista
+   * presa num dia de setembro depois de voltar para agosto.
+   */
+  const trocarMes = (novo: string) => {
+    setMes(novo);
+    setDia(null);
+  };
+
+  const mesVizinho = (n: number) => {
+    const d = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)) - 1 + n, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+
+  const mesAtual = todayISO().slice(0, 7);
+  const noMesAtual = mes === mesAtual;
+
+  /*
+   * Recorte do mês, para o resumo e os gráficos: só o que vence no mês.
+   *
+   * Conta abatida em aberto entra à força quando o mês em foco é o atual: ela
+   * não tem data marcada e segue sendo dívida de hoje até o abatimento cobrir
+   * o total.
+   */
+  const doMesEstrito = React.useCallback(
+    (b: Bill) =>
+      b.due_date.startsWith(mes) ||
+      (noMesAtual && ehAbatida(b) && b.status === "pending" && restanteDe(b) > 0),
+    [mes, noMesAtual]
+  );
+
+  /*
+   * Recorte da lista: o mês em foco e, no mês atual, também o que venceu antes
+   * e não foi pago.
+   *
+   * Sem essa segunda parte, uma conta vencida em julho desapareceria da tela em
+   * agosto — o recorte por mês esconderia justamente a dívida que mais precisa
+   * aparecer. Ela entra no grupo "Vencidas", com a data à mostra.
+   */
+  const naLista = React.useCallback(
+    (b: Bill) => doMesEstrito(b) || (noMesAtual && atrasada(b)),
+    [doMesEstrito, noMesAtual]
+  );
+
+  /*
+   * Contadores dos chips no mesmo recorte da lista.
+   *
+   * Contados sobre `rows` inteiro, o chip dizia "Pendentes 18" e mostrava 6:
+   * era o mesmo desencontro entre cabeçalho e lista que o recorte por mês veio
+   * resolver.
+   */
   const contagens = React.useMemo(() => {
-    const pend = rows.filter((b) => b.status === "pending");
+    const noMes = rows.filter(naLista);
+    const pend = noMes.filter((b) => b.status === "pending");
     return {
-      todas: rows.length,
+      todas: noMes.length,
       // pendentes, como "semana" e "atrasadas": misturar pagas fazia o
       // contador do chip discordar da lista que ele filtra
       hoje: pend.filter((b) => b.due_date.slice(0, 10) === todayISO()).length,
@@ -434,9 +502,10 @@ export default function ContasPage() {
       }).length,
       atrasadas: pend.filter(atrasada).length,
       pendentes: pend.length,
-      pagas: rows.filter((b) => b.status === "paid").length,
+      pagas: noMes.filter((b) => b.status === "paid").length,
     };
-  }, [rows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, naLista]);
 
   const filtradas = React.useMemo(() => {
     const termo = q.trim().toLowerCase();
@@ -462,6 +531,9 @@ export default function ContasPage() {
       }
     };
     const lista = rows
+      /* Dia escolhido no calendário passa por cima do recorte do mês: o clique
+         é explícito e pode cair na borda de outro mês. */
+      .filter((b) => (dia ? true : naLista(b)))
       .filter(passa)
       .filter(
         (b) =>
@@ -487,7 +559,7 @@ export default function ContasPage() {
       }
     });
     return ordenada;
-  }, [rows, filtro, ordem, q, dia]);
+  }, [rows, filtro, ordem, q, dia, naLista]);
 
   /** Grupos por situação, na ordem em que pedem atenção. */
   const grupos = React.useMemo(() => {
@@ -512,23 +584,20 @@ export default function ContasPage() {
   }, [filtradas]);
 
   /*
-   * O resumo e as categorias são do MÊS ATUAL, fixos.
+   * O resumo e as categorias são do mês em foco, e não do filtro.
    *
-   * Deixá-los seguir o filtro fazia os quatro números mudarem a cada chip
-   * clicado, e o card Total perdia utilidade como referência. A soma do que
-   * está na tela existe no pé da lista, que é onde ela pertence.
+   * Deixá-los seguir os chips fazia os quatro números mudarem a cada clique, e
+   * o card Total perdia utilidade como referência. A soma do que está na tela
+   * existe no pé da lista, que é onde ela pertence. Trocar o mês, por outro
+   * lado, tem de mover tudo junto — é o recorte da tela inteira.
+   *
+   * Diferente de `naLista`: aqui não entra o vencido de meses anteriores, que
+   * somado inflaria o total do mês com dívida que é de outro.
    */
-  const doMes = React.useMemo(() => {
-    const prefixo = todayISO().slice(0, 7);
-    return rows.filter(
-      (b) =>
-        b.due_date.startsWith(prefixo) ||
-        /* Conta abatida em aberto acompanha o mês atual, independente do
-           vencimento: ela não tem data marcada e segue sendo dívida de hoje
-           até o abatimento cobrir o total. */
-        (ehAbatida(b) && b.status === "pending" && restanteDe(b) > 0)
-    );
-  }, [rows]);
+  const doMes = React.useMemo(
+    () => rows.filter(doMesEstrito),
+    [rows, doMesEstrito]
+  );
 
   const resumoMes = React.useMemo(() => {
     const pend = doMes.filter((b) => b.status === "pending");
@@ -749,8 +818,26 @@ export default function ContasPage() {
     return pontos;
   }, [rows]);
 
-  const nomeMes = new Date(todayISO() + "T00:00:00").toLocaleDateString("pt-BR", {
+  /*
+   * Dois rótulos do mesmo mês.
+   *
+   * `nomeMes` acompanha os títulos e traz o ano só quando não é o ano corrente:
+   * "Resumo de agosto" lê melhor que "Resumo de agosto de 2026", mas em 2025 o
+   * ano é a diferença entre dois agostos.
+   *
+   * `nomeMesAno` é do seletor, onde o ano aparece sempre: é ele que navega para
+   * dezembro e cai no ano seguinte, e sem o ano o salto passaria batido.
+   */
+  const nomeMes = new Date(mes + "-01T00:00:00").toLocaleDateString("pt-BR", {
     month: "long",
+    ...(Number(mes.slice(0, 4)) !== new Date().getFullYear()
+      ? { year: "numeric" }
+      : {}),
+  });
+
+  const nomeMesAno = new Date(mes + "-01T00:00:00").toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric",
   });
 
   const nadaPendente =
@@ -835,6 +922,41 @@ export default function ContasPage() {
       {/* ------------------------------ lista ------------------------------ */}
       <Card className="mt-4 overflow-hidden">
         <div className="flex flex-wrap items-center gap-2.5 px-[18px] pt-[18px]">
+          {/*
+            Seletor do mês em foco, antes dos chips: ele recorta tudo o que vem
+            depois — chips, contadores, lista, resumo, gráficos e calendário.
+            É o mesmo estado do calendário, então virar o mês num lugar move o
+            outro.
+          */}
+          <div className="flex items-center gap-0.5 rounded-full bg-ink-800 p-0.5">
+            <button
+              onClick={() => trocarMes(mesVizinho(-1))}
+              aria-label={`Ver ${rotuloMes(mesVizinho(-1) + "-01")}`}
+              className="grid h-7 w-7 place-items-center rounded-full text-fg-mute transition-colors hover:bg-white hover:text-fg"
+            >
+              <ChevronLeft size={15} />
+            </button>
+            <span className="w-[132px] text-center text-[12.5px] font-bold capitalize">
+              {nomeMesAno}
+            </span>
+            <button
+              onClick={() => trocarMes(mesVizinho(1))}
+              aria-label={`Ver ${rotuloMes(mesVizinho(1) + "-01")}`}
+              className="grid h-7 w-7 place-items-center rounded-full text-fg-mute transition-colors hover:bg-white hover:text-fg"
+            >
+              <ChevronRight size={15} />
+            </button>
+          </div>
+
+          {!noMesAtual && (
+            <button
+              onClick={() => trocarMes(mesAtual)}
+              className="h-8 rounded-full bg-brand-500/12 px-3 text-[12px] font-bold text-brand-400 transition-colors hover:bg-brand-500/20"
+            >
+              voltar para {rotuloMes(mesAtual + "-01")}
+            </button>
+          )}
+
           <div className="flex flex-wrap gap-1.5">
             {FILTROS.map((f) => (
               <button
@@ -907,6 +1029,7 @@ export default function ContasPage() {
           <div className="border-t border-line-soft">
             <p className="px-[18px] pt-3 text-[11.5px] font-semibold text-fg-mute">
               {filtradas.length} conta{filtradas.length === 1 ? "" : "s"}
+              {dia ? ` em ${dataCurta(dia)}` : ` em ${nomeMes}`}
             </p>
             {grupos.map((g) => {
               const aberto = !fechados.has(g.titulo);
@@ -977,7 +1100,13 @@ export default function ContasPage() {
         <Card>
           <Cabeca titulo="Calendário de pagamentos" sub="Clique num dia para filtrar" />
           <div className="px-[18px] pb-[18px] pt-3">
-            <CalendarioPagamentos contas={rows} dia={dia} onDia={setDia} />
+            <CalendarioPagamentos
+              contas={rows}
+              dia={dia}
+              onDia={setDia}
+              mes={mes}
+              onMes={trocarMes}
+            />
           </div>
         </Card>
 

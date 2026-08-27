@@ -40,3 +40,43 @@ export async function limparConcluidas(
   if (error) return null;
   return data?.length ?? 0;
 }
+
+/**
+ * Apaga contas pagas de meses anteriores.
+ *
+ * O efeito pedido é "no dia 1º do mês seguinte a conta paga sai": como não há
+ * agendador, a regra é comparada por mês em cada abertura. Uma conta paga com
+ * vencimento em agosto sobrevive todo o mês de agosto e desaparece na primeira
+ * abertura de setembro — inclusive se o app ficar fechado até outubro, porque a
+ * comparação é com o início do mês corrente e não com "ontem".
+ *
+ * O critério é `due_date`, e não `paid_at`: o recorte da tela é por mês de
+ * vencimento, e uma conta de agosto paga adiantada em julho pertence a agosto.
+ *
+ * Duas salvaguardas:
+ *
+ * 1. Só apaga `status = paid`. Nada em aberto ou atrasado é tocado, em nenhuma
+ *    hipótese — é justamente a dívida que precisa continuar à vista.
+ * 2. O RLS limita o delete às linhas do próprio usuário, então a operação não
+ *    depende de o filtro estar certo para ser segura.
+ *
+ * Devolve quantas linhas saíram, ou null se falhou.
+ */
+export async function limparPagasDeMesesAnteriores(
+  supabase: SupabaseClient
+): Promise<number | null> {
+  const agora = new Date();
+  const inicioDoMes = `${agora.getFullYear()}-${String(
+    agora.getMonth() + 1
+  ).padStart(2, "0")}-01`;
+
+  const { data, error } = await supabase
+    .from("bills")
+    .delete()
+    .eq("status", "paid")
+    .lt("due_date", inicioDoMes)
+    .select("id");
+
+  if (error) return null;
+  return data?.length ?? 0;
+}

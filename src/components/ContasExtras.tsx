@@ -19,16 +19,27 @@ export function CalendarioPagamentos({
   contas,
   dia,
   onDia,
+  mes,
+  onMes,
 }: {
   contas: Bill[];
   dia: string | null;
   onDia: (iso: string | null) => void;
+  /** "AAAA-MM" — o mês é da página, não deste componente. */
+  mes: string;
+  onMes: (mes: string) => void;
 }) {
   const hoje = todayISO();
-  const [cursor, setCursor] = React.useState(() => {
-    const d = new Date(hoje + "T00:00:00");
-    return { y: d.getFullYear(), m: d.getMonth() };
-  });
+  /*
+   * O mês vem de fora porque a lista de contas usa o mesmo.
+   *
+   * Enquanto era estado interno, virar o mês aqui não mexia na lista, e as duas
+   * partes da mesma tela mostravam meses diferentes ao mesmo tempo.
+   */
+  const cursor = {
+    y: Number(mes.slice(0, 4)),
+    m: Number(mes.slice(5, 7)) - 1,
+  };
 
   /** Por dia: total, e se há alguma vencida ou pendente. */
   const porDia = React.useMemo(() => {
@@ -77,11 +88,10 @@ export function CalendarioPagamentos({
     .filter((b) => b.due_date.startsWith(prefixo))
     .reduce((s, b) => s + b.amount, 0);
 
-  const mover = (n: number) =>
-    setCursor((c) => {
-      const d = new Date(c.y, c.m + n, 1);
-      return { y: d.getFullYear(), m: d.getMonth() };
-    });
+  const mover = (n: number) => {
+    const d = new Date(cursor.y, cursor.m + n, 1);
+    onMes(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+  };
 
   return (
     <div>
