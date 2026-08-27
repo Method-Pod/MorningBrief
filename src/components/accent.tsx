@@ -2,11 +2,19 @@
 
 import * as React from "react";
 
+/*
+ * A ordem segue a roda de cores, não a de criação: com oito opções, agrupar por
+ * matiz faz a fileira de bolinhas ser lida de uma vez.
+ */
 export const ACCENTS = [
   { key: "red", hex: "#e72828", name: "Vermelho" },
-  { key: "blue", hex: "#287ee7", name: "Azul" },
-  { key: "green", hex: "#28e75e", name: "Verde" },
+  { key: "orange", hex: "#e78e28", name: "Laranja" },
   { key: "yellow", hex: "#e7e128", name: "Amarelo" },
+  { key: "green", hex: "#28e75e", name: "Verde" },
+  { key: "cyan", hex: "#28e7e1", name: "Ciano" },
+  { key: "blue", hex: "#287ee7", name: "Azul" },
+  { key: "violet", hex: "#7e28e7", name: "Violeta" },
+  { key: "pink", hex: "#e7288e", name: "Rosa" },
 ] as const;
 
 export type AccentKey = (typeof ACCENTS)[number]["key"];

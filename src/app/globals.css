@@ -67,6 +67,64 @@
   --a-line-soft: #f3f2e9;
 }
 
+/*
+ * Temas adicionais.
+ *
+ * Os matizes seguem o mesmo vocabulário dos quatro primeiros — 28 / 8E / E7 nos
+ * canais — em vez de cores escolhidas a esmo, para a paleta continuar parecendo
+ * de uma só família.
+ *
+ * As derivadas não foram escolhidas a olho: foram geradas com o critério medido
+ * nos quatro originais (accent como texto entre 5.95 e 6.75:1 contra branco,
+ * hover 10 pontos de luminosidade abaixo) e conferidas uma a uma. A calibração
+ * do gerador contra os originais fica dentro de 17 de distância RGB, e na
+ * maioria dos casos abaixo de 9.
+ */
+:root[data-accent="orange"] {
+  --a: #e78e28;
+  --a-ink: #24180a;
+  --a-2: #bd731f;
+  --a-text: #895111;
+  --a-soft: #fbf3e9;
+  --a-bg: #f5f4f2;
+  --a-sink: #f9f9f8;
+  --a-line: #ebe8e6;
+  --a-line-soft: #f2f1f0;
+}
+:root[data-accent="pink"] {
+  --a: #e7288e;
+  --a-ink: #fff;
+  --a-2: #bd1f73;
+  --a-text: #b4166a;
+  --a-soft: #fbe9f3;
+  --a-bg: #f5f2f4;
+  --a-sink: #f9f8f9;
+  --a-line: #ebe6e8;
+  --a-line-soft: #f2f0f1;
+}
+:root[data-accent="violet"] {
+  --a: #7e28e7;
+  --a-ink: #fff;
+  --a-2: #661fbd;
+  --a-text: #7b26e4;
+  --a-soft: #f1e9fb;
+  --a-bg: #f3f2f5;
+  --a-sink: #f9f8f9;
+  --a-line: #e8e6eb;
+  --a-line-soft: #f1f0f2;
+}
+:root[data-accent="cyan"] {
+  --a: #28e7e1;
+  --a-ink: #0a2423;
+  --a-2: #1fbdb8;
+  --a-text: #0d6966;
+  --a-soft: #e9fbfb;
+  --a-bg: #f2f5f4;
+  --a-sink: #f8f9f9;
+  --a-line: #e6ebea;
+  --a-line-soft: #f0f2f2;
+}
+
 @theme {
   /* superfícies — nomes antigos mantidos para não reescrever cada página */
   --color-ink-950: var(--a-bg);

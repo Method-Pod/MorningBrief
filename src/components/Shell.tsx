@@ -72,7 +72,9 @@ function CaixaTema() {
       {aberta && (
         <div className="px-3.5 pb-3.5">
           <p className="mb-2.5 text-[11.5px] text-fg-dim">Cor principal</p>
-          <div className="flex gap-2">
+          {/* Quebra linha: com oito cores, 24px cada mais o espaço somam 248px
+              num espaço de 196px na barra lateral. */}
+          <div className="flex flex-wrap gap-2">
             {ACCENTS.map((a) => (
               <button
                 key={a.key}
