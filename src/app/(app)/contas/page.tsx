@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { limparPagasDeMesesAnteriores } from "@/lib/limpeza";
+import { sugerirCategoria } from "@/lib/categoriaSugerida";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   ehAbatida,
@@ -79,6 +80,9 @@ const FILTROS: { v: Filtro; label: string }[] = [
   { v: "pagas", label: "Pagas" },
 ];
 
+/** Categoria de uma conta nova enquanto nada foi sugerido nem escolhido. */
+const CATEGORIA_PADRAO = "Outros";
+
 const ORDENS: { v: Ordem; label: string }[] = [
   { v: "vencimento", label: "Próximo vencimento" },
   { v: "maior", label: "Maior valor" },
@@ -91,7 +95,7 @@ const vazio = () => ({
   description: "",
   amount: "",
   due_date: todayISO(),
-  category: "Outros",
+  category: CATEGORIA_PADRAO,
   status: "pending" as BillStatus,
   recurring: false,
   notes: "",
@@ -100,6 +104,8 @@ const vazio = () => ({
   installment_total: 2,
   /** false: o valor digitado é de cada parcela. true: é o total a dividir. */
   valorTotal: false,
+  /** true quando a pessoa mexeu na categoria: o palpite para de mandar. */
+  categoriaEscolhida: false,
   /** "iguais": mesma data e valor todo mês. "variaveis": cada parcela por si. */
   modoParcelas: "iguais" as "iguais" | "variaveis",
   parcelas: [] as Parcela[],
@@ -195,6 +201,8 @@ export default function ContasPage() {
       /* Ao editar, o valor na tela é sempre o da parcela: é o que está gravado.
          Editar mexe numa conta só, então o parcelamento em lote não se aplica. */
       valorTotal: false,
+      /* A conta já tem categoria gravada; palpite não tem o que fazer aqui. */
+      categoriaEscolhida: true,
       modoParcelas: "iguais" as const,
       parcelas: [],
       abatida: ehAbatida(b),
@@ -1177,7 +1185,31 @@ export default function ContasPage() {
             <Input
               autoFocus
               value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onChange={(e) => {
+                const description = e.target.value;
+                /*
+                 * O palpite acompanha a digitação e para no instante em que a
+                 * pessoa mexe no select. Sem esse freio, terminar de digitar
+                 * depois de escolher a categoria desfaria a escolha.
+                 */
+                if (form.categoriaEscolhida) {
+                  setForm({ ...form, description });
+                  return;
+                }
+                /*
+                 * Sem correspondência, volta para o padrão em vez de manter o
+                 * palpite anterior: digitar "Perfumes" e depois trocar por algo
+                 * que não casa deixava "Cuidados Pessoais" no campo, sem a dica
+                 * e sem ninguém ter escolhido — um palpite velho virava a
+                 * categoria da conta nova.
+                 */
+                const palpite = sugerirCategoria(description, categorias.nomes);
+                setForm({
+                  ...form,
+                  description,
+                  category: palpite ?? CATEGORIA_PADRAO,
+                });
+              }}
               placeholder="Aluguel do escritório"
             />
           </Field>
@@ -1208,10 +1240,26 @@ export default function ContasPage() {
           </div>
 
           <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="Categoria">
+            <Field
+              label="Categoria"
+              hint={
+                !editing &&
+                !form.categoriaEscolhida &&
+                sugerirCategoria(form.description, categorias.nomes) ===
+                  form.category
+                  ? "sugerida pela descrição · troque se quiser"
+                  : undefined
+              }
+            >
               <Select
                 value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    category: e.target.value,
+                    categoriaEscolhida: true,
+                  })
+                }
               >
                 {/* a categoria da conta em edição pode não estar mais na lista,
                     se foi excluída; incluí-la evita o select cair no primeiro

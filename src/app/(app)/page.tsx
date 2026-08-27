@@ -29,6 +29,10 @@ import {
 } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import { HORAS_RETENCAO, limparConcluidas } from "@/lib/limpeza";
+import {
+  lancarProximoMesDasFixas,
+  reporRecorrentesPerdidas,
+} from "@/lib/manutencao";
 import { Card, useNotice, cx } from "@/components/ui";
 import { useIdentity } from "@/components/identity";
 
@@ -102,72 +106,6 @@ export default function HomePage() {
     return (r.data as RecurringTask[]) ?? [];
   }, [supabase]);
 
-  /* Materializa as recorrências vencidas hoje, uma vez por dia. */
-  const materialize = React.useCallback(
-    async (rows: RecurringTask[]) => {
-      const due = rows.filter((r) => isDueOn(r, today));
-      if (!due.length) return 0;
-      const uid = await currentUserId(supabase);
-      if (!uid) return 0;
-
-      /*
-       * Reivindica a recorrência ANTES de criar a demanda.
-       *
-       * O update só encontra a linha se last_run_on ainda não é hoje, então
-       * duas abas abertas ao mesmo tempo disputam e apenas uma leva. Antes a
-       * ordem era inversa — inserir e depois marcar — e as duas abas inseriam
-       * antes de qualquer uma marcar, gerando a demanda em dobro.
-       *
-       * O `or` é necessário porque em SQL `last_run_on <> hoje` é falso quando
-       * a coluna é NULL: a recorrência que nunca rodou não seria reivindicada.
-       */
-      // Em paralelo: eram idas em série, uma por recorrência vencida, e com
-      // cinco regras isso somava meio segundo antes da tela aparecer.
-      const resultados = await Promise.all(
-        due.map(async (r) => {
-          const { data } = await supabase
-            .from("recurring_tasks")
-            .update({ last_run_on: today })
-            .eq("id", r.id)
-            .or(`last_run_on.is.null,last_run_on.neq.${today}`)
-            .select("id");
-          return data && data.length ? r : null;
-        })
-      );
-      const claimed = resultados.filter((r): r is RecurringTask => r !== null);
-      if (!claimed.length) return 0;
-
-      const { error } = await supabase.from("tasks").insert(
-        claimed.map((r) => ({
-          user_id: uid,
-          title: r.title,
-          description: r.description,
-          client: r.client,
-          priority: r.priority,
-          status: "todo",
-          due_date: today,
-          origin_id: r.id,
-        }))
-      );
-
-      if (error) {
-        // 23505 = índice único tasks_origin_day_uniq. A demanda já existe,
-        // então não é falha: outra aba chegou primeiro.
-        if (error.code === "23505") return 0;
-        // devolve a reivindicação para a próxima abertura tentar de novo
-        await supabase
-          .from("recurring_tasks")
-          .update({ last_run_on: null })
-          .in("id", claimed.map((r) => r.id));
-        notice.show(`Não foi possível gerar as recorrências: ${error.message}`);
-        return 0;
-      }
-      return claimed.length;
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [supabase, today]
-  );
-
   React.useEffect(() => {
     let alive = true;
     (async () => {
@@ -179,17 +117,23 @@ export default function HomePage() {
        * apagada; isso agora é resolvido no cliente, em `load`, que descarta
        * localmente o que já passou da janela de 24h.
        */
-      const [apagadas, rows] = await Promise.all([
-        limparConcluidas(supabase),
-        load(),
+      const [apagadas] = await Promise.all([limparConcluidas(supabase), load()]);
+
+      /*
+       * Manutenção do dia, depois da primeira pintura.
+       *
+       * As duas rotinas vivem em lib/manutencao porque a rota do cron chama as
+       * mesmas: com o app fechado é o cron que roda, e ao abrir é a página —
+       * quem chegar primeiro faz, e a outra passada não encontra nada a fazer.
+       */
+      const [criadas, lancadas] = await Promise.all([
+        reporRecorrentesPerdidas(supabase),
+        lancarProximoMesDasFixas(supabase),
       ]);
-      const made = await materialize(rows);
       if (!alive) return;
       if (apagadas && apagadas > 0) setLimpas(apagadas);
-      if (made > 0) {
-        setGenerated(made);
-        await load();
-      }
+      if ((criadas ?? 0) > 0) setGenerated(criadas ?? 0);
+      if ((criadas ?? 0) > 0 || (lancadas ?? 0) > 0) await load();
       setLoading(false);
     })();
     return () => {
