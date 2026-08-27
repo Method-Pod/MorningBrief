@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { RotateCcw } from "lucide-react";
+import { CalendarDays, RotateCcw } from "lucide-react";
 import { brl, dataCurta } from "@/lib/format";
 import { mesesAdiante } from "./ContasExtras";
 import { Input, cx } from "./ui";
@@ -20,7 +20,7 @@ export type Parcela = { due_date: string; amount: number };
  * rótulo e data à grade como itens diretos.
  */
 const COLUNAS =
-  "grid grid-cols-[minmax(0,1fr)_80px] items-center gap-2 sm:grid-cols-[38px_minmax(0,1fr)_104px]";
+  "grid grid-cols-[minmax(0,1fr)_98px] items-center gap-2 sm:grid-cols-[38px_minmax(0,1fr)_118px]";
 const PAR_ROTULO_DATA = "flex min-w-0 items-center gap-1.5 sm:contents";
 
 /** Teto de parcelas: cada uma vira uma linha no banco. */
@@ -161,11 +161,11 @@ export function EditorParcelas({
         <div className={PAR_ROTULO_DATA}>
           <span className="hidden sm:block" />
           <span className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
-            Vencimento
+            Vence em
           </span>
         </div>
         <span className="text-right text-[10px] font-medium uppercase tracking-wider text-fg-mute">
-          Valor
+          Valor da parcela
         </span>
       </div>
 
@@ -179,23 +179,43 @@ export function EditorParcelas({
               <span className="w-[26px] shrink-0 text-[11px] font-bold text-fg-mute tnum sm:w-auto">
                 {de + i}/{total}
               </span>
-              <div className="min-w-0 flex-1 sm:flex-none">
+              {/*
+                Ícone de calendário no campo de data e "R$" no de valor.
+                
+                O cabeçalho das colunas sozinho não bastava: com dez linhas na
+                lista, quem está na sexta não tem o cabeçalho no campo de visão
+                e os dois campos ficam indistinguíveis. Assim cada um se
+                identifica na própria linha.
+              */}
+              <div className="relative min-w-0 flex-1 sm:flex-none">
+                {/*
+                  O ícone só aparece de 640px para cima. Em 375px ele custaria
+                  14px de recuo justo na coluna mais apertada, e ali é
+                  redundante: o campo já mostra dd/mm/aaaa e o vizinho tem R$.
+                */}
+                <CalendarDays
+                  size={13}
+                  className="pointer-events-none absolute left-2 top-1/2 hidden -translate-y-1/2 text-fg-mute sm:block"
+                />
                 <Input
                   type="date"
                   value={p.due_date}
                   onChange={(e) => mudar(i, "due_date", e.target.value)}
-                  aria-label={`Vencimento da parcela ${de + i}`}
-                  className="h-9 !px-2 text-[12px]"
+                  aria-label={`Vencimento da parcela ${de + i} de ${total}`}
+                  className="h-9 !pl-2 !pr-1 text-[12px] sm:!pl-[26px]"
                 />
               </div>
             </div>
-            <div className="min-w-0">
+            <div className="relative min-w-0">
+              <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-fg-mute">
+                R$
+              </span>
               <Input
                 inputMode="decimal"
                 value={rascunhos[i] ?? paraCampo(Number(p.amount) || 0)}
                 onChange={(e) => mudar(i, "amount", e.target.value)}
-                aria-label={`Valor da parcela ${de + i}`}
-                className="h-9 !px-2 text-right text-[12px] tnum"
+                aria-label={`Valor da parcela ${de + i} de ${total}`}
+                className="h-9 !pl-[26px] !pr-2 text-right text-[12px] tnum"
               />
             </div>
           </li>
