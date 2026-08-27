@@ -32,8 +32,16 @@ import {
 import { AbaterModal, ProgressoAbatida } from "@/components/ContasLote";
 import { brl, dataCurta, daysUntil, rotuloMes, todayISO } from "@/lib/format";
 import {
+  EditorParcelas,
+  MAX_PARCELAS,
+  parcelasIguais,
+  repartir,
+  type Parcela,
+} from "@/components/Parcelamento";
+import {
   CalendarioPagamentos,
   ContasFixas,
+  mesesAdiante,
   proximoMes,
 } from "@/components/ContasExtras";
 import {
@@ -88,6 +96,11 @@ const vazio = () => ({
   parcelado: false,
   installment_no: 1,
   installment_total: 2,
+  /** false: o valor digitado é de cada parcela. true: é o total a dividir. */
+  valorTotal: false,
+  /** "iguais": mesma data e valor todo mês. "variaveis": cada parcela por si. */
+  modoParcelas: "iguais" as "iguais" | "variaveis",
+  parcelas: [] as Parcela[],
   // conta paga aos poucos, sem data marcada
   abatida: false,
   paid_amount: "0",
@@ -165,6 +178,11 @@ export default function ContasPage() {
       parcelado: b.installment_total != null,
       installment_no: b.installment_no ?? 1,
       installment_total: b.installment_total ?? 2,
+      /* Ao editar, o valor na tela é sempre o da parcela: é o que está gravado.
+         Editar mexe numa conta só, então o parcelamento em lote não se aplica. */
+      valorTotal: false,
+      modoParcelas: "iguais" as const,
+      parcelas: [],
       abatida: ehAbatida(b),
       paid_amount: String(b.paid_amount ?? 0),
     });
@@ -185,8 +203,19 @@ export default function ContasPage() {
     if (!form.due_date) return setErr("Informe a data de vencimento.");
     if (form.parcelado && form.installment_no > form.installment_total)
       return setErr("A parcela atual não pode ser maior que o total.");
+    /* O total vira uma linha por mês, e um número digitado errado geraria
+       centenas de lançamentos de uma vez. */
+    if (form.parcelado && form.installment_total > MAX_PARCELAS)
+      return setErr(`O total de parcelas vai até ${MAX_PARCELAS}.`);
+    if (
+      form.parcelado &&
+      form.modoParcelas === "variaveis" &&
+      form.parcelas.some((x) => !(Number(x.amount) > 0) || !x.due_date)
+    )
+      return setErr("Toda parcela precisa de data e valor maior que zero.");
 
     setBusy(true);
+    const temAbatimento = form.abatida || editing?.paid_amount != null;
     const payload = {
       description: desc,
       amount: valor,
@@ -209,7 +238,7 @@ export default function ContasPage() {
        */
       /* paid_amount vem de ABATIDAS.sql. Só entra no payload quando a conta é
          abatida, para o banco sem a migração continuar aceitando conta comum. */
-      ...(form.abatida || editing?.paid_amount != null
+      ...(temAbatimento
         ? {
             paid_amount: form.abatida
               ? Math.min(
@@ -246,9 +275,57 @@ export default function ContasPage() {
         setBusy(false);
         return setErr(SESSION_EXPIRED);
       }
-      ({ error } = await supabase
-        .from("bills")
-        .insert({ ...payload, user_id: uid }));
+      /*
+       * Parcelada lança todas as parcelas de uma vez, uma por mês.
+       *
+       * Era o trabalho manual que sobrava: uma conta de 10 parcelas exigia
+       * criar dez contas à mão, mês a mês.
+       */
+      /*
+       * A lista de parcelas vem do editor quando o modo é variável, e do
+       * cálculo automático quando é iguais. Nos dois casos é a mesma estrutura,
+       * então a montagem das linhas não precisa saber de qual veio.
+       */
+      const lista: Parcela[] =
+        form.modoParcelas === "variaveis" && form.parcelas.length
+          ? form.parcelas
+          : parcelasIguais({
+              primeiroVencimento: form.due_date,
+              valor,
+              valorTotal: form.valorTotal,
+              de: Number(form.installment_no),
+              total: Number(form.installment_total),
+            });
+
+      const linhas = form.parcelado
+        ? lista.map((parcela, i) => ({
+            ...payload,
+            user_id: uid,
+            installment_no: Number(form.installment_no) + i,
+            amount: parcela.amount,
+            due_date: parcela.due_date,
+            /*
+             * Só a primeira parcela recebe a situação escolhida. As seguintes
+             * entram em aberto: marcar como paga o que ainda não venceu seria
+             * inventar pagamento.
+             */
+            ...(i === 0
+              ? {}
+              : {
+                  status: "pending" as BillStatus,
+                  paid_at: null,
+                  ...(temAbatimento ? { paid_amount: 0 } : {}),
+                }),
+          }))
+        : [{ ...payload, user_id: uid }];
+
+      ({ error } = await supabase.from("bills").insert(linhas));
+      if (!error && linhas.length > 1)
+        notice.show(
+          `${linhas.length} parcelas lançadas, de ${rotuloMes(
+            linhas[0].due_date
+          )} a ${rotuloMes(linhas[linhas.length - 1].due_date)}.`
+        );
     }
     setBusy(false);
     if (error) {
@@ -491,6 +568,144 @@ export default function ContasPage() {
   /** Uso por categoria em TODAS as contas, não só no filtro: o aviso antes de
       excluir precisa contar tudo, senão diria "sem uso" para categoria em uso
       fora do recorte visível. */
+  /**
+   * Monta a lista do editor a partir dos campos de cima.
+   *
+   * Ao entrar no modo variável a lista vem preenchida com o cálculo automático,
+   * então ajustar uma parcela não obriga a digitar as outras. `forcar` é o
+   * "recalcular iguais": só ele sobrescreve valores já editados à mão.
+   */
+  const trocarModoParcelas = (
+    modo: "iguais" | "variaveis",
+    forcar = false
+  ) => {
+    if (modo === "iguais") return setForm({ ...form, modoParcelas: "iguais" });
+
+    const valor = parseFloat(
+      String(form.amount).replace(/\./g, "").replace(",", ".")
+    );
+    const de = Number(form.installment_no);
+    const total = Number(form.installment_total);
+    if (
+      !Number.isFinite(valor) ||
+      valor <= 0 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(form.due_date) ||
+      total - de + 1 < 1 ||
+      total > MAX_PARCELAS
+    ) {
+      setErr("Informe valor, vencimento e o total de parcelas antes de ajustar.");
+      return;
+    }
+
+    setErr("");
+    const base = parcelasIguais({
+      primeiroVencimento: form.due_date,
+      valor,
+      valorTotal: form.valorTotal,
+      de,
+      total,
+    });
+    setForm({
+      ...form,
+      modoParcelas: "variaveis",
+      /* Sem forçar, preserva o que já foi ajustado e só completa o que falta. */
+      parcelas:
+        forcar || !form.parcelas.length
+          ? base
+          : base.map((b, i) => form.parcelas[i] ?? b),
+    });
+  };
+
+  /*
+   * Mexer em "Parcela" ou "De" muda quantas linhas a lista precisa ter.
+   * Estender ou cortar aqui evita gravar uma quantidade diferente da que está
+   * na tela, e preserva as linhas já ajustadas.
+   */
+  React.useEffect(() => {
+    if (form.modoParcelas !== "variaveis" || !form.parcelas.length) return;
+    const alvo = Number(form.installment_total) - Number(form.installment_no) + 1;
+    if (alvo < 1 || alvo === form.parcelas.length) return;
+
+    const valor = parseFloat(
+      String(form.amount).replace(/\./g, "").replace(",", ".")
+    );
+    if (!Number.isFinite(valor) || valor <= 0) return;
+    const base = parcelasIguais({
+      primeiroVencimento: form.due_date,
+      valor,
+      valorTotal: form.valorTotal,
+      de: Number(form.installment_no),
+      total: Number(form.installment_total),
+    });
+    setForm((f) => ({
+      ...f,
+      parcelas: base.map((b, i) => f.parcelas[i] ?? b),
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.installment_no, form.installment_total, form.modoParcelas]);
+
+  /**
+   * Prévia do parcelamento, com os mesmos cálculos da gravação.
+   *
+   * Refaz repartir e mesesAdiante em vez de reaproveitar valores da gravação
+   * porque a gravação só roda depois; o que importa é que use as mesmas
+   * funções, para a prévia não prometer algo diferente do que será criado.
+   */
+  const previaParcelas = React.useMemo(() => {
+    if (!form.parcelado) return null;
+    const total = Number(form.installment_total);
+    const de = Number(form.installment_no);
+    const v = parseFloat(String(form.amount).replace(/\./g, "").replace(",", "."));
+    const quantas = total - de + 1;
+    if (
+      !Number.isFinite(total) ||
+      !Number.isFinite(de) ||
+      quantas < 1 ||
+      total > 120 ||
+      !Number.isFinite(v) ||
+      v <= 0 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(form.due_date)
+    )
+      return null;
+
+    const parcelas = form.valorTotal ? repartir(v, total) : null;
+    const primeiro = parcelas ? parcelas[de - 1] : v;
+    const ultimo = parcelas ? parcelas[total - 1] : v;
+    const dia = Number(form.due_date.slice(8, 10));
+
+    /*
+     * Soma do que vai ser criado, sempre.
+     *
+     * Assim tanto faz por qual dos dois lados a pessoa digitou: quem informou o
+     * valor da parcela confere o total aqui, e quem informou o total confere a
+     * parcela. Some as parcelas de fato, em vez de multiplicar, porque a sobra
+     * de centavos da divisão está na primeira.
+     */
+    const soma = parcelas
+      ? parcelas.slice(de - 1).reduce((t, x) => t + x, 0)
+      : v * quantas;
+
+    return {
+      quantas,
+      rotuloValor:
+        primeiro === ultimo ? brl(primeiro) : `${brl(primeiro)} + ${brl(ultimo)}`,
+      soma,
+      parcial: parcelas != null && de > 1,
+      doMes: rotuloMes(form.due_date),
+      aoMes: rotuloMes(mesesAdiante(form.due_date, quantas - 1)),
+      dia,
+      /* Só avisa do encolhimento quando ele pode acontecer de fato. */
+      diaCurto: dia > 28,
+    };
+  }, [
+    form.parcelado,
+    form.installment_no,
+    form.installment_total,
+    form.amount,
+    form.due_date,
+    form.valorTotal,
+  ]);
+
   const usoPorCategoria = React.useMemo(() => {
     const m: Record<string, number> = {};
     rows.forEach((b) => {
@@ -969,8 +1184,37 @@ export default function ContasPage() {
               </span>
             </label>
             {form.parcelado && (
-              <div className="mt-3.5 grid gap-3.5 border-t border-line-soft pt-3.5 sm:grid-cols-2">
-                <Field label="Parcela">
+              <div className="mt-3.5 border-t border-line-soft pt-3.5">
+                {!editing && (
+                  <div className="mb-3.5">
+                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-fg-mute">
+                      O valor de R$ {form.amount || "0,00"} é
+                    </span>
+                    <div className="flex gap-1.5">
+                      {[
+                        { v: false, label: "de cada parcela" },
+                        { v: true, label: "o total a dividir" },
+                      ].map((op) => (
+                        <button
+                          key={String(op.v)}
+                          type="button"
+                          onClick={() => setForm({ ...form, valorTotal: op.v })}
+                          className={cx(
+                            "h-8 flex-1 rounded-full px-3 text-[12px] font-semibold transition-colors",
+                            form.valorTotal === op.v
+                              ? "bg-brand-500 text-on-brand"
+                              : "bg-ink-750 text-fg-mute hover:text-fg-dim"
+                          )}
+                        >
+                          {op.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <Field label="Parcela">
                   <Input
                     type="number"
                     min={1}
@@ -980,19 +1224,92 @@ export default function ContasPage() {
                     }
                   />
                 </Field>
-                <Field label="De">
-                  <Input
-                    type="number"
-                    min={1}
-                    value={form.installment_total}
-                    onChange={(e) =>
-                      setForm({
-                        ...form,
-                        installment_total: Number(e.target.value),
-                      })
-                    }
-                  />
-                </Field>
+                  <Field label="De">
+                    <Input
+                      type="number"
+                      min={1}
+                      value={form.installment_total}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          installment_total: Number(e.target.value),
+                        })
+                      }
+                    />
+                  </Field>
+                </div>
+
+                {!editing && (
+                  <div className="mt-3.5">
+                    <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-fg-mute">
+                      Datas e valores
+                    </span>
+                    <div className="flex gap-1.5">
+                      {[
+                        { v: "iguais" as const, label: "iguais todo mês" },
+                        { v: "variaveis" as const, label: "ajustar cada uma" },
+                      ].map((op) => (
+                        <button
+                          key={op.v}
+                          type="button"
+                          onClick={() => trocarModoParcelas(op.v)}
+                          className={cx(
+                            "h-8 flex-1 rounded-full px-3 text-[12px] font-semibold transition-colors",
+                            form.modoParcelas === op.v
+                              ? "bg-brand-500 text-on-brand"
+                              : "bg-ink-750 text-fg-mute hover:text-fg-dim"
+                          )}
+                        >
+                          {op.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!editing &&
+                  form.modoParcelas === "variaveis" &&
+                  form.parcelas.length > 0 && (
+                    <EditorParcelas
+                      parcelas={form.parcelas}
+                      de={Number(form.installment_no)}
+                      onChange={(parcelas) => setForm({ ...form, parcelas })}
+                      onRecalcular={() => trocarModoParcelas("variaveis", true)}
+                    />
+                  )}
+
+                {/* Prévia do que será criado: quantas linhas, com que valor e
+                    em que meses. É a única forma de conferir antes de gravar
+                    dez lançamentos de uma vez. */}
+                {!editing && form.modoParcelas === "iguais" && previaParcelas && (
+                  <p className="mt-3.5 rounded-[12px] bg-brand-500/10 px-3 py-2.5 text-[11.5px] leading-relaxed text-fg-dim">
+                    Vão ser criados{" "}
+                    <span className="font-bold text-fg tnum">
+                      {previaParcelas.quantas}
+                    </span>{" "}
+                    {previaParcelas.quantas === 1 ? "lançamento" : "lançamentos"} de{" "}
+                    <span className="font-bold text-fg tnum">
+                      {previaParcelas.rotuloValor}
+                    </span>
+                    , de{" "}
+                    <span className="font-bold text-fg">{previaParcelas.doMes}</span>{" "}
+                    a <span className="font-bold text-fg">{previaParcelas.aoMes}</span>.
+                    <span className="mt-1 block">
+                      {previaParcelas.parcial ? "Somam" : "Soma"}{" "}
+                      <span className="font-bold text-fg tnum">
+                        {brl(previaParcelas.soma)}
+                      </span>
+                      {previaParcelas.diaCurto && (
+                        <>
+                          {" "}
+                          · nos meses sem dia {previaParcelas.dia}, cai no último
+                          dia
+                        </>
+                      )}
+                      .
+                    </span>
+                  </p>
+                )}
               </div>
             )}
           </div>

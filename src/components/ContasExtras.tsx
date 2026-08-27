@@ -210,6 +210,23 @@ export const proximoMes = (iso: string) => {
   )}`;
 };
 
+/**
+ * A mesma data, `n` meses adiante, encolhida quando o mês de destino é curto.
+ *
+ * Conta sempre a partir da data original, e não chamando proximoMes n vezes: o
+ * encadeamento perde o dia no caminho. Uma parcela dia 31 viraria 28 em
+ * fevereiro e daí em diante ficaria no dia 28 para sempre, quando o certo é
+ * voltar ao 31 em março.
+ */
+export const mesesAdiante = (iso: string, n: number) => {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const alvo = m - 1 + n; // 0-based para atravessar a virada de ano
+  const ano = y + Math.floor(alvo / 12);
+  const mes = (alvo % 12) + 1;
+  const ultimo = new Date(ano, mes, 0).getDate();
+  return `${ano}-${pad(mes)}-${pad(Math.min(d, ultimo))}`;
+};
+
 export function ContasFixas({
   contas,
   onLancar,

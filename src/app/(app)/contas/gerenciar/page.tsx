@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { mesesAdiante } from "@/components/ContasExtras";
 import { ehAbatida, restanteDe, type Bill } from "@/lib/types";
 import { brl, dataCurta, rotuloMes } from "@/lib/format";
 import { useCategorias } from "@/components/Categorias";
@@ -61,6 +63,22 @@ const trocarDia = (iso: string, dia: number) => {
   return `${ano}-${String(mes).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 };
 
+/**
+ * Quantas parcelas do total ainda não foram lançadas.
+ *
+ * Conta a partir da maior parcela existente, e não de `total - linhas`: uma
+ * parcela 5 de 5 lançada sozinha é a quinta e não falta nenhuma, enquanto
+ * subtrair linhas diria que faltam quatro.
+ */
+const faltamDe = (contas: Bill[], total: number | null) => {
+  if (total == null) return 0;
+  const maior = contas.reduce(
+    (m, b) => (b.installment_no != null ? Math.max(m, b.installment_no) : m),
+    0
+  );
+  return Math.max(0, total - Math.max(maior, contas.length));
+};
+
 type Serie = {
   chave: string;
   descricao: string;
@@ -75,6 +93,8 @@ type Serie = {
   parcelaTotal: number | null;
   /** maior installment_no presente, para dizer em que parcela a conta está */
   parcelaAtual: number | null;
+  /** parcelas do total que ainda não têm lançamento */
+  faltam: number;
 };
 
 const numero = (b: Bill): Bill => ({
@@ -148,6 +168,7 @@ export default function GerenciarPage() {
               b.installment_no != null ? Math.max(m ?? 0, b.installment_no) : m,
             null
           ),
+          faltam: faltamDe(ordenadas, recente.installment_total),
         };
       })
       .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
@@ -181,6 +202,41 @@ export default function GerenciarPage() {
   /** Abre o editor no lançamento em aberto mais próximo, ou no último. */
   const editarSerie = (s: Serie) =>
     setEdicao({ conta: s.emAberto[0] ?? s.contas[s.contas.length - 1], serie: s });
+
+  /**
+   * Lança as parcelas que faltam da série, uma por mês.
+   *
+   * Serve para as parceladas criadas antes de a criação passar a lançar tudo
+   * de uma vez, e para as que foram lançadas à mão pela metade. As datas saem
+   * de mesesAdiante a partir da última parcela existente, então o dia da série
+   * é preservado mesmo passando por fevereiro.
+   */
+  const gerarParcelas = (s: Serie) => {
+    const ultima = s.contas[s.contas.length - 1];
+    const de = (s.parcelaAtual ?? s.contas.length) + 1;
+    confirm.ask(
+      `Lançar as ${s.faltam} parcelas que faltam de "${s.descricao}", da ${de}ª à ${s.parcelaTotal}ª, uma por mês a partir de ${rotuloMes(mesesAdiante(ultima.due_date, 1))}?`,
+      async () => {
+        const uid = await currentUserId(supabase);
+        if (!uid) return notice.show(SESSION_EXPIRED);
+        const linhas = Array.from({ length: s.faltam }, (_, i) => ({
+          user_id: uid,
+          description: ultima.description,
+          amount: ultima.amount,
+          due_date: mesesAdiante(ultima.due_date, i + 1),
+          category: ultima.category,
+          status: "pending",
+          notes: ultima.notes,
+          recurring: ultima.recurring,
+          paid_at: null,
+          installment_no: de + i,
+          installment_total: s.parcelaTotal,
+        }));
+        const { error } = await supabase.from("bills").insert(linhas);
+        if (!notice.check(error, "lançar as parcelas que faltam")) carregar();
+      }
+    );
+  };
 
   const excluirSerie = (s: Serie) => {
     const n = s.contas.length;
@@ -279,6 +335,7 @@ export default function GerenciarPage() {
                 onEditarSerie={() => editarSerie(s)}
                 onEditarConta={(b) => setEdicao({ conta: b, serie: s })}
                 onExcluir={() => excluirSerie(s)}
+                onGerarParcelas={() => gerarParcelas(s)}
               />
             ))}
           </ul>
@@ -317,11 +374,13 @@ function LinhaSerie({
   onEditarSerie,
   onEditarConta,
   onExcluir,
+  onGerarParcelas,
 }: {
   serie: Serie;
   onEditarSerie: () => void;
   onEditarConta: (b: Bill) => void;
   onExcluir: () => void;
+  onGerarParcelas: () => void;
 }) {
   const cadencia =
     s.tipo === "fixa"
@@ -405,6 +464,23 @@ function LinhaSerie({
             </button>
           );
         })}
+
+        {/*
+          Vaga tracejada no fim da faixa: as parcelas que existem no total mas
+          não têm lançamento. Fica no mesmo lugar onde elas vão aparecer, então
+          o que falta se lê junto com o que já está lá.
+        */}
+        {s.faltam > 0 && (
+          <button
+            onClick={onGerarParcelas}
+            title={`Lançar as ${s.faltam} parcelas que faltam`}
+            aria-label={`Lançar as ${s.faltam} parcelas que faltam de ${s.descricao}`}
+            className="inline-flex h-8 items-center gap-0.5 rounded-full border border-dashed border-brand-500/45 px-2.5 text-[10.5px] font-bold text-brand-400 transition-colors hover:bg-brand-500/12 lg:h-[26px] lg:px-2"
+          >
+            <Plus size={11} strokeWidth={3} />
+            <span className="tnum">{s.faltam}</span>
+          </button>
+        )}
       </div>
 
       <div className="flex shrink-0 justify-end gap-0.5 transition-opacity xl:col-start-4 xl:row-start-1 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
