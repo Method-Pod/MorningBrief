@@ -10,3 +10,6 @@ npm-debug.log*
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+# resposta do teste do cron: ruido local, nao vai para o repositorio
+resultado-cron.txt
