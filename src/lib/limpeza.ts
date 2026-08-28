@@ -23,19 +23,29 @@ export const HORAS_RETENCAO = 24;
  * Devolve quantas linhas saíram, ou null se a operação falhou.
  */
 export async function limparConcluidas(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  opcoes: { userId?: string } = {}
 ): Promise<number | null> {
   const limite = new Date(
     Date.now() - HORAS_RETENCAO * 60 * 60 * 1000
   ).toISOString();
 
-  const { data, error } = await supabase
+  /*
+   * `userId` é obrigatório quando quem chama usa a chave de serviço.
+   *
+   * A chave de serviço passa por cima do RLS, e a salvaguarda 2 acima deixa de
+   * valer: sem o filtro explícito, este delete alcançaria as linhas de todos os
+   * usuários. No navegador o parâmetro é dispensável, porque lá o RLS restringe.
+   */
+  let consulta = supabase
     .from("tasks")
     .delete()
     .eq("status", "done")
     .not("completed_at", "is", null)
-    .lt("completed_at", limite)
-    .select("id");
+    .lt("completed_at", limite);
+  if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
+
+  const { data, error } = await consulta.select("id");
 
   if (error) return null;
   return data?.length ?? 0;
@@ -63,19 +73,31 @@ export async function limparConcluidas(
  * Devolve quantas linhas saíram, ou null se falhou.
  */
 export async function limparPagasDeMesesAnteriores(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  opcoes: { userId?: string; hoje?: string } = {}
 ): Promise<number | null> {
-  const agora = new Date();
-  const inicioDoMes = `${agora.getFullYear()}-${String(
-    agora.getMonth() + 1
-  ).padStart(2, "0")}-01`;
+  /*
+   * `hoje` pode vir de fora porque no servidor o relógio está em UTC.
+   *
+   * Sem isso, entre 21h e meia-noite em São Paulo o servidor já acha que é o dia
+   * seguinte, e na virada do mês apagaria as pagas algumas horas antes da hora.
+   */
+  const hoje = opcoes.hoje ?? (() => {
+    const a = new Date();
+    return `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, "0")}-01`;
+  })();
+  const inicioDoMes = `${hoje.slice(0, 7)}-01`;
 
-  const { data, error } = await supabase
+  /* Mesma razão do userId em limparConcluidas: com a chave de serviço, sem o
+     filtro explícito o delete alcançaria todos os usuários. */
+  let consulta = supabase
     .from("bills")
     .delete()
     .eq("status", "paid")
-    .lt("due_date", inicioDoMes)
-    .select("id");
+    .lt("due_date", inicioDoMes);
+  if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
+
+  const { data, error } = await consulta.select("id");
 
   if (error) return null;
   return data?.length ?? 0;
