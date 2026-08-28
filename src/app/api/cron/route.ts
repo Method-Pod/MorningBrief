@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import { limparConcluidas, limparPagasDeMesesAnteriores } from "@/lib/limpeza";
+import {
+  limparConcluidas,
+  limparEventosPassados,
+  limparPagasDeMesesAnteriores,
+} from "@/lib/limpeza";
 import {
   estenderEventosRecorrentes,
   lancarProximoMesDasFixas,
@@ -137,12 +141,22 @@ export async function GET(req: Request) {
      * em linhas diferentes da mesma tabela, e nenhuma depende do resultado da
      * outra.
      */
-    const [demandas, fixas, eventos, concluidas, pagas] = await Promise.all([
+    /*
+     * A extensão da janela vem ANTES da limpeza dos passados, e por isso as duas
+     * não entram no mesmo Promise.all: se rodassem juntas, a limpeza poderia
+     * avaliar a série antes de a extensão criar a ocorrência adiante, e a
+     * salvaguarda teria de preservar uma linha que já ia ser substituída.
+     */
+    const [demandas, fixas, eventos] = await Promise.all([
       reporRecorrentesPerdidas(supabase, opcoes),
       lancarProximoMesDasFixas(supabase, opcoes),
       estenderEventosRecorrentes(supabase, opcoes),
+    ]);
+
+    const [concluidas, pagas, eventosAntigos] = await Promise.all([
       limparConcluidas(supabase, { userId: u.id }),
       limparPagasDeMesesAnteriores(supabase, opcoes),
+      limparEventosPassados(supabase, opcoes),
     ]);
 
     relatorio.push({
@@ -152,6 +166,7 @@ export async function GET(req: Request) {
       ocorrenciasDeEventoCriadas: eventos,
       demandasConcluidasApagadas: concluidas,
       contasPagasApagadas: pagas,
+      eventosPassadosApagados: eventosAntigos,
     });
   }
 

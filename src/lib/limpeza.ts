@@ -129,3 +129,105 @@ export async function limparPagasDeMesesAnteriores(
   if (error) return null;
   return data?.length ?? 0;
 }
+
+/**
+ * Apaga eventos de calendário de meses anteriores.
+ *
+ * Diferente das contas pagas, que ficam 12 meses: não há gráfico nem soma que
+ * dependa do histórico de eventos, então evento de mês fechado é só ruído ao
+ * navegar para trás no calendário.
+ *
+ * A comparação é com o primeiro dia do mês corrente, e não com "ontem": o mês
+ * em curso fica inteiro, inclusive os dias já passados dele. É o mesmo critério
+ * do recorte por mês da tela.
+ *
+ * Duas salvaguardas:
+ *
+ * 1. A ÚLTIMA ocorrência de cada repetição nunca é apagada. `estender` parte
+ *    dela para preencher a janela adiante; apagá-la encerraria a repetição em
+ *    silêncio. Só acontece se a repetição inteira estiver no passado — o que
+ *    exigiria o app e o cron parados por mais de dois meses — mas o custo de
+ *    proteger é uma consulta e o de não proteger é perder a regra.
+ *
+ * 2. O RLS limita o delete às linhas do próprio usuário. Quem chama com a chave
+ *    de serviço passa `userId`, porque ali o RLS não vale.
+ *
+ * Devolve quantos eventos saíram, ou null se falhou.
+ */
+export async function limparEventosPassados(
+  supabase: SupabaseClient,
+  opcoes: { userId?: string; hoje?: string } = {}
+): Promise<number | null> {
+  const hoje =
+    opcoes.hoje ??
+    (() => {
+      const a = new Date();
+      return `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, "0")}-01`;
+    })();
+
+  /* Meia-noite local do primeiro dia do mês corrente. */
+  const [ano, mes] = hoje.split("-").map(Number);
+  const corte = new Date(ano, mes - 1, 1).toISOString();
+
+  let candidatos = supabase
+    .from("events")
+    .select("id, series_id, start_at")
+    .lt("start_at", corte);
+  if (opcoes.userId) candidatos = candidatos.eq("user_id", opcoes.userId);
+
+  const { data, error } = await candidatos;
+  if (error) return null;
+
+  const linhas =
+    (data as { id: string; series_id: string | null; start_at: string }[]) ?? [];
+  if (!linhas.length) return 0;
+
+  /*
+   * Quais séries não têm nenhuma ocorrência a partir do corte.
+   *
+   * Para essas, a mais recente do passado é a única âncora que resta e precisa
+   * ficar. Uma consulta só, pedindo as séries que sobrevivem ao corte.
+   */
+  const seriesNoPassado = new Set(
+    linhas.map((e) => e.series_id).filter((s): s is string => !!s)
+  );
+
+  const protegidos = new Set<string>();
+  if (seriesNoPassado.size) {
+    let futuras = supabase
+      .from("events")
+      .select("series_id")
+      .gte("start_at", corte)
+      .in("series_id", [...seriesNoPassado]);
+    if (opcoes.userId) futuras = futuras.eq("user_id", opcoes.userId);
+
+    const { data: adiante } = await futuras;
+    const temFuturo = new Set(
+      ((adiante as { series_id: string | null }[]) ?? [])
+        .map((e) => e.series_id)
+        .filter((s): s is string => !!s)
+    );
+
+    /* Série sem nada adiante: preserva a ocorrência mais recente dela. */
+    const maisRecente = new Map<string, { id: string; start_at: string }>();
+    linhas.forEach((e) => {
+      if (!e.series_id || temFuturo.has(e.series_id)) return;
+      const atual = maisRecente.get(e.series_id);
+      if (!atual || e.start_at > atual.start_at)
+        maisRecente.set(e.series_id, { id: e.id, start_at: e.start_at });
+    });
+    maisRecente.forEach((e) => protegidos.add(e.id));
+  }
+
+  const apagar = linhas.filter((e) => !protegidos.has(e.id)).map((e) => e.id);
+  if (!apagar.length) return 0;
+
+  const { data: saiu, error: erroDelete } = await supabase
+    .from("events")
+    .delete()
+    .in("id", apagar)
+    .select("id");
+
+  if (erroDelete) return null;
+  return saiu?.length ?? 0;
+}

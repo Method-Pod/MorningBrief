@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { limparEventosPassados } from "@/lib/limpeza";
 import {
   estenderEventosRecorrentes,
   fimDaJanelaDeEventos,
@@ -117,6 +118,9 @@ export default function CalendarioPage() {
   React.useEffect(() => {
     (async () => {
       await load();
+      /* Eventos de meses fechados saem, mas depois de pintar: a tela do mês
+         atual já está completa sem isso. */
+      const apagados = await limparEventosPassados(supabase);
       /*
        * Empurra a janela das repetições depois de pintar.
        *
@@ -124,7 +128,7 @@ export default function CalendarioPage() {
        * do mês atual já está completo sem ela. Se criou algo, recarrega.
        */
       const criadas = await estenderEventosRecorrentes(supabase);
-      if (criadas && criadas > 0) load();
+      if ((criadas ?? 0) > 0 || (apagados ?? 0) > 0) load();
     })();
   }, [load, supabase]);
 
