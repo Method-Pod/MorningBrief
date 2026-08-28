@@ -62,6 +62,40 @@ function autorizado(req: Request): boolean {
   return diferenca === 0;
 }
 
+/**
+ * Os usuários que têm dados a manter.
+ *
+ * Tenta a Admin API primeiro, que é o caminho direto. Se ela recusar a chave,
+ * deriva os ids das próprias tabelas.
+ *
+ * A reserva existe porque o Supabase trocou o formato das chaves privilegiadas
+ * (`service_role` virou `sb_secret_...`) e eu não tenho a chave para confirmar
+ * que a Admin API aceita o formato novo. Sem a reserva, uma recusa ali pararia
+ * toda a manutenção com um erro difícil de ligar à causa. Os ids das tabelas
+ * bastam: quem não tem nenhuma conta, demanda ou evento não tem o que manter.
+ */
+async function listarUsuarios(
+  supabase: ReturnType<typeof createServiceClient>
+): Promise<{ id: string; email?: string }[]> {
+  try {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 200,
+    });
+    if (!error && data?.users?.length)
+      return data.users.map((u) => ({ id: u.id, email: u.email ?? undefined }));
+  } catch {
+    /* cai na reserva abaixo */
+  }
+
+  const ids = new Set<string>();
+  for (const tabela of ["bills", "recurring_tasks", "events"]) {
+    const { data } = await supabase.from(tabela).select("user_id");
+    ((data as { user_id: string }[]) ?? []).forEach((r) => ids.add(r.user_id));
+  }
+  return [...ids].map((id) => ({ id }));
+}
+
 export async function GET(req: Request) {
   if (!autorizado(req))
     return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
@@ -85,16 +119,14 @@ export async function GET(req: Request) {
    * `userId` explícito em cada chamada, uma conta poderia receber a manutenção
    * calculada sobre os dados de outra.
    */
-  const { data: lista, error: erroUsuarios } =
-    await supabase.auth.admin.listUsers({ page: 1, perPage: 200 });
+  const usuarios = await listarUsuarios(supabase);
 
-  if (erroUsuarios)
+  if (!usuarios.length)
     return NextResponse.json(
-      { erro: `não foi possível listar os usuários: ${erroUsuarios.message}` },
+      { erro: "nenhum usuário encontrado — a chave de serviço está correta?" },
       { status: 500 }
     );
 
-  const usuarios = lista?.users ?? [];
   const relatorio: Record<string, unknown>[] = [];
 
   for (const u of usuarios) {
