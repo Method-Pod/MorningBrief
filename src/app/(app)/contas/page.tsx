@@ -19,7 +19,10 @@ import {
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { limparPagasDeMesesAnteriores } from "@/lib/limpeza";
+import {
+  limparPagasDeMesesAnteriores,
+  MESES_RETENCAO_PAGAS,
+} from "@/lib/limpeza";
 import { sugerirCategoria } from "@/lib/categoriaSugerida";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
@@ -808,11 +811,23 @@ export default function ContasPage() {
     return lista;
   }, [doMes]);
 
-  /** Últimos 12 meses, sempre sobre todas as contas — é tendência, não filtro. */
+  /**
+   * Doze pontos, sempre sobre todas as contas — é tendência, não filtro.
+   *
+   * Para trás vai só até onde a retenção guarda as pagas, e não um número fixo:
+   * olhar mais longe que a retenção mostraria meses zerados porque o dado foi
+   * apagado, não porque não houve gasto — o gráfico mentiria justamente na parte
+   * mais antiga. Com a retenção em doze meses, os doze pontos são todos passado.
+   *
+   * Se a retenção diminuir algum dia, o espaço que sobra vai para a frente, onde
+   * há dado real: parcelas e contas fixas já lançadas.
+   */
   const evolucao = React.useMemo<PontoMes[]>(() => {
     const hoje = new Date(todayISO() + "T00:00:00");
+    const atras = MESES_RETENCAO_PAGAS - 1;
+    const aFrente = 12 - MESES_RETENCAO_PAGAS;
     const pontos: PontoMes[] = [];
-    for (let i = 11; i >= 0; i--) {
+    for (let i = atras; i >= -aFrente; i--) {
       const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
       const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       pontos.push({
@@ -1158,7 +1173,13 @@ export default function ContasPage() {
       <Card className="mt-4">
         <Cabeca
           titulo="Evolução dos gastos"
-          sub="Últimos 12 meses, todas as contas"
+          sub={
+            12 - MESES_RETENCAO_PAGAS > 0
+              ? `${MESES_RETENCAO_PAGAS} meses para trás e ${
+                  12 - MESES_RETENCAO_PAGAS
+                } à frente, todas as contas`
+              : "Últimos 12 meses, todas as contas"
+          }
         />
         <div className="px-2 pb-4 pt-3">
           <EvolucaoMensal dados={evolucao} />

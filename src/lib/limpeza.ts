@@ -4,6 +4,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const HORAS_RETENCAO = 24;
 
 /**
+ * Meses que uma conta paga fica guardada, contando o mês atual.
+ *
+ * A primeira versão apagava no dia 1º do mês seguinte, o que esvaziava o
+ * gráfico de evolução — ele precisa do histórico para dizer qualquer coisa.
+ * Doze meses cobrem a janela inteira do gráfico e ainda impedem a tabela de
+ * crescer para sempre: em cada virada de mês, sai um mês e entra outro.
+ *
+ * A janela do gráfico é derivada deste número, e não fixada em paralelo. Assim
+ * nenhum mês pode aparecer vazio por construção — um mês zerado porque o dado
+ * foi apagado mentiria sobre o gasto — e mudar a retenção move as duas coisas
+ * juntas.
+ */
+export const MESES_RETENCAO_PAGAS = 12;
+
+/**
  * Apaga demandas concluídas há mais de 24 horas.
  *
  * Roda quando o Início é aberto, no mesmo momento em que as recorrências são
@@ -52,13 +67,11 @@ export async function limparConcluidas(
 }
 
 /**
- * Apaga contas pagas de meses anteriores.
+ * Apaga contas pagas com mais de seis meses.
  *
- * O efeito pedido é "no dia 1º do mês seguinte a conta paga sai": como não há
- * agendador, a regra é comparada por mês em cada abertura. Uma conta paga com
- * vencimento em agosto sobrevive todo o mês de agosto e desaparece na primeira
- * abertura de setembro — inclusive se o app ficar fechado até outubro, porque a
- * comparação é com o início do mês corrente e não com "ontem".
+ * A regra é comparada por mês a cada passada, e não por "ontem": uma conta paga
+ * de agosto sai quando o mês corrente chega a fevereiro, e sai igual se o app
+ * ficar fechado por meses — o corte é calculado a partir do mês atual.
  *
  * O critério é `due_date`, e não `paid_at`: o recorte da tela é por mês de
  * vencimento, e uma conta de agosto paga adiantada em julho pertence a agosto.
@@ -80,13 +93,27 @@ export async function limparPagasDeMesesAnteriores(
    * `hoje` pode vir de fora porque no servidor o relógio está em UTC.
    *
    * Sem isso, entre 21h e meia-noite em São Paulo o servidor já acha que é o dia
-   * seguinte, e na virada do mês apagaria as pagas algumas horas antes da hora.
+   * seguinte, e na virada do mês a limpeza aconteceria algumas horas adiantada.
    */
-  const hoje = opcoes.hoje ?? (() => {
-    const a = new Date();
-    return `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, "0")}-01`;
-  })();
-  const inicioDoMes = `${hoje.slice(0, 7)}-01`;
+  const hoje =
+    opcoes.hoje ??
+    (() => {
+      const a = new Date();
+      return `${a.getFullYear()}-${String(a.getMonth() + 1).padStart(2, "0")}-01`;
+    })();
+
+  /*
+   * Primeiro dia do mês mais antigo que fica.
+   *
+   * Com retenção de 6 e estando em fevereiro, o corte cai em setembro: setembro
+   * a fevereiro são os seis meses guardados, e agosto sai. O cálculo passa por
+   * Date para a virada de ano se resolver sozinha.
+   */
+  const [ano, mes] = hoje.split("-").map(Number);
+  const corte = new Date(ano, mes - 1 - (MESES_RETENCAO_PAGAS - 1), 1);
+  const inicioDoMes = `${corte.getFullYear()}-${String(
+    corte.getMonth() + 1
+  ).padStart(2, "0")}-01`;
 
   /* Mesma razão do userId em limparConcluidas: com a chave de serviço, sem o
      filtro explícito o delete alcançaria todos os usuários. */
