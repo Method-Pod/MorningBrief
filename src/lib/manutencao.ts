@@ -178,18 +178,21 @@ export async function reporRecorrentesPerdidas(
     const { data: ganhou } = await claim.select("id");
     if (!ganhou || !ganhou.length) continue;
 
-    const { error: erroInsert } = await supabase.from("tasks").insert(
-      datas.map((d) => ({
-        user_id: r.user_id,
-        title: r.title,
-        description: r.description,
-        client: r.client,
-        priority: r.priority,
-        status: "todo",
-        due_date: d,
-        origin_id: r.id,
-      }))
-    );
+    const { data: criadasAgora, error: erroInsert } = await supabase
+      .from("tasks")
+      .insert(
+        datas.map((d) => ({
+          user_id: r.user_id,
+          title: r.title,
+          description: r.description,
+          client: r.client,
+          priority: r.priority,
+          status: "todo",
+          due_date: d,
+          origin_id: r.id,
+        }))
+      )
+      .select("id");
 
     if (erroInsert) {
       /* 23505 = tasks_origin_day_uniq: a demanda daquele dia já existe. */
@@ -201,6 +204,28 @@ export async function reporRecorrentesPerdidas(
         .eq("id", r.id);
       continue;
     }
+
+    /*
+     * Cada ocorrência nasce com os itens do modelo, desmarcados.
+     *
+     * É o que faz o checklist valer a pena numa recorrente diária: os cinco
+     * cortes já estão lá toda manhã, sem ninguém digitar. Falha aqui não
+     * desfaz a demanda — ela existe e vale mais sem checklist do que não
+     * existir; e `checklist` é nulo em regra criada antes da migração.
+     */
+    const modelo = r.checklist ?? [];
+    if (modelo.length && criadasAgora?.length)
+      await supabase.from("task_items").insert(
+        (criadasAgora as { id: string }[]).flatMap((t) =>
+          modelo.map((title, i) => ({
+            user_id: r.user_id,
+            task_id: t.id,
+            title,
+            position: i,
+          }))
+        )
+      );
+
     criadas += datas.length;
   }
 

@@ -27,6 +27,8 @@ import {
   type Priority,
   type Task,
   type TaskStatus,
+
+  type TaskItem,
 } from "@/lib/types";
 import { dateBR, daysUntil, todayISO } from "@/lib/format";
 import { HORAS_RETENCAO } from "@/lib/limpeza";
@@ -46,6 +48,11 @@ import {
   useNotice,
   cx,
 } from "@/components/ui";
+import {
+  EditorChecklist,
+  ListaDeItens,
+  ProgressoChecklist,
+} from "@/components/Checklist";
 
 const COLUMNS: TaskStatus[] = ["todo", "doing", "review", "done"];
 const PRIORITIES: Priority[] = ["low", "medium", "high", "urgent"];
@@ -95,16 +102,35 @@ export default function DemandasPage() {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
   const [drag, setDrag] = React.useState<string | null>(null);
+  /* Itens de checklist agrupados por demanda. */
+  const [itens, setItens] = React.useState<Record<string, TaskItem[]>>({});
+  const [marcando, setMarcando] = React.useState<string | null>(null);
+  /* Títulos do checklist em edição: da demanda, ou o modelo da regra. */
+  const [checklist, setChecklist] = React.useState<string[]>([]);
   const today = todayISO();
   const confirm = useConfirm();
   const notice = useNotice();
 
   const load = React.useCallback(async () => {
-    const { data } = await supabase
-      .from("tasks")
-      .select("*")
-      .order("created_at", { ascending: false });
-    setRows((data as Task[]) ?? []);
+    /*
+     * As duas leituras em paralelo, e a dos itens tolerando falha.
+     *
+     * Se SUBTAREFAS.sql ainda não rodou, a consulta de task_items erra e o
+     * checklist simplesmente não aparece — o quadro continua funcionando. Um
+     * erro ali não pode derrubar a página inteira.
+     */
+    const [t, i] = await Promise.all([
+      supabase.from("tasks").select("*").order("created_at", { ascending: false }),
+      supabase.from("task_items").select("*").order("position"),
+    ]);
+
+    setRows((t.data as Task[]) ?? []);
+
+    const porDemanda: Record<string, TaskItem[]> = {};
+    ((i.data as TaskItem[]) ?? []).forEach((item) => {
+      (porDemanda[item.task_id] ??= []).push(item);
+    });
+    setItens(porDemanda);
     setLoading(false);
   }, [supabase]);
 
@@ -134,6 +160,7 @@ export default function DemandasPage() {
       weekdays: [new Date().getDay()] as number[],
       day_of_month: new Date().getDate(),
     });
+    setChecklist((itens[t.id] ?? []).map((i) => i.title));
     setErr("");
     setOpen(true);
   };
@@ -142,6 +169,23 @@ export default function DemandasPage() {
     e.preventDefault();
     setErr("");
     if (!form.title.trim()) return setErr("Informe o título da demanda.");
+
+    /*
+     * O campo Status é o outro caminho para "concluída", e vale a mesma regra.
+     *
+     * Aqui a checagem é sobre o checklist EM EDIÇÃO, não sobre o gravado: se a
+     * pessoa acabou de marcar tudo na tela, o gravado ainda está desatualizado.
+     */
+    if (form.status === "done" && checklist.length) {
+      const feitos = (itens[editing?.id ?? ""] ?? []).filter((i) => i.done).length;
+      if (feitos < checklist.length)
+        return setErr(
+          `Faltam ${checklist.length - feitos} ${
+            checklist.length - feitos === 1 ? "item" : "itens"
+          } do checklist. Marque tudo antes de concluir a demanda.`
+        );
+    }
+
     setBusy(true);
 
     const base = {
@@ -172,8 +216,18 @@ export default function DemandasPage() {
               : null,
         })
         .eq("id", editing.id);
+      if (error) {
+        setBusy(false);
+        return setErr(error.message);
+      }
+
+      const uidEdit = await currentUserId(supabase);
+      if (uidEdit && !(await salvarChecklist(editing.id, checklist, uidEdit))) {
+        setBusy(false);
+        return;
+      }
+
       setBusy(false);
-      if (error) return setErr(error.message);
       setOpen(false);
       return load();
     }
@@ -227,6 +281,9 @@ export default function DemandasPage() {
             : null,
           active: true,
           last_run_on: today,
+          /* O modelo só entra quando há itens: sem a migração, mandá-lo faria
+             toda recorrente falhar, inclusive as sem checklist. */
+          ...(checklist.length ? { checklist } : {}),
         })
         .select("id")
         .single();
@@ -238,38 +295,179 @@ export default function DemandasPage() {
           return setErr(
             "Vários dias da semana precisa de supabase/DIAS-DA-SEMANA.sql no banco. Rode o arquivo ou deixe um dia só marcado."
           );
+        if (ruleError && /checklist/.test(ruleError.message))
+          return setErr(
+            "Checklist precisa de supabase/SUBTAREFAS.sql no banco. Rode o arquivo ou deixe a lista vazia."
+          );
         return setErr(ruleError?.message ?? "Não foi possível criar a recorrência.");
       }
 
-      const { error: taskError } = await supabase.from("tasks").insert({
-        ...base,
-        user_id: uid,
-        status: "todo",
-        due_date: today,
-        origin_id: rule.id,
-      });
+      const { data: hoje1, error: taskError } = await supabase
+        .from("tasks")
+        .insert({
+          ...base,
+          user_id: uid,
+          status: "todo",
+          due_date: today,
+          origin_id: rule.id,
+        })
+        .select("id")
+        .single();
+
+      if (taskError) {
+        setBusy(false);
+        return setErr(taskError.message);
+      }
+
+      /* A ocorrência de hoje já nasce com os itens do modelo. */
+      if (hoje1 && checklist.length)
+        await supabase.from("task_items").insert(
+          checklist.map((title, i) => ({
+            user_id: uid,
+            task_id: hoje1.id,
+            title,
+            position: i,
+          }))
+        );
 
       setBusy(false);
-      if (taskError) return setErr(taskError.message);
       setOpen(false);
       return load();
     }
 
-    const { error } = await supabase.from("tasks").insert({
+    const { data: criada, error } = await supabase
+      .from("tasks")
+      .insert({
       ...base,
       user_id: uid,
       status: form.status,
       due_date: form.due_date || null,
       completed_at: form.status === "done" ? new Date().toISOString() : null,
-    });
+    })
+      .select("id")
+      .single();
     setBusy(false);
     if (error) return setErr(error.message);
+
+    if (criada && checklist.length)
+      await supabase.from("task_items").insert(
+        checklist.map((title, idx) => ({
+          user_id: uid,
+          task_id: criada.id,
+          title,
+          position: idx,
+        }))
+      );
+
     setOpen(false);
     load();
   };
 
-  const move = async (t: Task, status: TaskStatus) => {
-    if (t.status === status) return;
+  /**
+   * Grava o checklist de uma demanda, preservando o que já está marcado.
+   *
+   * Casa por posição em vez de apagar tudo e reinserir: recriar zeraria o
+   * `done` de itens já concluídos, e editar o título do item 3 apagaria o
+   * progresso dos outros quatro.
+   *
+   * Devolve false se falhou.
+   */
+  const salvarChecklist = async (taskId: string, titulos: string[], uid: string) => {
+    const atuais = itens[taskId] ?? [];
+    const limpos = titulos.map((t) => t.trim()).filter(Boolean);
+
+    const renomear = limpos
+      .slice(0, atuais.length)
+      .map((titulo, i) => ({ id: atuais[i].id, titulo }))
+      .filter((x, i) => atuais[i].title !== x.titulo);
+
+    const novos = limpos.slice(atuais.length).map((title, i) => ({
+      user_id: uid,
+      task_id: taskId,
+      title,
+      position: atuais.length + i,
+    }));
+
+    const sobrando = atuais.slice(limpos.length).map((i) => i.id);
+
+    const erros = await Promise.all([
+      ...renomear.map((x) =>
+        supabase.from("task_items").update({ title: x.titulo }).eq("id", x.id)
+      ),
+      novos.length
+        ? supabase.from("task_items").insert(novos)
+        : Promise.resolve({ error: null }),
+      sobrando.length
+        ? supabase.from("task_items").delete().in("id", sobrando)
+        : Promise.resolve({ error: null }),
+    ]);
+
+    const falhou = erros.find((r) => r && "error" in r && r.error);
+    if (falhou && "error" in falhou && falhou.error) {
+      /* PGRST205: SUBTAREFAS.sql ainda não rodou. */
+      setErr(
+        /task_items/.test(falhou.error.message)
+          ? "Checklist precisa de supabase/SUBTAREFAS.sql no banco. Rode o arquivo ou deixe a lista vazia."
+          : falhou.error.message
+      );
+      return false;
+    }
+    return true;
+  };
+
+  /**
+   * Quantos itens do checklist ainda faltam.
+   *
+   * Uma função só, usada por todos os caminhos que mudam status: o botão de
+   * avançar, o arrastar entre colunas e o campo Status do formulário. Se a
+   * regra morasse em um deles, os outros dois viravam porta dos fundos.
+   */
+  const faltamNoChecklist = (taskId: string) =>
+    (itens[taskId] ?? []).filter((i) => !i.done).length;
+
+  /**
+   * Marca ou desmarca um item, direto no cartão.
+   *
+   * Atualiza o estado local antes da resposta do banco: o ciclo diário é fazer
+   * um corte e marcar, e esperar a ida de rede a cada clique tornaria o
+   * checklist mais lento que o trabalho que ele acompanha.
+   */
+  const alternarItem = async (item: TaskItem) => {
+    const novo = !item.done;
+    setMarcando(item.id);
+    setItens((m) => ({
+      ...m,
+      [item.task_id]: (m[item.task_id] ?? []).map((i) =>
+        i.id === item.id ? { ...i, done: novo } : i
+      ),
+    }));
+    const { error } = await supabase
+      .from("task_items")
+      .update({ done: novo })
+      .eq("id", item.id);
+    setMarcando(null);
+    if (notice.check(error, "marcar o item")) load();
+  };
+
+  /** Marca todos os itens da demanda como feitos. */
+  const concluirItens = async (taskId: string) => {
+    const abertos = (itens[taskId] ?? []).filter((i) => !i.done);
+    if (!abertos.length) return true;
+    const { error } = await supabase
+      .from("task_items")
+      .update({ done: true })
+      .in("id", abertos.map((i) => i.id));
+    return !notice.check(error, "concluir os itens");
+  };
+
+  /**
+   * Grava a mudança de status. Sem regra nenhuma — a regra fica em `move`.
+   *
+   * Separado porque, depois de concluir os itens em massa, o estado local ainda
+   * está velho: chamar `move` de novo cairia na mesma verificação e abriria o
+   * aviso outra vez, em laço.
+   */
+  const aplicarStatus = async (t: Task, status: TaskStatus) => {
     setRows((r) => r.map((x) => (x.id === t.id ? { ...x, status } : x)));
     const { error } = await supabase
       .from("tasks")
@@ -280,6 +478,34 @@ export default function DemandasPage() {
       .eq("id", t.id);
     notice.check(error, "mover a demanda");
     load();
+  };
+
+  const move = async (t: Task, status: TaskStatus) => {
+    if (t.status === status) return;
+
+    /*
+     * Concluir exige o checklist inteiro feito.
+     *
+     * Em vez de só recusar, oferece o atalho: quem terminou os cinco cortes e
+     * não marcou nenhum quer concluir tudo, não voltar e clicar cinco vezes.
+     * Cancelar não muda nada.
+     */
+    const faltam = status === "done" ? faltamNoChecklist(t.id) : 0;
+    if (faltam > 0) {
+      confirm.ask(
+        `"${t.title}" tem ${faltam} ${
+          faltam === 1 ? "item" : "itens"
+        } do checklist em aberto. Concluir ${
+          faltam === 1 ? "ele" : "eles"
+        } e a demanda?`,
+        async () => {
+          if (await concluirItens(t.id)) await aplicarStatus(t, status);
+        }
+      );
+      return;
+    }
+
+    await aplicarStatus(t, status);
   };
 
   const remove = (t: Task) =>
@@ -448,6 +674,9 @@ export default function DemandasPage() {
                       <TaskCard
                         key={t.id}
                         t={t}
+                        itens={itens[t.id] ?? []}
+                        onAlternarItem={alternarItem}
+                        marcando={marcando}
                         onDragStart={() => setDrag(t.id)}
                         onEdit={() => startEdit(t)}
                         onDelete={() => remove(t)}
@@ -593,6 +822,17 @@ export default function DemandasPage() {
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Contexto, links, o que precisa ser entregue..."
             />
+          </Field>
+
+          <Field
+            label="Checklist"
+            hint={
+              form.recurring
+                ? "Vira o modelo da recorrência: cada dia nasce com estes itens desmarcados."
+                : "A demanda só vai para Concluída com todos marcados."
+            }
+          >
+            <EditorChecklist itens={checklist} onChange={setChecklist} />
           </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -824,17 +1064,24 @@ export default function DemandasPage() {
 
 function TaskCard({
   t,
+  itens,
+  onAlternarItem,
+  marcando,
   onDragStart,
   onEdit,
   onDelete,
   onAdvance,
 }: {
   t: Task;
+  itens: TaskItem[];
+  onAlternarItem: (i: TaskItem) => void;
+  marcando: string | null;
   onDragStart: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onAdvance: () => void;
 }) {
+  const feitos = itens.filter((i) => i.done).length;
   const late = t.status !== "done" && t.due_date && daysUntil(t.due_date) < 0;
   const isToday = t.due_date?.slice(0, 10) === todayISO();
 
@@ -884,6 +1131,24 @@ function TaskCard({
         <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-fg-mute">
           {t.description}
         </p>
+      )}
+
+      {/*
+        Checklist no próprio cartão, com o progresso acima.
+
+        Marcar é um clique, sem abrir modal e sem salvar: o ciclo real é fazer
+        um corte e riscar. Se exigisse editar a demanda, o checklist viraria
+        trabalho em vez de atalho.
+      */}
+      {itens.length > 0 && (
+        <div className="mt-2">
+          <ProgressoChecklist feitos={feitos} total={itens.length} />
+          <ListaDeItens
+            itens={itens}
+            onAlternar={onAlternarItem}
+            ocupado={marcando}
+          />
+        </div>
       )}
 
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">

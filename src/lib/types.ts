@@ -83,6 +83,11 @@ export type RecurringTask = {
    * regra semanal sem nenhum dia nunca dispararia, em silêncio.
    */
   weekdays: number[] | null;
+  /*
+   * Modelo do checklist: os títulos dos itens que cada ocorrência recebe.
+   * Ver supabase/SUBTAREFAS.sql. Nulo ou vazio = a demanda nasce sem checklist.
+   */
+  checklist: string[] | null;
   day_of_month: number | null;
   active: boolean;
   last_run_on: string | null;
@@ -119,6 +124,43 @@ export const EVENT_RECURRENCE_LABEL: Record<EventRecurrence, string> = {
   biweekly: "A cada 15 dias",
   monthly: "Todo mês",
 };
+
+/**
+ * Item de checklist de uma demanda.
+ *
+ * Não tem data nem prioridade de propósito: a unidade de trabalho continua
+ * sendo a demanda, e o item é só um pedaço contável dela. Dar data ao item
+ * criaria a pergunta "a demanda está atrasada ou só o item?".
+ */
+export type TaskItem = {
+  id: string;
+  user_id: string;
+  task_id: string;
+  title: string;
+  done: boolean;
+  position: number;
+  created_at: string;
+};
+
+/** Quantos itens estão feitos, para o rótulo "3/5" e a barra. */
+export const progressoDe = (itens: Pick<TaskItem, "done">[]) => ({
+  feitos: itens.filter((i) => i.done).length,
+  total: itens.length,
+});
+
+/**
+ * Gera títulos numerados a partir de um rótulo: "Thumb" e 5 viram
+ * "Thumb 1" ... "Thumb 5".
+ *
+ * Existe porque o caso real é lote de trabalho igual — cinco cortes para o
+ * mesmo canal — e digitar cinco linhas quase idênticas todo dia é a repetição
+ * que o app deveria tirar do caminho, não criar.
+ */
+export function itensNumerados(rotulo: string, quantos: number): string[] {
+  const base = rotulo.trim() || "Item";
+  const n = Math.max(1, Math.min(50, Math.floor(quantos) || 1));
+  return Array.from({ length: n }, (_, i) => `${base} ${i + 1}`);
+}
 
 export const PRIORITY_LABEL: Record<Priority, string> = {
   low: "Baixa",
