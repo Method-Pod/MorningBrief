@@ -165,17 +165,22 @@ export default function ContasPage() {
     setLoading(false);
   }, [supabase]);
 
-  /*
-   * Limpa as pagas de meses anteriores antes de listar.
-   *
-   * Em série, não em paralelo: rodando junto, a listagem poderia trazer as
-   * linhas que a limpeza está apagando e a tela mostraria por um instante
-   * contas que já saíram.
-   */
   React.useEffect(() => {
     (async () => {
-      await limparPagasDeMesesAnteriores(supabase);
-      load();
+      /*
+       * A listagem vem primeiro; a limpeza corre atrás.
+       *
+       * Ela ficava em série, antes do load, para a tela não exibir por um
+       * instante uma conta a caminho de ser apagada. Com a retenção em 12
+       * meses isso deixou de existir: o que ela apaga tem mais de um ano e não
+       * aparece no recorte de mês nenhum. O que sobrava era uma ida de rede
+       * inteira na frente da lista, na página mais pesada do app.
+       *
+       * Só relê se algo saiu de fato — o que, com o cron diário, é raro.
+       */
+      await load();
+      const apagadas = await limparPagasDeMesesAnteriores(supabase);
+      if (apagadas && apagadas > 0) load();
     })();
   }, [load, supabase]);
 

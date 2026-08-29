@@ -111,23 +111,31 @@ export default function HomePage() {
     let alive = true;
     (async () => {
       /*
-       * Limpeza em paralelo com a leitura, não antes dela.
+       * Só a leitura segura a primeira pintura.
        *
-       * Em série, a exclusão somava uma ida de rede à espera da primeira
-       * pintura. O motivo de vir antes era não exibir demanda a caminho de ser
-       * apagada; isso agora é resolvido no cliente, em `load`, que descarta
-       * localmente o que já passou da janela de 24h.
+       * A manutenção e a limpeza ficavam antes do `setLoading(false)`, e o
+       * comentário dizia "depois da primeira pintura" enquanto o código fazia o
+       * contrário: a tela de entrada esperava quatro rotinas, cada uma com suas
+       * próprias idas ao banco, antes de mostrar qualquer coisa.
+       *
+       * Nada aqui precisa bloquear: o que a limpeza vai apagar já é descartado
+       * localmente em `load`, e o que a manutenção cria aparece na releitura
+       * logo abaixo.
        */
-      const [apagadas] = await Promise.all([limparConcluidas(supabase), load()]);
+      await load();
+      if (!alive) return;
+      setLoading(false);
 
       /*
-       * Manutenção do dia, depois da primeira pintura.
+       * Manutenção do dia, agora de fato em segundo plano.
        *
-       * As duas rotinas vivem em lib/manutencao porque a rota do cron chama as
+       * As rotinas vivem em lib/manutencao porque a rota do cron chama as
        * mesmas: com o app fechado é o cron que roda, e ao abrir é a página —
        * quem chegar primeiro faz, e a outra passada não encontra nada a fazer.
+       * Com o cron diário no ar, quase sempre não há nada a fazer aqui.
        */
-      const [criadas, lancadas, eventos] = await Promise.all([
+      const [apagadas, criadas, lancadas, eventos] = await Promise.all([
+        limparConcluidas(supabase),
         reporRecorrentesPerdidas(supabase),
         lancarProximoMesDasFixas(supabase),
         estenderEventosRecorrentes(supabase),
@@ -137,7 +145,6 @@ export default function HomePage() {
       if ((criadas ?? 0) > 0) setGenerated(criadas ?? 0);
       if ((criadas ?? 0) > 0 || (lancadas ?? 0) > 0 || (eventos ?? 0) > 0)
         await load();
-      setLoading(false);
     })();
     return () => {
       alive = false;
