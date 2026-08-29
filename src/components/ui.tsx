@@ -379,15 +379,44 @@ export function Skeleton({ className }: { className?: string }) {
 
 /* ------------------------------ Confirm ------------------------------ */
 
+/**
+ * Confirmação. O texto do título e do botão são opcionais.
+ *
+ * Nasceu só para exclusão, com "Confirmar exclusão" e "Excluir" fixos. Quando
+ * a regra do checklist passou a usar a mesma caixa para CONCLUIR, o aviso dizia
+ * "Confirmar exclusão / Excluir" numa ação que não apaga nada — alarme falso na
+ * hora errada. Os rótulos agora acompanham a ação.
+ */
 export function useConfirm() {
   const [state, setState] = React.useState<{
     open: boolean;
     text: string;
+    titulo: string;
+    rotulo: string;
+    variante: "danger" | "primary";
     onYes: () => void;
-  }>({ open: false, text: "", onYes: () => {} });
+  }>({
+    open: false,
+    text: "",
+    titulo: "Confirmar exclusão",
+    rotulo: "Excluir",
+    variante: "danger",
+    onYes: () => {},
+  });
 
-  const ask = (text: string, onYes: () => void) =>
-    setState({ open: true, text, onYes });
+  const ask = (
+    text: string,
+    onYes: () => void,
+    opcoes?: { titulo?: string; rotulo?: string; variante?: "danger" | "primary" }
+  ) =>
+    setState({
+      open: true,
+      text,
+      titulo: opcoes?.titulo ?? "Confirmar exclusão",
+      rotulo: opcoes?.rotulo ?? "Excluir",
+      variante: opcoes?.variante ?? "danger",
+      onYes,
+    });
 
   const close = () => setState((s) => ({ ...s, open: false }));
 
@@ -395,18 +424,18 @@ export function useConfirm() {
     <Modal
       open={state.open}
       onClose={close}
-      title="Confirmar exclusão"
+      title={state.titulo}
       footer={
         <>
           <Button onClick={close}>Cancelar</Button>
           <Button
-            variant="danger"
+            variant={state.variante}
             onClick={() => {
               state.onYes();
               close();
             }}
           >
-            Excluir
+            {state.rotulo}
           </Button>
         </>
       }

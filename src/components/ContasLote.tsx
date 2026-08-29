@@ -136,10 +136,15 @@ export function ProgressoAbatida({ conta }: { conta: Bill }) {
 
   return (
     <div className="mt-1.5 w-full max-w-[280px]">
+      {/* Cresce por transform e não por width: largura recalcula layout a
+          cada quadro, scaleX roda no compositor. */}
       <div className="h-1.5 overflow-hidden rounded-full bg-ink-800">
         <div
-          className={cx("h-full rounded-full", falta === 0 ? "bg-pos" : "bg-warn")}
-          style={{ width: `${pct}%` }}
+          className={cx(
+            "h-full w-full origin-left rounded-full transition-transform duration-[280ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]",
+            falta === 0 ? "bg-pos" : "bg-warn"
+          )}
+          style={{ transform: `scaleX(${pct / 100})` }}
         />
       </div>
       <p className="mt-1 text-[10.5px] text-fg-mute tnum">

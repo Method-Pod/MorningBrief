@@ -167,8 +167,14 @@
    * de uma transição de página, não de um botão mudando de cor. Suavidade vem
    * da curva; o que dá sensação de lentidão é a duração.
    */
-  --default-transition-duration: 130ms;
-  --default-transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+  /*
+   * 130ms com curva dura lia como "seco", não como rápido: o olho registra o
+   * fim abrupto. 170ms com uma curva de saída mais macia parece mais fluido e
+   * continua imperceptível como espera — é cor e opacidade, que não custam
+   * layout, então o quadro extra não pesa.
+   */
+  --default-transition-duration: 170ms;
+  --default-transition-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 html,
@@ -267,7 +273,7 @@ textarea::placeholder {
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translate3d(0, 5px, 0);
+    transform: translate3d(0, 6px, 0);
   }
   to {
     opacity: 1;
@@ -275,8 +281,13 @@ textarea::placeholder {
   }
 }
 .rise {
-  /* 420ms era quase meio segundo antes de a página ficar legível */
-  animation: rise 0.19s cubic-bezier(0.32, 0.72, 0, 1) both;
+  /*
+   * 420ms era quase meio segundo antes de a página ficar legível; 190ms cortou
+   * a espera mas ficou brusco. 260ms com saída macia é o meio: o conteúdo já
+   * está legível desde o começo — a animação é de opacidade e deslocamento, e
+   * ambos partem de perto do destino.
+   */
+  animation: rise 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 /* O modal vive num portal no <body>, então o transform daqui não alcança
@@ -292,7 +303,9 @@ textarea::placeholder {
   }
 }
 .pop {
-  animation: pop 0.16s cubic-bezier(0.32, 0.72, 0, 1) both;
+  /* O modal aparece sobre um fundo escurecido, então um pouco mais de tempo
+     aqui é percebido como suavidade, não como demora. */
+  animation: pop 0.21s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 @keyframes fade {
@@ -304,7 +317,7 @@ textarea::placeholder {
   }
 }
 .fade {
-  animation: fade 0.12s ease-out both;
+  animation: fade 0.16s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

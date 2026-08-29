@@ -36,13 +36,20 @@ export function ProgressoChecklist({
       >
         {feitos}/{total}
       </span>
+      {/*
+        A barra cresce por transform, não por width.
+        
+        Animar largura força o navegador a recalcular layout a cada quadro.
+        scaleX roda no compositor, então desliza liso mesmo com vários cartões
+        na tela — e é justamente onde havia mais barras ao mesmo tempo.
+      */}
       <div className="h-1 min-w-[36px] flex-1 overflow-hidden rounded-full bg-ink-800">
         <div
           className={cx(
-            "h-full rounded-full transition-[width]",
+            "h-full w-full origin-left rounded-full transition-transform duration-[280ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]",
             completo ? "bg-pos" : "bg-brand-500"
           )}
-          style={{ width: `${pct}%` }}
+          style={{ transform: `scaleX(${pct / 100})` }}
         />
       </div>
     </div>
@@ -79,16 +86,25 @@ export function ListaDeItens({
             disabled={ocupado === i.id}
             className="group/i flex w-full items-center gap-2 py-1 text-left disabled:opacity-50"
           >
+            {/* O sinal entra com escala curta: dá resposta ao clique sem
+                atrasar nada, porque transform e opacity não custam layout. */}
             <span
               aria-hidden
               className={cx(
-                "grid h-[15px] w-[15px] shrink-0 place-items-center rounded-[5px] border transition-colors",
+                "grid h-[15px] w-[15px] shrink-0 place-items-center rounded-[5px] border transition-[background-color,border-color] duration-[180ms]",
                 i.done
                   ? "border-pos bg-pos text-white"
                   : "border-line bg-white group-hover/i:border-brand-400"
               )}
             >
-              {i.done && <Check size={10} strokeWidth={3.5} />}
+              <Check
+                size={10}
+                strokeWidth={3.5}
+                className={cx(
+                  "transition-[transform,opacity] duration-[180ms] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
+                  i.done ? "scale-100 opacity-100" : "scale-50 opacity-0"
+                )}
+              />
             </span>
             <span
               className={cx(

@@ -348,10 +348,13 @@ export default function HomePage() {
               </p>
               <span className="text-xs text-fg-mute">{m.pct}% do dia</span>
             </div>
+            {/* Cresce por transform e não por width: largura recalcula layout
+                a cada quadro, e esta barra fica no cartão de entrada, que é o
+                primeiro a ser pintado. */}
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-800">
               <div
-                className="h-full rounded-full bg-brand-500 transition-[width] duration-500"
-                style={{ width: `${m.pct}%` }}
+                className="h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-[420ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]"
+                style={{ transform: `scaleX(${m.pct / 100})` }}
               />
             </div>
 

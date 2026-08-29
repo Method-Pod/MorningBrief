@@ -500,6 +500,11 @@ export default function DemandasPage() {
         } e a demanda?`,
         async () => {
           if (await concluirItens(t.id)) await aplicarStatus(t, status);
+        },
+        {
+          titulo: "Concluir a demanda",
+          rotulo: "Concluir tudo",
+          variante: "primary",
         }
       );
       return;
