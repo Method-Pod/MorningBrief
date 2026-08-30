@@ -131,10 +131,19 @@ export function ListaDeItens({
 export function EditorChecklist({
   itens,
   onChange,
+  salvos = [],
+  onAlternar,
   rotuloVazio = "Nenhum item. Use o gerador abaixo ou adicione um a um.",
 }: {
   itens: string[];
   onChange: (itens: string[]) => void;
+  /*
+   * Os itens já gravados, na mesma ordem. Só eles podem ser marcados: um item
+   * recém-digitado ainda não existe no banco, e marcar algo que não foi salvo
+   * daria a impressão de progresso que se perde ao cancelar.
+   */
+  salvos?: TaskItem[];
+  onAlternar?: (item: TaskItem) => void;
   rotuloVazio?: string;
 }) {
   const [novo, setNovo] = React.useState("");
@@ -148,8 +157,14 @@ export function EditorChecklist({
     setNovo("");
   };
 
+  const feitos = salvos.filter((i) => i.done).length;
+
   return (
     <div className="flex flex-col gap-2.5">
+      {salvos.length > 0 && (
+        <ProgressoChecklist feitos={feitos} total={salvos.length} />
+      )}
+
       {/*
         Gerador numerado antes da lista: é o caminho comum.
 
@@ -199,15 +214,51 @@ export function EditorChecklist({
               key={i}
               className="flex items-center gap-2 border-b border-line-soft py-1.5 last:border-0"
             >
-              <span className="w-5 shrink-0 text-[11px] font-bold text-fg-mute tnum">
-                {i + 1}
-              </span>
+              {/*
+                A caixinha marca aqui também.
+                
+                Ela existia só no cartão do quadro, e a mesma lista aparecia
+                sem ela no formulário — quem abria para editar não tinha como
+                riscar um item. Duas caras para a mesma coisa.
+              */}
+              {salvos[i] && onAlternar ? (
+                <button
+                  type="button"
+                  onClick={() => onAlternar(salvos[i])}
+                  aria-label={`${salvos[i].done ? "Desmarcar" : "Marcar"} ${
+                    salvos[i].title
+                  }`}
+                  aria-pressed={salvos[i].done}
+                  className={cx(
+                    "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[6px] border transition-[background-color,border-color]",
+                    salvos[i].done
+                      ? "border-pos bg-pos text-white"
+                      : "border-line bg-white hover:border-brand-400"
+                  )}
+                >
+                  <Check
+                    size={11}
+                    strokeWidth={3.5}
+                    className={cx(
+                      "transition-[transform,opacity] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
+                      salvos[i].done ? "scale-100 opacity-100" : "scale-50 opacity-0"
+                    )}
+                  />
+                </button>
+              ) : (
+                <span className="w-[18px] shrink-0 text-center text-[11px] font-bold text-fg-mute tnum">
+                  {i + 1}
+                </span>
+              )}
               <Input
                 value={t}
                 onChange={(e) =>
                   onChange(itens.map((x, j) => (j === i ? e.target.value : x)))
                 }
-                className="h-9 flex-1 text-[12.5px]"
+                className={cx(
+                  "h-9 flex-1 text-[12.5px]",
+                  salvos[i]?.done && "text-fg-mute line-through"
+                )}
               />
               <button
                 type="button"

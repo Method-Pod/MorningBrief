@@ -837,7 +837,13 @@ export default function DemandasPage() {
                 : "A demanda só vai para Concluída com todos marcados."
             }
           >
-            <EditorChecklist itens={checklist} onChange={setChecklist} />
+            <EditorChecklist
+              itens={checklist}
+              onChange={setChecklist}
+              /* Só ao editar existe item gravado para marcar. */
+              salvos={editing ? (itens[editing.id] ?? []) : []}
+              onAlternar={alternarItem}
+            />
           </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
