@@ -124,6 +124,14 @@ export function ListaDeItens({
 /* --------------------------- editor no formulário --------------------------- */
 
 /**
+ * Item enquanto está sendo editado no formulário.
+ *
+ * `id` só existe em item já gravado — é o que permite preservar o `done` ao
+ * salvar em vez de recriar tudo.
+ */
+export type ItemEmEdicao = { id?: string; title: string; done: boolean };
+
+/**
  * Edita a lista de títulos. Serve tanto para a demanda quanto para o modelo da
  * regra recorrente, porque nos dois casos o que se edita é só uma lista de
  * textos — o que muda é onde ela é gravada.
@@ -131,19 +139,10 @@ export function ListaDeItens({
 export function EditorChecklist({
   itens,
   onChange,
-  salvos = [],
-  onAlternar,
   rotuloVazio = "Nenhum item. Use o gerador abaixo ou adicione um a um.",
 }: {
-  itens: string[];
-  onChange: (itens: string[]) => void;
-  /*
-   * Os itens já gravados, na mesma ordem. Só eles podem ser marcados: um item
-   * recém-digitado ainda não existe no banco, e marcar algo que não foi salvo
-   * daria a impressão de progresso que se perde ao cancelar.
-   */
-  salvos?: TaskItem[];
-  onAlternar?: (item: TaskItem) => void;
+  itens: ItemEmEdicao[];
+  onChange: (itens: ItemEmEdicao[]) => void;
   rotuloVazio?: string;
 }) {
   const [novo, setNovo] = React.useState("");
@@ -153,16 +152,16 @@ export function EditorChecklist({
   const adicionar = () => {
     const t = novo.trim();
     if (!t) return;
-    onChange([...itens, t]);
+    onChange([...itens, { title: t, done: false }]);
     setNovo("");
   };
 
-  const feitos = salvos.filter((i) => i.done).length;
+  const feitos = itens.filter((i) => i.done).length;
 
   return (
     <div className="flex flex-col gap-2.5">
-      {salvos.length > 0 && (
-        <ProgressoChecklist feitos={feitos} total={salvos.length} />
+      {itens.length > 0 && (
+        <ProgressoChecklist feitos={feitos} total={itens.length} />
       )}
 
       {/*
@@ -200,7 +199,15 @@ export function EditorChecklist({
         <Button
           type="button"
           size="sm"
-          onClick={() => onChange([...itens, ...itensNumerados(rotulo, quantos)])}
+          onClick={() =>
+            onChange([
+              ...itens,
+              ...itensNumerados(rotulo, quantos).map((title) => ({
+                title,
+                done: false,
+              })),
+            ])
+          }
         >
           <Wand2 size={14} />
           Gerar
@@ -209,55 +216,60 @@ export function EditorChecklist({
 
       {itens.length > 0 ? (
         <ul className="flex max-h-[34vh] flex-col overflow-y-auto">
-          {itens.map((t, i) => (
+          {itens.map((item, i) => (
             <li
               key={i}
               className="flex items-center gap-2 border-b border-line-soft py-1.5 last:border-0"
             >
               {/*
-                A caixinha marca aqui também.
+                Toda linha tem caixinha, gravada ou não.
                 
-                Ela existia só no cartão do quadro, e a mesma lista aparecia
-                sem ela no formulário — quem abria para editar não tinha como
-                riscar um item. Duas caras para a mesma coisa.
+                Antes só item já salvo ganhava caixinha, e quem acabava de gerar
+                cinco via "1 2 3 4 5" sem nada para marcar. Precisar salvar
+                primeiro é detalhe de implementação vazando para a tela.
+                
+                Marcar aqui vale ao Salvar, como todo o resto do formulário —
+                Cancelar descarta, que é o que Cancelar quer dizer. Para marcar
+                na hora existe a lista do cartão, no quadro.
               */}
-              {salvos[i] && onAlternar ? (
-                <button
-                  type="button"
-                  onClick={() => onAlternar(salvos[i])}
-                  aria-label={`${salvos[i].done ? "Desmarcar" : "Marcar"} ${
-                    salvos[i].title
-                  }`}
-                  aria-pressed={salvos[i].done}
+              <button
+                type="button"
+                onClick={() =>
+                  onChange(
+                    itens.map((x, j) => (j === i ? { ...x, done: !x.done } : x))
+                  )
+                }
+                aria-label={`${item.done ? "Desmarcar" : "Marcar"} ${item.title}`}
+                aria-pressed={item.done}
+                className={cx(
+                  "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[6px] border transition-[background-color,border-color]",
+                  item.done
+                    ? "border-pos bg-pos text-white"
+                    : "border-line bg-white hover:border-brand-400"
+                )}
+              >
+                <Check
+                  size={11}
+                  strokeWidth={3.5}
                   className={cx(
-                    "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[6px] border transition-[background-color,border-color]",
-                    salvos[i].done
-                      ? "border-pos bg-pos text-white"
-                      : "border-line bg-white hover:border-brand-400"
+                    "transition-[transform,opacity] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
+                    item.done ? "scale-100 opacity-100" : "scale-50 opacity-0"
                   )}
-                >
-                  <Check
-                    size={11}
-                    strokeWidth={3.5}
-                    className={cx(
-                      "transition-[transform,opacity] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
-                      salvos[i].done ? "scale-100 opacity-100" : "scale-50 opacity-0"
-                    )}
-                  />
-                </button>
-              ) : (
-                <span className="w-[18px] shrink-0 text-center text-[11px] font-bold text-fg-mute tnum">
-                  {i + 1}
-                </span>
-              )}
+                />
+              </button>
+
               <Input
-                value={t}
+                value={item.title}
                 onChange={(e) =>
-                  onChange(itens.map((x, j) => (j === i ? e.target.value : x)))
+                  onChange(
+                    itens.map((x, j) =>
+                      j === i ? { ...x, title: e.target.value } : x
+                    )
+                  )
                 }
                 className={cx(
                   "h-9 flex-1 text-[12.5px]",
-                  salvos[i]?.done && "text-fg-mute line-through"
+                  item.done && "text-fg-mute line-through"
                 )}
               />
               <button

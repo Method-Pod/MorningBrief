@@ -52,6 +52,7 @@ import {
   EditorChecklist,
   ListaDeItens,
   ProgressoChecklist,
+  type ItemEmEdicao,
 } from "@/components/Checklist";
 
 const COLUMNS: TaskStatus[] = ["todo", "doing", "review", "done"];
@@ -105,8 +106,8 @@ export default function DemandasPage() {
   /* Itens de checklist agrupados por demanda. */
   const [itens, setItens] = React.useState<Record<string, TaskItem[]>>({});
   const [marcando, setMarcando] = React.useState<string | null>(null);
-  /* Títulos do checklist em edição: da demanda, ou o modelo da regra. */
-  const [checklist, setChecklist] = React.useState<string[]>([]);
+  /* Checklist em edição: da demanda, ou o modelo da regra. */
+  const [checklist, setChecklist] = React.useState<ItemEmEdicao[]>([]);
   const today = todayISO();
   const confirm = useConfirm();
   const notice = useNotice();
@@ -160,7 +161,9 @@ export default function DemandasPage() {
       weekdays: [new Date().getDay()] as number[],
       day_of_month: new Date().getDate(),
     });
-    setChecklist((itens[t.id] ?? []).map((i) => i.title));
+    setChecklist(
+      (itens[t.id] ?? []).map((i) => ({ id: i.id, title: i.title, done: i.done }))
+    );
     setErr("");
     setOpen(true);
   };
@@ -177,11 +180,11 @@ export default function DemandasPage() {
      * pessoa acabou de marcar tudo na tela, o gravado ainda está desatualizado.
      */
     if (form.status === "done" && checklist.length) {
-      const feitos = (itens[editing?.id ?? ""] ?? []).filter((i) => i.done).length;
-      if (feitos < checklist.length)
+      const faltam = checklist.filter((i) => !i.done).length;
+      if (faltam > 0)
         return setErr(
-          `Faltam ${checklist.length - feitos} ${
-            checklist.length - feitos === 1 ? "item" : "itens"
+          `Faltam ${faltam} ${
+            faltam === 1 ? "item" : "itens"
           } do checklist. Marque tudo antes de concluir a demanda.`
         );
     }
@@ -283,7 +286,10 @@ export default function DemandasPage() {
           last_run_on: today,
           /* O modelo só entra quando há itens: sem a migração, mandá-lo faria
              toda recorrente falhar, inclusive as sem checklist. */
-          ...(checklist.length ? { checklist } : {}),
+          /* O modelo guarda só os títulos: cada ocorrência nasce desmarcada. */
+          ...(checklist.length
+            ? { checklist: checklist.map((i) => i.title) }
+            : {}),
         })
         .select("id")
         .single();
@@ -322,10 +328,11 @@ export default function DemandasPage() {
       /* A ocorrência de hoje já nasce com os itens do modelo. */
       if (hoje1 && checklist.length)
         await supabase.from("task_items").insert(
-          checklist.map((title, i) => ({
+          checklist.map((item, i) => ({
             user_id: uid,
             task_id: hoje1.id,
-            title,
+            title: item.title,
+            done: item.done,
             position: i,
           }))
         );
@@ -351,10 +358,11 @@ export default function DemandasPage() {
 
     if (criada && checklist.length)
       await supabase.from("task_items").insert(
-        checklist.map((title, idx) => ({
+        checklist.map((item, idx) => ({
           user_id: uid,
           task_id: criada.id,
-          title,
+          title: item.title,
+          done: item.done,
           position: idx,
         }))
       );
@@ -372,27 +380,39 @@ export default function DemandasPage() {
    *
    * Devolve false se falhou.
    */
-  const salvarChecklist = async (taskId: string, titulos: string[], uid: string) => {
+  const salvarChecklist = async (
+    taskId: string,
+    titulos: ItemEmEdicao[],
+    uid: string
+  ) => {
     const atuais = itens[taskId] ?? [];
-    const limpos = titulos.map((t) => t.trim()).filter(Boolean);
+    const limpos = titulos
+      .map((t) => ({ ...t, title: t.title.trim() }))
+      .filter((t) => t.title);
 
-    const renomear = limpos
+    const mudados = limpos
       .slice(0, atuais.length)
-      .map((titulo, i) => ({ id: atuais[i].id, titulo }))
-      .filter((x, i) => atuais[i].title !== x.titulo);
+      .map((item, i) => ({ id: atuais[i].id, item }))
+      .filter(
+        (x, i) => atuais[i].title !== x.item.title || atuais[i].done !== x.item.done
+      );
 
-    const novos = limpos.slice(atuais.length).map((title, i) => ({
+    const novos = limpos.slice(atuais.length).map((item, i) => ({
       user_id: uid,
       task_id: taskId,
-      title,
+      title: item.title,
+      done: item.done,
       position: atuais.length + i,
     }));
 
     const sobrando = atuais.slice(limpos.length).map((i) => i.id);
 
     const erros = await Promise.all([
-      ...renomear.map((x) =>
-        supabase.from("task_items").update({ title: x.titulo }).eq("id", x.id)
+      ...mudados.map((x) =>
+        supabase
+          .from("task_items")
+          .update({ title: x.item.title, done: x.item.done })
+          .eq("id", x.id)
       ),
       novos.length
         ? supabase.from("task_items").insert(novos)
@@ -837,13 +857,7 @@ export default function DemandasPage() {
                 : "A demanda só vai para Concluída com todos marcados."
             }
           >
-            <EditorChecklist
-              itens={checklist}
-              onChange={setChecklist}
-              /* Só ao editar existe item gravado para marcar. */
-              salvos={editing ? (itens[editing.id] ?? []) : []}
-              onAlternar={alternarItem}
-            />
+            <EditorChecklist itens={checklist} onChange={setChecklist} />
           </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
