@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Check, ListChecks, Plus, Trash2, Wand2 } from "lucide-react";
-import { itensNumerados, type TaskItem } from "@/lib/types";
+import { Check, ListChecks, Plus, Trash2 } from "lucide-react";
+import { type TaskItem } from "@/lib/types";
 import { Button, Input, cx } from "./ui";
 
 /* ------------------------------ progresso ------------------------------ */
@@ -139,15 +139,13 @@ export type ItemEmEdicao = { id?: string; title: string; done: boolean };
 export function EditorChecklist({
   itens,
   onChange,
-  rotuloVazio = "Nenhum item. Use o gerador abaixo ou adicione um a um.",
+  rotuloVazio = "Nenhum item. Adicione abaixo.",
 }: {
   itens: ItemEmEdicao[];
   onChange: (itens: ItemEmEdicao[]) => void;
   rotuloVazio?: string;
 }) {
   const [novo, setNovo] = React.useState("");
-  const [rotulo, setRotulo] = React.useState("Thumb");
-  const [quantos, setQuantos] = React.useState(5);
 
   const adicionar = () => {
     const t = novo.trim();
@@ -164,56 +162,6 @@ export function EditorChecklist({
         <ProgressoChecklist feitos={feitos} total={itens.length} />
       )}
 
-      {/*
-        Gerador numerado antes da lista: é o caminho comum.
-
-        O caso real é lote de trabalho igual — cinco cortes para o mesmo canal.
-        Digitar "Thumb 1", "Thumb 2"... até cinco é a repetição que o app
-        deveria tirar do caminho.
-      */}
-      <div className="flex flex-wrap items-end gap-2 rounded-[14px] bg-ink-800 p-2.5">
-        <label className="min-w-0 flex-1">
-          <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-fg-mute">
-            Gerar numerados
-          </span>
-          <Input
-            value={rotulo}
-            onChange={(e) => setRotulo(e.target.value)}
-            placeholder="Thumb"
-            className="h-9"
-          />
-        </label>
-        <label className="w-[72px] shrink-0">
-          <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-fg-mute">
-            Quantos
-          </span>
-          <Input
-            type="number"
-            min={1}
-            max={50}
-            value={quantos}
-            onChange={(e) => setQuantos(Number(e.target.value))}
-            className="h-9"
-          />
-        </label>
-        <Button
-          type="button"
-          size="sm"
-          onClick={() =>
-            onChange([
-              ...itens,
-              ...itensNumerados(rotulo, quantos).map((title) => ({
-                title,
-                done: false,
-              })),
-            ])
-          }
-        >
-          <Wand2 size={14} />
-          Gerar
-        </Button>
-      </div>
-
       {itens.length > 0 ? (
         <ul className="flex max-h-[34vh] flex-col overflow-y-auto">
           {itens.map((item, i) => (
@@ -222,12 +170,9 @@ export function EditorChecklist({
               className="flex items-center gap-2 border-b border-line-soft py-1.5 last:border-0"
             >
               {/*
-                Toda linha tem caixinha, gravada ou não.
-                
-                Antes só item já salvo ganhava caixinha, e quem acabava de gerar
-                cinco via "1 2 3 4 5" sem nada para marcar. Precisar salvar
-                primeiro é detalhe de implementação vazando para a tela.
-                
+                Toda linha tem caixinha, gravada ou não — precisar salvar antes
+                de poder marcar é detalhe de implementação vazando para a tela.
+
                 Marcar aqui vale ao Salvar, como todo o resto do formulário —
                 Cancelar descarta, que é o que Cancelar quer dizer. Para marcar
                 na hora existe a lista do cartão, no quadro.

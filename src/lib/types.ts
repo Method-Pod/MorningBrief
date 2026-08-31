@@ -148,20 +148,6 @@ export const progressoDe = (itens: Pick<TaskItem, "done">[]) => ({
   total: itens.length,
 });
 
-/**
- * Gera títulos numerados a partir de um rótulo: "Thumb" e 5 viram
- * "Thumb 1" ... "Thumb 5".
- *
- * Existe porque o caso real é lote de trabalho igual — cinco cortes para o
- * mesmo canal — e digitar cinco linhas quase idênticas todo dia é a repetição
- * que o app deveria tirar do caminho, não criar.
- */
-export function itensNumerados(rotulo: string, quantos: number): string[] {
-  const base = rotulo.trim() || "Item";
-  const n = Math.max(1, Math.min(50, Math.floor(quantos) || 1));
-  return Array.from({ length: n }, (_, i) => `${base} ${i + 1}`);
-}
-
 export const PRIORITY_LABEL: Record<Priority, string> = {
   low: "Baixa",
   medium: "Média",
