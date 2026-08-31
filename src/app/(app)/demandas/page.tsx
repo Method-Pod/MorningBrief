@@ -142,6 +142,9 @@ export default function DemandasPage() {
   const startNew = (status: TaskStatus = "todo") => {
     setEditing(null);
     setForm({ ...blank(), status });
+    // O checklist mora fora de `form`, entao `blank()` nao o alcanca: sem esta
+    // linha a lista da demanda anterior reaparecia na demanda nova.
+    setChecklist([]);
     setErr("");
     setOpen(true);
   };
