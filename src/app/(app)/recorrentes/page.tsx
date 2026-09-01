@@ -24,7 +24,7 @@ import {
   type Priority,
   type RecurringTask,
 } from "@/lib/types";
-import { dateBR, todayISO } from "@/lib/format";
+import { dateBR, normalizarLink, todayISO } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import {
   Badge,
@@ -56,6 +56,7 @@ const blank = () => ({
   title: "",
   description: "",
   client: "",
+  link: "",
   priority: "medium" as Priority,
   frequency: "weekly" as Frequency,
   weekday: 1,
@@ -98,6 +99,7 @@ export default function RecorrentesPage() {
       title: r.title,
       description: r.description,
       client: r.client,
+      link: r.link ?? "",
       priority: r.priority,
       frequency: r.frequency,
       weekday: r.weekday ?? 1,
@@ -124,6 +126,10 @@ export default function RecorrentesPage() {
       title: form.title.trim(),
       description: form.description.trim(),
       client: form.client.trim(),
+      /* Sempre presente, inclusive nulo: apagar o campo na tela tem que apagar
+         no banco. Se a coluna não existe, a mensagem de erro abaixo diz qual
+         arquivo rodar. */
+      link: normalizarLink(form.link) || null,
       priority: form.priority,
       frequency: form.frequency,
       /* No semanal, `weekday` guarda o primeiro dia marcado — é o que mantém a
@@ -161,6 +167,10 @@ export default function RecorrentesPage() {
     }
     setBusy(false);
     if (error) {
+      if (/link/.test(error.message))
+        return setErr(
+          "Link precisa de supabase/LINK-NA-DEMANDA.sql no banco. Rode o arquivo ou deixe o campo vazio."
+        );
       /* PGRST204/42703: a coluna de vários dias não existe no banco ainda. */
       if (/weekdays/.test(error.message))
         return setErr(
@@ -197,6 +207,7 @@ export default function RecorrentesPage() {
       status: "todo",
       due_date: today,
       origin_id: r.id,
+      ...(r.link ? { link: r.link } : {}),
     });
     if (error) return notice.show(`Não foi possível gerar a demanda: ${error.message}`);
     await supabase
@@ -434,6 +445,19 @@ export default function RecorrentesPage() {
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
               placeholder="Relatório semanal de performance"
+            />
+          </Field>
+
+          <Field
+            label="Link do material"
+            hint="Cada demanda gerada nasce com ele."
+          >
+            <Input
+              type="url"
+              inputMode="url"
+              value={form.link}
+              onChange={(e) => setForm({ ...form, link: e.target.value })}
+              placeholder="drive.google.com/..."
             />
           </Field>
 

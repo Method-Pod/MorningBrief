@@ -190,6 +190,10 @@ export async function reporRecorrentesPerdidas(
           status: "todo",
           due_date: d,
           origin_id: r.id,
+          /* Só quando existe: numa base sem LINK-NA-DEMANDA.sql, mandar a
+             coluna derrubaria toda a geração automática — inclusive das
+             regras que não têm link. */
+          ...(r.link ? { link: r.link } : {}),
         }))
       )
       .select("id");

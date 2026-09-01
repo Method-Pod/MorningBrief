@@ -11,6 +11,7 @@ import {
   ListChecks,
   Pencil,
   Plus,
+  Link2,
   Repeat2,
   Search,
   Trash2,
@@ -30,7 +31,13 @@ import {
 
   type TaskItem,
 } from "@/lib/types";
-import { dateBR, daysUntil, todayISO } from "@/lib/format";
+import {
+  dateBR,
+  daysUntil,
+  normalizarLink,
+  rotuloDeLink,
+  todayISO,
+} from "@/lib/format";
 import { HORAS_RETENCAO } from "@/lib/limpeza";
 import { frequencyDescription } from "@/lib/recurring";
 import {
@@ -56,6 +63,16 @@ import {
 } from "@/components/Checklist";
 
 const COLUMNS: TaskStatus[] = ["todo", "doing", "review", "done"];
+
+/*
+ * Chave do grupo de quem não tem cliente.
+ *
+ * String vazia não serve como valor de <option>: o navegador a trata como
+ * "nada selecionado" e o filtro voltaria sozinho para Todos. Daí uma sentinela
+ * — em texto comum, porque byte nulo em atributo do DOM é terreno que alguns
+ * navegadores limpam sem avisar.
+ */
+const SEM_CLIENTE = "::sem-cliente::";
 const PRIORITIES: Priority[] = ["low", "medium", "high", "urgent"];
 const RANK: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
@@ -79,6 +96,7 @@ const blank = () => ({
   title: "",
   description: "",
   client: "",
+  link: "",
   priority: "medium" as Priority,
   status: "todo" as TaskStatus,
   due_date: "",
@@ -94,9 +112,10 @@ export default function DemandasPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = React.useState<Task[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [view, setView] = React.useState<"board" | "list">("board");
+  const [view, setView] = React.useState<"board" | "list" | "cliente">("board");
   const [q, setQ] = React.useState("");
   const [prio, setPrio] = React.useState<"all" | Priority>("all");
+  const [cliente, setCliente] = React.useState<"all" | string>("all");
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Task | null>(null);
   const [form, setForm] = React.useState(blank());
@@ -155,6 +174,7 @@ export default function DemandasPage() {
       title: t.title,
       description: t.description,
       client: t.client,
+      link: t.link ?? "",
       priority: t.priority,
       status: t.status,
       due_date: t.due_date?.slice(0, 10) ?? "",
@@ -194,6 +214,8 @@ export default function DemandasPage() {
 
     setBusy(true);
 
+    const link = normalizarLink(form.link);
+
     const base = {
       title: form.title.trim(),
       description: form.description.trim(),
@@ -201,12 +223,19 @@ export default function DemandasPage() {
       priority: form.priority,
     };
 
+    /*
+     * O link entra na criação só quando existe.
+     *
+     * Mandá-lo sempre faria toda demanda falhar numa base onde
+     * LINK-NA-DEMANDA.sql ainda não rodou — inclusive as sem link, que
+     * funcionam sem a coluna. Mesma escolha de `weekdays` e `checklist`.
+     */
+    const comLink = link ? { link } : {};
+
     if (editing) {
-      const { error } = await supabase
-        .from("tasks")
-        .update({
-          ...base,
-          status: form.status,
+      const mudanca = {
+        ...base,
+        status: form.status,
           due_date: form.due_date || null,
           /*
            * Preserva a conclusão original.
@@ -216,12 +245,36 @@ export default function DemandasPage() {
            * janela de 24h da limpeza reiniciava, e editar de vez em quando
            * mantinha a demanda viva para sempre.
            */
-          completed_at:
-            form.status === "done"
-              ? (editing.completed_at ?? new Date().toISOString())
-              : null,
-        })
+        completed_at:
+          form.status === "done"
+            ? (editing.completed_at ?? new Date().toISOString())
+            : null,
+      };
+
+      /*
+       * Aqui o link vai sempre, inclusive vazio.
+       *
+       * Na criação basta omitir, mas na edição omitir significa "não mexe": sem
+       * gravar nulo, apagar o campo na tela não apagaria nada no banco. Se a
+       * coluna ainda não existe, a segunda tentativa salva o resto — editar
+       * uma demanda não pode depender de uma migração pendente.
+       */
+      let { error } = await supabase
+        .from("tasks")
+        .update({ ...mudanca, link: link || null })
         .eq("id", editing.id);
+
+      if (error && /link/.test(error.message)) {
+        ({ error } = await supabase
+          .from("tasks")
+          .update(mudanca)
+          .eq("id", editing.id));
+        if (!error && link)
+          notice.show(
+            "Demanda salva, mas o link não: rode supabase/LINK-NA-DEMANDA.sql no banco."
+          );
+      }
+
       if (error) {
         setBusy(false);
         return setErr(error.message);
@@ -259,6 +312,7 @@ export default function DemandasPage() {
         .from("recurring_tasks")
         .insert({
           ...base,
+          ...comLink,
           user_id: uid,
           frequency: form.frequency,
           /*
@@ -308,6 +362,10 @@ export default function DemandasPage() {
           return setErr(
             "Checklist precisa de supabase/SUBTAREFAS.sql no banco. Rode o arquivo ou deixe a lista vazia."
           );
+        if (ruleError && /link/.test(ruleError.message))
+          return setErr(
+            "Link precisa de supabase/LINK-NA-DEMANDA.sql no banco. Rode o arquivo ou deixe o campo vazio."
+          );
         return setErr(ruleError?.message ?? "Não foi possível criar a recorrência.");
       }
 
@@ -315,6 +373,7 @@ export default function DemandasPage() {
         .from("tasks")
         .insert({
           ...base,
+          ...comLink,
           user_id: uid,
           status: "todo",
           due_date: today,
@@ -349,6 +408,7 @@ export default function DemandasPage() {
       .from("tasks")
       .insert({
       ...base,
+      ...comLink,
       user_id: uid,
       status: form.status,
       due_date: form.due_date || null,
@@ -549,6 +609,9 @@ export default function DemandasPage() {
     return rows
       .filter((t) => prio === "all" || t.priority === prio)
       .filter(
+        (t) => cliente === "all" || (t.client || SEM_CLIENTE) === cliente
+      )
+      .filter(
         (t) =>
           !term ||
           t.title.toLowerCase().includes(term) ||
@@ -560,9 +623,53 @@ export default function DemandasPage() {
           return RANK[a.priority] - RANK[b.priority];
         return (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999");
       });
-  }, [rows, q, prio]);
+  }, [rows, q, prio, cliente]);
 
   const byStatus = (s: TaskStatus) => filtered.filter((t) => t.status === s);
+
+  /**
+   * Os clientes que existem, com quanto cada um tem em aberto.
+   *
+   * Contado sobre `rows` e não sobre `filtered`: o número ao lado do nome
+   * precisa dizer o tamanho real do cliente, não o resultado do filtro atual —
+   * senão escolher um cliente zeraria a contagem de todos os outros.
+   */
+  const clientes = React.useMemo(() => {
+    const m = new Map<string, { nome: string; abertas: number; atrasadas: number }>();
+    rows.forEach((t) => {
+      const chave = t.client || SEM_CLIENTE;
+      const g =
+        m.get(chave) ??
+        { nome: t.client || "Sem cliente", abertas: 0, atrasadas: 0 };
+      if (t.status !== "done") {
+        g.abertas++;
+        if (t.due_date && daysUntil(t.due_date) < 0) g.atrasadas++;
+      }
+      m.set(chave, g);
+    });
+    return [...m.entries()]
+      .map(([chave, g]) => ({ chave, ...g }))
+      /* Quem tem mais em aberto primeiro; "Sem cliente" sempre por último,
+         porque é o balaio, não um cliente. */
+      .sort((a, b) => {
+        if ((a.chave === SEM_CLIENTE) !== (b.chave === SEM_CLIENTE))
+          return a.chave === SEM_CLIENTE ? 1 : -1;
+        if (a.abertas !== b.abertas) return b.abertas - a.abertas;
+        return a.nome.localeCompare(b.nome, "pt-BR");
+      });
+  }, [rows]);
+
+  /* As demandas já filtradas, agrupadas para a visão por cliente. */
+  const grupos = React.useMemo(
+    () =>
+      clientes
+        .map((c) => ({
+          ...c,
+          tarefas: filtered.filter((t) => (t.client || SEM_CLIENTE) === c.chave),
+        }))
+        .filter((g) => g.tarefas.length > 0),
+    [clientes, filtered]
+  );
   const openCount = rows.filter((t) => t.status !== "done").length;
   const lateCount = rows.filter(
     (t) => t.status !== "done" && t.due_date && daysUntil(t.due_date) < 0
@@ -609,6 +716,7 @@ export default function DemandasPage() {
           options={[
             { value: "board", label: "Quadro" },
             { value: "list", label: "Lista" },
+            { value: "cliente", label: "Por cliente" },
           ]}
         />
         <Segmented
@@ -619,6 +727,25 @@ export default function DemandasPage() {
             ...PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] })),
           ]}
         />
+        {/* Dropdown e não Segmented: cliente é lista aberta — com seis canais
+            os botões já quebrariam a linha dos filtros. O número é o que está
+            em aberto, que é a pergunta real ("o que devo pro canal X"). */}
+        {clientes.length > 1 && (
+          <Select
+            value={cliente}
+            onChange={(e) => setCliente(e.target.value)}
+            className="w-full sm:w-[200px]"
+            aria-label="Filtrar por cliente"
+          >
+            <option value="all">Todos os clientes</option>
+            {clientes.map((c) => (
+              <option key={c.chave} value={c.chave}>
+                {c.nome} ({c.abertas})
+              </option>
+            ))}
+          </Select>
+        )}
+
         <div className="relative ml-auto w-full sm:w-64">
           <Search
             size={14}
@@ -712,6 +839,7 @@ export default function DemandasPage() {
                           const i = COLUMNS.indexOf(t.status);
                           if (i < COLUMNS.length - 1) move(t, COLUMNS[i + 1]);
                         }}
+                        onClient={setCliente}
                       />
                     ))
                   )}
@@ -720,6 +848,155 @@ export default function DemandasPage() {
             );
           })}
         </div>
+      ) : view === "cliente" ? (
+        /* --------------------------- por cliente --------------------------- */
+        /*
+         * Um bloco por canal, o que tem mais em aberto primeiro.
+         *
+         * O quadro responde "em que pé está cada demanda". Esta visão responde
+         * outra pergunta — "o que eu devo pro canal X" — e por isso agrupa por
+         * cliente e mostra o status como campo, não como coluna.
+         */
+        grupos.length === 0 ? (
+          <Card>
+            <Empty
+              icon={<Building2 size={18} />}
+              title="Nada com esse filtro"
+              sub="Ajuste a busca, a prioridade ou o cliente."
+            />
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {grupos.map((g) => (
+              <Card key={g.chave} className="overflow-hidden">
+                <div className="flex flex-wrap items-center gap-2 border-b border-line-soft px-5 py-3">
+                  <Building2 size={14} className="text-fg-mute" />
+                  <h2 className="text-[13.5px] font-semibold">{g.nome}</h2>
+                  <span className="text-[11px] text-fg-mute tnum">
+                    {g.abertas} aberta{g.abertas === 1 ? "" : "s"}
+                  </span>
+                  {g.atrasadas > 0 && (
+                    <Badge tone="neg">
+                      {g.atrasadas} atrasada{g.atrasadas === 1 ? "" : "s"}
+                    </Badge>
+                  )}
+                  {g.chave !== SEM_CLIENTE && cliente === "all" && (
+                    <button
+                      type="button"
+                      onClick={() => setCliente(g.chave)}
+                      className="ml-auto text-[11px] text-fg-mute transition-colors hover:text-brand-400"
+                    >
+                      ver só este
+                    </button>
+                  )}
+                </div>
+
+                <ul className="divide-y divide-line-soft/60">
+                  {g.tarefas.map((t) => {
+                    const doChecklist = itens[t.id] ?? [];
+                    const late =
+                      t.status !== "done" &&
+                      t.due_date &&
+                      daysUntil(t.due_date) < 0;
+                    return (
+                      <li
+                        key={t.id}
+                        className="group flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-3 transition-colors hover:bg-ink-800/40"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className={cx(
+                              "truncate text-[13px] font-medium",
+                              t.status === "done" && "text-fg-mute line-through"
+                            )}
+                          >
+                            {t.title}
+                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            <Badge tone={TONE[t.priority]}>
+                              {PRIORITY_LABEL[t.priority]}
+                            </Badge>
+                            {t.origin_id && (
+                              <Badge tone="violet">
+                                <Repeat2 size={10} />
+                                recorrente
+                              </Badge>
+                            )}
+                            {doChecklist.length > 0 && (
+                              <ProgressoChecklist
+                                feitos={doChecklist.filter((i) => i.done).length}
+                                total={doChecklist.length}
+                                className="w-[86px]"
+                              />
+                            )}
+                            {t.link && (
+                              <a
+                                href={normalizarLink(t.link)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={t.link}
+                                className="inline-flex items-center gap-1 text-[10.5px] text-brand-400 hover:underline"
+                              >
+                                <Link2 size={10} />
+                                {rotuloDeLink(t.link)}
+                              </a>
+                            )}
+                            {t.due_date && (
+                              <span
+                                className={cx(
+                                  "inline-flex items-center gap-1 text-[10.5px] tnum",
+                                  late ? "text-neg" : "text-fg-mute"
+                                )}
+                              >
+                                {late ? (
+                                  <AlertCircle size={10} />
+                                ) : (
+                                  <CalendarDays size={10} />
+                                )}
+                                {dateBR(t.due_date)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <Select
+                          value={t.status}
+                          onChange={(e) =>
+                            move(t, e.target.value as TaskStatus)
+                          }
+                          className="h-8 w-[130px] shrink-0 text-xs"
+                        >
+                          {COLUMNS.map((c) => (
+                            <option key={c} value={c}>
+                              {STATUS_LABEL[c]}
+                            </option>
+                          ))}
+                        </Select>
+
+                        <div className="flex shrink-0 items-center gap-1 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                          <button
+                            onClick={() => startEdit(t)}
+                            aria-label="Editar"
+                            className="rounded-lg p-1.5 text-fg-mute hover:bg-ink-750 hover:text-fg"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            onClick={() => remove(t)}
+                            aria-label="Excluir"
+                            className="rounded-lg p-1.5 text-fg-mute hover:bg-neg/15 hover:text-neg"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+            ))}
+          </div>
+        )
       ) : (
         /* ------------------------------ lista ------------------------------ */
         <Card className="overflow-hidden">
@@ -755,9 +1032,32 @@ export default function DemandasPage() {
                           {t.description}
                         </p>
                       )}
+                      {t.link && (
+                        <a
+                          href={normalizarLink(t.link)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={t.link}
+                          className="mt-0.5 inline-flex max-w-[280px] items-center gap-1 text-[11px] text-brand-400 hover:underline"
+                        >
+                          <Link2 size={10} className="shrink-0" />
+                          <span className="truncate">{rotuloDeLink(t.link)}</span>
+                        </a>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-xs text-fg-dim">
-                      {t.client || "—"}
+                      {t.client ? (
+                        <button
+                          type="button"
+                          onClick={() => setCliente(t.client)}
+                          title={`Ver só ${t.client}`}
+                          className="rounded px-1 py-0.5 transition-colors hover:bg-ink-750 hover:text-brand-400"
+                        >
+                          {t.client}
+                        </button>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="px-3 py-3">
                       <Badge tone={TONE[t.priority]}>
@@ -849,6 +1149,19 @@ export default function DemandasPage() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               placeholder="Contexto, links, o que precisa ser entregue..."
+            />
+          </Field>
+
+          <Field
+            label="Link do material"
+            hint="Vídeo bruto, pasta do Drive, referência. Abre em outra aba."
+          >
+            <Input
+              type="url"
+              inputMode="url"
+              value={form.link}
+              onChange={(e) => setForm({ ...form, link: e.target.value })}
+              placeholder="drive.google.com/..."
             />
           </Field>
 
@@ -1099,6 +1412,7 @@ function TaskCard({
   onEdit,
   onDelete,
   onAdvance,
+  onClient,
 }: {
   t: Task;
   itens: TaskItem[];
@@ -1108,6 +1422,7 @@ function TaskCard({
   onEdit: () => void;
   onDelete: () => void;
   onAdvance: () => void;
+  onClient: (c: string) => void;
 }) {
   const feitos = itens.filter((i) => i.done).length;
   const late = t.status !== "done" && t.due_date && daysUntil(t.due_date) < 0;
@@ -1188,10 +1503,33 @@ function TaskCard({
           </Badge>
         )}
         {t.client && (
-          <span className="inline-flex items-center gap-1 text-[10px] text-fg-mute">
+          <button
+            type="button"
+            onClick={() => onClient(t.client)}
+            title={`Ver só ${t.client}`}
+            className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10px] text-fg-mute transition-colors hover:bg-ink-750 hover:text-brand-400"
+          >
             <Building2 size={9} />
             {t.client}
-          </span>
+          </button>
+        )}
+        {/* O link é âncora de verdade, não um onClick: abrir em aba nova,
+            copiar o endereço e o meio do botão do mouse precisam funcionar.
+            `draggable={false}` porque o cartão inteiro arrasta, e sem isso o
+            arrasto do link disputava com o de mover a demanda. */}
+        {t.link && (
+          <a
+            href={normalizarLink(t.link)}
+            target="_blank"
+            rel="noopener noreferrer"
+            draggable={false}
+            onClick={(e) => e.stopPropagation()}
+            title={t.link}
+            className="inline-flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 text-[10px] text-brand-400 transition-colors hover:bg-ink-750 hover:underline"
+          >
+            <Link2 size={9} className="shrink-0" />
+            <span className="truncate">{rotuloDeLink(t.link)}</span>
+          </a>
         )}
         {t.due_date && (
           <span

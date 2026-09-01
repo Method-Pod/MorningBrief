@@ -137,3 +137,31 @@ export const semanaDe = (iso: string, semanas = 0) => {
     )}-${String(x.getDate()).padStart(2, "0")}`;
   });
 };
+
+/* ------------------------------ links ------------------------------ */
+
+/**
+ * Deixa o que foi digitado em forma de endereço navegável.
+ *
+ * Colar "drive.google.com/..." é o normal — ninguém digita o esquema. Sem isso
+ * o href vira relativo e o clique navega para dentro do próprio app.
+ */
+export const normalizarLink = (v: string) => {
+  const t = v.trim();
+  if (!t) return "";
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
+};
+
+/**
+ * Nome curto para exibir no lugar da URL inteira.
+ *
+ * O cartão tem largura de coluna de quadro: uma URL de Drive ocuparia três
+ * linhas e não diria mais do que "drive.google.com".
+ */
+export const rotuloDeLink = (v: string) => {
+  try {
+    return new URL(normalizarLink(v)).hostname.replace(/^www\./, "");
+  } catch {
+    return v.trim().slice(0, 28);
+  }
+};

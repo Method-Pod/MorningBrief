@@ -60,6 +60,8 @@ export type Task = {
   priority: Priority;
   status: TaskStatus;
   due_date: string | null;
+  /* Endereço do material da demanda. Nulo em base sem LINK-NA-DEMANDA.sql. */
+  link: string | null;
   origin_id: string | null;
   created_at: string;
   completed_at: string | null;
@@ -72,6 +74,8 @@ export type RecurringTask = {
   description: string;
   client: string;
   priority: Priority;
+  /* Link do modelo: cada ocorrência nasce com ele. */
+  link: string | null;
   frequency: Frequency;
   weekday: number | null;
   /*
