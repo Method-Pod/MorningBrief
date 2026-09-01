@@ -14,6 +14,7 @@ import {
   Wallet,
   Zap,
 } from "lucide-react";
+import { Clima } from "@/components/Clima";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import type { Bill, CalendarEvent, Note, RecurringTask, Task } from "@/lib/types";
@@ -255,12 +256,16 @@ export default function HomePage() {
             Vamos dar uma olhada no seu dia — tudo em um só lugar.
           </p>
         </div>
-        <span className="whitespace-nowrap rounded-full bg-white px-4 py-2.5 text-[13px] font-semibold text-fg-dim shadow-[0_1px_2px_rgb(20_24_26/0.05)]">
+        {/* Data e clima na mesma pílula, separados por um traço fino.
+            Duas pílulas soltas competiriam entre si; aqui a data continua sendo
+            o assunto e a temperatura entra como complemento. */}
+        <span className="flex items-center gap-2.5 whitespace-nowrap rounded-full bg-white px-4 py-2.5 text-[13px] font-semibold text-fg-dim shadow-[0_1px_2px_rgb(20_24_26/0.05)]">
           {now.toLocaleDateString("pt-BR", {
             weekday: "long",
             day: "2-digit",
             month: "long",
           })}
+          <Clima className="flex items-center gap-1.5 border-l border-line-soft pl-2.5" />
         </span>
       </div>
 
