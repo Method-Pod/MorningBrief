@@ -15,10 +15,15 @@ const cabecalhos = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   // não vaza a URL interna completa ao sair para outro site
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  // nega o que o app não usa
+  /*
+   * Nega o que o app não usa. `geolocation=(self)` é a exceção: o clima do
+   * início pede a posição do aparelho, e uma lista vazia nega para a própria
+   * origem também — o navegador recusa em silêncio, sem nem mostrar a caixa de
+   * permissão, o que é exatamente o sintoma de "não me pediu permissão".
+   */
   {
     key: "Permissions-Policy",
-    value: "camera=(), microphone=(), geolocation=(), payment=()",
+    value: "camera=(), microphone=(), geolocation=(self), payment=()",
   },
 ];
 

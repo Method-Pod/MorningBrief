@@ -38,7 +38,17 @@ const faixaDe = (codigo: number) =>
 type Clima = { temp: number; codigo: number; cidade: string | null };
 
 const CHAVE_LOCAL = "mb.clima.local";
-const CHAVE_NEGADO = "mb.clima.negado";
+/*
+ * O `2` no nome é de propósito.
+ *
+ * A primeira versão gravava "negado" em qualquer erro, e o cabeçalho
+ * Permissions-Policy — que era o bug de verdade — rejeitava em silêncio antes
+ * de qualquer caixa de permissão. Resultado: quem abriu naquela versão ficou
+ * com a recusa gravada sem nunca ter recusado nada, e continuaria sem ser
+ * perguntado depois do conserto. Trocar a chave descarta esse registro falso.
+ */
+const CHAVE_NEGADO = "mb.clima.negado2";
+const CHAVE_NEGADO_ANTIGA = "mb.clima.negado";
 const DIAS = 86_400_000;
 
 /** Coordenada guardada, se ainda vale. */
@@ -81,10 +91,19 @@ function pedirLocal(): Promise<{ lat: number; lon: number } | null> {
         } catch {}
         resolve({ lat, lon });
       },
-      () => {
-        try {
-          localStorage.setItem(CHAVE_NEGADO, "1");
-        } catch {}
+      (erro) => {
+        /*
+         * Só recusa de verdade fica registrada.
+         *
+         * O callback de erro também dispara em timeout e em "posição
+         * indisponível", que são passageiros — gravar `negado` neles desligaria
+         * a caixa de permissão para sempre por causa de um GPS lento uma vez.
+         */
+        if (erro.code === erro.PERMISSION_DENIED) {
+          try {
+            localStorage.setItem(CHAVE_NEGADO, "1");
+          } catch {}
+        }
         resolve(null);
       },
       { timeout: 8000, maximumAge: 30 * 60_000 }
@@ -122,6 +141,7 @@ export function Clima({ className }: { className?: string }) {
       let negado = false;
       try {
         negado = localStorage.getItem(CHAVE_NEGADO) === "1";
+        localStorage.removeItem(CHAVE_NEGADO_ANTIGA);
       } catch {}
 
       if (!onde && !negado) onde = await pedirLocal();
