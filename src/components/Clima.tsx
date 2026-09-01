@@ -37,6 +37,61 @@ const faixaDe = (codigo: number) =>
 
 type Clima = { temp: number; codigo: number; cidade: string | null };
 
+const CHAVE_LOCAL = "mb.clima.local";
+const CHAVE_NEGADO = "mb.clima.negado";
+const DIAS = 86_400_000;
+
+/** Coordenada guardada, se ainda vale. */
+function localGuardado(): { lat: number; lon: number } | null {
+  try {
+    const cru = localStorage.getItem(CHAVE_LOCAL);
+    if (!cru) return null;
+    const { lat, lon, em } = JSON.parse(cru);
+    /* Sete dias: cidade não muda toda hora, e quando muda a diferença de
+       temperatura é justamente o que se quer ver. */
+    if (!Number.isFinite(lat) || Date.now() - em > 7 * DIAS) return null;
+    return { lat, lon };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pede a posição ao aparelho.
+ *
+ * Duas casas decimais, cerca de 1 km. É precisão de sobra para temperatura, e
+ * guardar o endereço exato de alguém para dizer "27°" seria coletar mais do que
+ * a informação exige.
+ *
+ * A recusa fica registrada: sem isso a caixa de permissão voltaria em toda
+ * abertura do início, o que é a forma mais rápida de tornar o recurso odioso.
+ */
+function pedirLocal(): Promise<{ lat: number; lon: number } | null> {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        const lat = Math.round(p.coords.latitude * 100) / 100;
+        const lon = Math.round(p.coords.longitude * 100) / 100;
+        try {
+          localStorage.setItem(
+            CHAVE_LOCAL,
+            JSON.stringify({ lat, lon, em: Date.now() })
+          );
+        } catch {}
+        resolve({ lat, lon });
+      },
+      () => {
+        try {
+          localStorage.setItem(CHAVE_NEGADO, "1");
+        } catch {}
+        resolve(null);
+      },
+      { timeout: 8000, maximumAge: 30 * 60_000 }
+    );
+  });
+}
+
 /**
  * Temperatura e condição, para ficar ao lado da data.
  *
@@ -49,12 +104,61 @@ export function Clima({ className }: { className?: string }) {
 
   React.useEffect(() => {
     let vivo = true;
-    fetch("/api/clima")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (vivo && d && typeof d.temp === "number") setClima(d);
-      })
-      .catch(() => {});
+
+    const aplicar = (c: Clima | null) => {
+      if (vivo && c) setClima(c);
+    };
+
+    (async () => {
+      /*
+       * Primeiro a posição do aparelho, depois o palpite pelo endereço de rede.
+       *
+       * O palpite da Vercel erra por centenas de quilômetros — na prática ele
+       * dava a capital do estado em vez da cidade de quem estava olhando, e
+       * 19° onde fazia 27°. Só a posição do aparelho responde "aqui".
+       */
+      let onde = localGuardado();
+
+      let negado = false;
+      try {
+        negado = localStorage.getItem(CHAVE_NEGADO) === "1";
+      } catch {}
+
+      if (!onde && !negado) onde = await pedirLocal();
+      if (!vivo) return;
+
+      if (onde) {
+        /*
+         * Direto no Open-Meteo, sem passar pelo servidor.
+         *
+         * É uma API aberta, sem chave, então o desvio não acrescentaria nada —
+         * e mandar a posição de alguém para o próprio backend só para repassar
+         * seria guardar um dado que não precisa existir lá.
+         */
+        const url =
+          `https://api.open-meteo.com/v1/forecast?latitude=${onde.lat}` +
+          `&longitude=${onde.lon}&current=temperature_2m,weather_code&timezone=auto`;
+        try {
+          const r = await fetch(url);
+          const d = r.ok ? await r.json() : null;
+          if (typeof d?.current?.temperature_2m === "number")
+            return aplicar({
+              temp: Math.round(d.current.temperature_2m),
+              codigo: Number(d.current.weather_code ?? 0),
+              cidade: null,
+            });
+        } catch {}
+      }
+
+      /* Sem permissão: sobra o palpite pelo endereço de rede, que é impreciso
+         mas melhor que campo vazio. */
+      try {
+        const r = await fetch("/api/clima");
+        const d = r.ok ? await r.json() : null;
+        if (typeof d?.temp === "number") aplicar(d);
+      } catch {}
+    })();
+
     /* Evita gravar estado depois que a página saiu — o fetch continua no ar
        mesmo com o componente desmontado. */
     return () => {
