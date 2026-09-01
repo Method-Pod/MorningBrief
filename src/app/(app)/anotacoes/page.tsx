@@ -245,7 +245,7 @@ export default function AnotacoesPage() {
         open={open}
         onClose={() => setOpen(false)}
         title={editing ? "Editar anotação" : "Nova anotação"}
-        wide
+        size="xl"
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>

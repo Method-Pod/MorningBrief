@@ -11,7 +11,6 @@ import {
   ListChecks,
   Pencil,
   Plus,
-  Link2,
   Repeat2,
   Search,
   Trash2,
@@ -31,13 +30,7 @@ import {
 
   type TaskItem,
 } from "@/lib/types";
-import {
-  dateBR,
-  daysUntil,
-  normalizarLink,
-  rotuloDeLink,
-  todayISO,
-} from "@/lib/format";
+import { dateBR, daysUntil, todayISO } from "@/lib/format";
 import { HORAS_RETENCAO } from "@/lib/limpeza";
 import { frequencyDescription } from "@/lib/recurring";
 import {
@@ -55,6 +48,7 @@ import {
   useNotice,
   cx,
 } from "@/components/ui";
+import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
 import {
   EditorChecklist,
   ListaDeItens,
@@ -96,7 +90,7 @@ const blank = () => ({
   title: "",
   description: "",
   client: "",
-  link: "",
+  links: [] as string[],
   priority: "medium" as Priority,
   status: "todo" as TaskStatus,
   due_date: "",
@@ -174,7 +168,7 @@ export default function DemandasPage() {
       title: t.title,
       description: t.description,
       client: t.client,
-      link: t.link ?? "",
+      links: t.links ?? [],
       priority: t.priority,
       status: t.status,
       due_date: t.due_date?.slice(0, 10) ?? "",
@@ -214,7 +208,7 @@ export default function DemandasPage() {
 
     setBusy(true);
 
-    const link = normalizarLink(form.link);
+    const links = limparLinks(form.links);
 
     const base = {
       title: form.title.trim(),
@@ -224,13 +218,13 @@ export default function DemandasPage() {
     };
 
     /*
-     * O link entra na criação só quando existe.
+     * Os links entram na criação só quando existem.
      *
-     * Mandá-lo sempre faria toda demanda falhar numa base onde
+     * Mandá-los sempre faria toda demanda falhar numa base onde
      * LINK-NA-DEMANDA.sql ainda não rodou — inclusive as sem link, que
      * funcionam sem a coluna. Mesma escolha de `weekdays` e `checklist`.
      */
-    const comLink = link ? { link } : {};
+    const comLink = links.length ? { links } : {};
 
     if (editing) {
       const mudanca = {
@@ -252,26 +246,26 @@ export default function DemandasPage() {
       };
 
       /*
-       * Aqui o link vai sempre, inclusive vazio.
+       * Aqui os links vão sempre, inclusive vazios.
        *
        * Na criação basta omitir, mas na edição omitir significa "não mexe": sem
-       * gravar nulo, apagar o campo na tela não apagaria nada no banco. Se a
-       * coluna ainda não existe, a segunda tentativa salva o resto — editar
+       * gravar nulo, apagar os endereços na tela não apagaria nada no banco. Se
+       * a coluna ainda não existe, a segunda tentativa salva o resto — editar
        * uma demanda não pode depender de uma migração pendente.
        */
       let { error } = await supabase
         .from("tasks")
-        .update({ ...mudanca, link: link || null })
+        .update({ ...mudanca, links: links.length ? links : null })
         .eq("id", editing.id);
 
-      if (error && /link/.test(error.message)) {
+      if (error && /links/.test(error.message)) {
         ({ error } = await supabase
           .from("tasks")
           .update(mudanca)
           .eq("id", editing.id));
-        if (!error && link)
+        if (!error && links.length)
           notice.show(
-            "Demanda salva, mas o link não: rode supabase/LINK-NA-DEMANDA.sql no banco."
+            "Demanda salva, mas os links não: rode supabase/LINK-NA-DEMANDA.sql no banco."
           );
       }
 
@@ -362,9 +356,9 @@ export default function DemandasPage() {
           return setErr(
             "Checklist precisa de supabase/SUBTAREFAS.sql no banco. Rode o arquivo ou deixe a lista vazia."
           );
-        if (ruleError && /link/.test(ruleError.message))
+        if (ruleError && /links/.test(ruleError.message))
           return setErr(
-            "Link precisa de supabase/LINK-NA-DEMANDA.sql no banco. Rode o arquivo ou deixe o campo vazio."
+            "Links precisam de supabase/LINK-NA-DEMANDA.sql no banco. Rode o arquivo ou deixe os campos vazios."
           );
         return setErr(ruleError?.message ?? "Não foi possível criar a recorrência.");
       }
@@ -929,18 +923,7 @@ export default function DemandasPage() {
                                 className="w-[86px]"
                               />
                             )}
-                            {t.link && (
-                              <a
-                                href={normalizarLink(t.link)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title={t.link}
-                                className="inline-flex items-center gap-1 text-[10.5px] text-brand-400 hover:underline"
-                              >
-                                <Link2 size={10} />
-                                {rotuloDeLink(t.link)}
-                              </a>
-                            )}
+                            <ChipsDeLink links={t.links} tamanho="md" />
                             {t.due_date && (
                               <span
                                 className={cx(
@@ -959,19 +942,29 @@ export default function DemandasPage() {
                           </div>
                         </div>
 
-                        <Select
-                          value={t.status}
-                          onChange={(e) =>
-                            move(t, e.target.value as TaskStatus)
-                          }
-                          className="h-8 w-[130px] shrink-0 text-xs"
-                        >
-                          {COLUMNS.map((c) => (
-                            <option key={c} value={c}>
-                              {STATUS_LABEL[c]}
-                            </option>
-                          ))}
-                        </Select>
+                        {/*
+                          Select dentro de um div de largura fixa: o
+                          `fieldBase` traz `w-full`, e como ele sai depois no
+                          CSS gerado, um `w-[130px]` na própria classe perde.
+                          Na visão de lista isso não aparece porque a célula da
+                          tabela já segura a largura; aqui, solto num flex, ele
+                          esticaria a linha inteira.
+                        */}
+                        <div className="w-[130px] shrink-0">
+                          <Select
+                            value={t.status}
+                            onChange={(e) =>
+                              move(t, e.target.value as TaskStatus)
+                            }
+                            className="h-8 text-xs"
+                          >
+                            {COLUMNS.map((c) => (
+                              <option key={c} value={c}>
+                                {STATUS_LABEL[c]}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
 
                         <div className="flex shrink-0 items-center gap-1 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
                           <button
@@ -1032,18 +1025,11 @@ export default function DemandasPage() {
                           {t.description}
                         </p>
                       )}
-                      {t.link && (
-                        <a
-                          href={normalizarLink(t.link)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={t.link}
-                          className="mt-0.5 inline-flex max-w-[280px] items-center gap-1 text-[11px] text-brand-400 hover:underline"
-                        >
-                          <Link2 size={10} className="shrink-0" />
-                          <span className="truncate">{rotuloDeLink(t.link)}</span>
-                        </a>
-                      )}
+                      {t.links?.length ? (
+                        <div className="mt-0.5 flex max-w-[280px] flex-wrap items-center gap-1.5">
+                          <ChipsDeLink links={t.links} tamanho="md" />
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-3 py-3 text-xs text-fg-dim">
                       {t.client ? (
@@ -1124,6 +1110,13 @@ export default function DemandasPage() {
         open={open}
         onClose={() => setOpen(false)}
         title={editing ? "Editar demanda" : "Nova demanda"}
+        /*
+         * Largo, porque este formulário tem campo demais para uma coluna de
+         * 512px: título, descrição, links, checklist, cliente, prioridade,
+         * prazo, status e ainda o bloco de recorrência. Empilhado nessa
+         * largura, tudo fica estreito e a descrição cortava.
+         */
+        size="lg"
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
@@ -1133,7 +1126,12 @@ export default function DemandasPage() {
           </>
         }
       >
-        <form onSubmit={save} className="space-y-4">
+        {/*
+          Ordem: o que a demanda é, depois o que ela contém, depois quando.
+          Antes cliente e prioridade vinham só no fim, depois do checklist, e
+          para trocar a prioridade era preciso rolar por toda a lista de itens.
+        */}
+        <form onSubmit={save} className="space-y-5">
           <Field label="Título">
             <Input
               autoFocus
@@ -1143,40 +1141,7 @@ export default function DemandasPage() {
             />
           </Field>
 
-          <Field label="Descrição">
-            <Textarea
-              rows={3}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Contexto, links, o que precisa ser entregue..."
-            />
-          </Field>
-
-          <Field
-            label="Link do material"
-            hint="Vídeo bruto, pasta do Drive, referência. Abre em outra aba."
-          >
-            <Input
-              type="url"
-              inputMode="url"
-              value={form.link}
-              onChange={(e) => setForm({ ...form, link: e.target.value })}
-              placeholder="drive.google.com/..."
-            />
-          </Field>
-
-          <Field
-            label="Checklist"
-            hint={
-              form.recurring
-                ? "Vira o modelo da recorrência: cada dia nasce com estes itens desmarcados."
-                : "A demanda só vai para Concluída com todos marcados."
-            }
-          >
-            <EditorChecklist itens={checklist} onChange={setChecklist} />
-          </Field>
-
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
             <Field label="Cliente / projeto">
               <Input
                 value={form.client}
@@ -1199,6 +1164,36 @@ export default function DemandasPage() {
               </Select>
             </Field>
           </div>
+
+          <Field label="Descrição">
+            <Textarea
+              rows={4}
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Contexto, o que precisa ser entregue..."
+            />
+          </Field>
+
+          <Field
+            label="Links do material"
+            hint="Roteiro, vídeo bruto, pasta do Drive. Abrem em outra aba."
+          >
+            <EditorLinks
+              links={form.links}
+              onChange={(links) => setForm({ ...form, links })}
+            />
+          </Field>
+
+          <Field
+            label="Checklist"
+            hint={
+              form.recurring
+                ? "Vira o modelo da recorrência: cada dia nasce com estes itens desmarcados."
+                : "A demanda só vai para Concluída com todos marcados."
+            }
+          >
+            <EditorChecklist itens={checklist} onChange={setChecklist} />
+          </Field>
 
           {/* Prazo e status só fazem sentido em demanda avulsa: numa recorrente
               quem manda na data é a frequência, e ela sempre nasce "a fazer". */}
@@ -1513,24 +1508,7 @@ function TaskCard({
             {t.client}
           </button>
         )}
-        {/* O link é âncora de verdade, não um onClick: abrir em aba nova,
-            copiar o endereço e o meio do botão do mouse precisam funcionar.
-            `draggable={false}` porque o cartão inteiro arrasta, e sem isso o
-            arrasto do link disputava com o de mover a demanda. */}
-        {t.link && (
-          <a
-            href={normalizarLink(t.link)}
-            target="_blank"
-            rel="noopener noreferrer"
-            draggable={false}
-            onClick={(e) => e.stopPropagation()}
-            title={t.link}
-            className="inline-flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 text-[10px] text-brand-400 transition-colors hover:bg-ink-750 hover:underline"
-          >
-            <Link2 size={9} className="shrink-0" />
-            <span className="truncate">{rotuloDeLink(t.link)}</span>
-          </a>
-        )}
+        <ChipsDeLink links={t.links} max={2} />
         {t.due_date && (
           <span
             className={cx(
