@@ -46,7 +46,7 @@ import {
 
 /*
  * Ordem das prateleiras, seguindo o caminho de um livro: está aberto, é o
- * próximo, terminou, parou no meio, ainda não é seu.
+ * próximo, terminou, parou no meio, ainda não é seu (Lista de Desejos).
  */
 const PRATELEIRAS: BookStatus[] = [
   "reading",
@@ -269,8 +269,8 @@ export default function LeituraPage() {
       language: a.language,
       total_pages: a.total_pages,
       status: ondeAdd,
-      /* Só "lendo" nasce com data de início: em "comprar" a data seria a de
-         quando foi anotado, não a de quando a leitura começou. */
+      /* Só "lendo" nasce com data de início: na Lista de Desejos a data seria
+         a de quando foi anotado, não a de quando a leitura começou. */
       started_on: ondeAdd === "reading" ? hoje : null,
     });
     setSalvando(null);
@@ -376,9 +376,9 @@ export default function LeituraPage() {
     const terminou = !!livro.total_pages && nova >= livro.total_pages;
 
     const mudanca: Record<string, unknown> = { current_page: nova };
-    /* Marcar página em livro que está em Ler, Comprar ou Abandonado é o gesto
-       de (re)começar a leitura — exigir trocar a prateleira antes seria um
-       passo sem propósito. */
+    /* Marcar página em livro que está em Ler, Abandonado ou na Lista de
+       Desejos é o gesto de (re)começar a leitura — exigir trocar a prateleira
+       antes seria um passo sem propósito. */
     if (livro.status !== "reading" && !terminou) {
       mudanca.status = "reading";
       mudanca.finished_on = null;
@@ -475,9 +475,9 @@ export default function LeituraPage() {
     /*
      * As datas seguem o significado da prateleira, não a troca em si.
      *
-     * "Ler" e "Comprar" são estados de quem não começou, então não inventam
-     * data de início. "Abandonado" preserva a que já existia — parar no meio
-     * não apaga o fato de ter começado. E só "Lido" tem data de fim.
+     * "Ler" e "Lista de Desejos" são estados de quem não começou, então não
+     * inventam data de início. "Abandonado" preserva a que já existia — parar
+     * no meio não apaga o fato de ter começado. E só "Lido" tem data de fim.
      */
     const naoComecou = status === "want" || status === "queue";
     const { error } = await supabase
@@ -662,7 +662,7 @@ export default function LeituraPage() {
           <p className="mt-1 text-sm text-fg-mute">
             {contagem("reading")} lendo · {contagem("queue")} na fila ·{" "}
             {contagem("done")} lido{contagem("done") === 1 ? "" : "s"} ·{" "}
-            {contagem("want")} para comprar
+            {contagem("want")} na lista de desejos
           </p>
         </div>
         <Button variant="primary" onClick={() => setAdd(true)}>

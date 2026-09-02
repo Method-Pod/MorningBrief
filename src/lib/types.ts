@@ -240,9 +240,9 @@ export type HabitLog = {
 /*
  * As prateleiras de uma estante de verdade.
  *
- * `queue` e `want` são coisas diferentes de propósito: um livro já é seu e
- * espera a vez, o outro nem foi comprado. Misturar os dois é o que faz a lista
- * de desejos virar cobrança.
+ * `queue` (Ler) e `want` (Lista de Desejos) são coisas diferentes de
+ * propósito: um livro já é seu e espera a vez, o outro nem foi comprado.
+ * Misturar os dois é o que faz a lista de desejos virar cobrança.
  *
  * `dropped` existe porque abandonar livro é normal, e sem essa prateleira ele
  * fica para sempre em "Lendo" fingindo que está em andamento — o que estraga a
@@ -257,7 +257,7 @@ export const BOOK_STATUS_LABEL: Record<BookStatus, string> = {
   queue: "Ler",
   done: "Lido",
   dropped: "Abandonado",
-  want: "Comprar",
+  want: "Lista de Desejos",
 };
 
 export type Book = {

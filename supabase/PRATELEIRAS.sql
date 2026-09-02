@@ -10,11 +10,11 @@
 --   queue    Ler          já é seu, ainda não começou
 --   done     Lido         terminou
 --   dropped  Abandonado   começou e parou — sem culpa, é informação
---   want     Comprar      ainda não é seu
+--   want     Lista de Desejos   ainda não é seu
 --
--- "Ler" e "Comprar" são coisas diferentes de propósito: um está na
--- estante esperando, o outro nem foi comprado. Misturar os dois é o que
--- faz a lista de desejos virar cobrança.
+-- "Ler" e "Lista de Desejos" são coisas diferentes de propósito: um está
+-- na estante esperando, o outro nem foi comprado. Misturar os dois é o
+-- que faz a lista de desejos virar cobrança.
 -- =====================================================================
 
 do $$
