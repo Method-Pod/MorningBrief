@@ -280,7 +280,19 @@ export type Book = {
   status: BookStatus;
   started_on: string | null;
   finished_on: string | null;
+  /*
+   * 1 a 5, ou nulo. Nulo é diferente de zero: "não avaliei" não é "achei
+   * ruim". Vem de LEITURA-EXTRAS.sql.
+   */
+  rating: number | null;
   created_at: string;
+};
+
+/** Meta de livros de um ano. Por ano, para não perder a do ano passado. */
+export type ReadingGoal = {
+  user_id: string;
+  year: number;
+  target: number;
 };
 
 export type ReadingSession = {

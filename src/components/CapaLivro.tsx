@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BookOpen, ImagePlus, Loader2, Trash2 } from "lucide-react";
+import { BookOpen, ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cx } from "./ui";
 
@@ -188,5 +188,60 @@ export function EscolherCapa({
         </span>
       </div>
     </div>
+  );
+}
+
+/* ------------------------------ nota ------------------------------ */
+
+/**
+ * Nota de 1 a 5 em estrelas.
+ *
+ * Clicar na estrela já marcada zera — é como se desfaz uma nota dada por
+ * engano, sem um botão "limpar" que só existiria para isso.
+ */
+export function Estrelas({
+  nota,
+  onNota,
+  tamanho = 16,
+}: {
+  nota: number | null;
+  onNota?: (n: number | null) => void;
+  tamanho?: number;
+}) {
+  const fixa = !onNota;
+  /* Sem nota e sem como dar: não desenha cinco estrelas vazias na grade só
+     para dizer que ninguém avaliou. */
+  if (fixa && !nota) return null;
+
+  return (
+    <span className="inline-flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => {
+        const cheia = !!nota && n <= nota;
+        const estrela = (
+          <Star
+            size={tamanho}
+            strokeWidth={2}
+            className={cx(
+              "transition-colors",
+              cheia ? "fill-warn text-warn" : "fill-none text-line"
+            )}
+          />
+        );
+        return fixa ? (
+          <span key={n}>{estrela}</span>
+        ) : (
+          <button
+            key={n}
+            type="button"
+            onClick={() => onNota(nota === n ? null : n)}
+            aria-label={`${n} de 5`}
+            aria-pressed={cheia}
+            className="rounded transition-transform hover:scale-110"
+          >
+            {estrela}
+          </button>
+        );
+      })}
+    </span>
   );
 }

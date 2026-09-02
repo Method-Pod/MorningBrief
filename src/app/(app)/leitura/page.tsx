@@ -1,13 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { BookOpen, Check, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  Check,
+  Loader2,
+  Plus,
+  Search,
+  Target,
+  Trash2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   BOOK_STATUS_LABEL,
   type Book,
   type BookStatus,
+  type ReadingGoal,
   type ReadingSession,
 } from "@/lib/types";
 import { dataCurta, todayISO, ultimosDias } from "@/lib/format";
@@ -27,7 +36,13 @@ import {
   useConfirm,
   useNotice,
 } from "@/components/ui";
-import { Capa, EscolherCapa, apagarCapa, enviarCapa } from "@/components/CapaLivro";
+import {
+  Capa,
+  Estrelas,
+  EscolherCapa,
+  apagarCapa,
+  enviarCapa,
+} from "@/components/CapaLivro";
 
 /*
  * Ordem das prateleiras, seguindo o caminho de um livro: está aberto, é o
@@ -45,6 +60,16 @@ const PRATELEIRAS: BookStatus[] = [
 const INICIAL = ["D", "S", "T", "Q", "Q", "S", "S"];
 
 const anoDe = (v: string | null) => v?.slice(0, 4) ?? null;
+
+type Ordem = "recentes" | "titulo" | "autor" | "progresso" | "nota";
+
+const ORDENS: { valor: Ordem; rotulo: string }[] = [
+  { valor: "recentes", rotulo: "Adicionados por último" },
+  { valor: "titulo", rotulo: "Título" },
+  { valor: "autor", rotulo: "Autor" },
+  { valor: "progresso", rotulo: "Progresso" },
+  { valor: "nota", rotulo: "Nota" },
+];
 
 const pctDe = (l: Book) =>
   l.total_pages
@@ -75,6 +100,13 @@ export default function LeituraPage() {
   const [loading, setLoading] = React.useState(true);
   const [falta, setFalta] = React.useState("");
   const [prateleira, setPrateleira] = React.useState<BookStatus>("reading");
+  const [busca, setBusca] = React.useState("");
+  const [ordem, setOrdem] = React.useState<Ordem>("recentes");
+
+  /* meta do ano */
+  const [meta, setMeta] = React.useState<number | null>(null);
+  const [metaEmEdicao, setMetaEmEdicao] = React.useState("");
+  const [editandoMeta, setEditandoMeta] = React.useState(false);
 
   /* marcação de página, por livro */
   const [rascunho, setRascunho] = React.useState<Record<string, string>>({});
@@ -104,12 +136,20 @@ export default function LeituraPage() {
   const notice = useNotice();
 
   const load = React.useCallback(async () => {
-    const [l, s] = await Promise.all([
+    const ano = new Date().getFullYear();
+    const [l, s, m] = await Promise.all([
       supabase.from("books").select("*").order("created_at", { ascending: false }),
       supabase
         .from("reading_sessions")
         .select("*")
         .order("day", { ascending: false }),
+      /* A meta tolera falha: sem LEITURA-EXTRAS.sql o cartão simplesmente não
+         aparece, e a estante continua funcionando. */
+      supabase
+        .from("reading_goals")
+        .select("*")
+        .eq("year", ano)
+        .maybeSingle(),
     ]);
 
     /*
@@ -132,6 +172,7 @@ export default function LeituraPage() {
     setFalta("");
     setLivros((l.data as Book[]) ?? []);
     setSessoes((s.data as ReadingSession[]) ?? []);
+    setMeta((m.data as ReadingGoal | null)?.target ?? null);
     setLoading(false);
   }, [supabase]);
 
@@ -380,6 +421,45 @@ export default function LeituraPage() {
     if (!notice.check(error, "gravar o total de páginas")) load();
   };
 
+  const darNota = async (livro: Book, nota: number | null) => {
+    const { error } = await supabase
+      .from("books")
+      .update({ rating: nota })
+      .eq("id", livro.id);
+    if (error && /rating/.test(error.message))
+      return notice.show(
+        "Nota precisa de supabase/LEITURA-EXTRAS.sql no banco. Rode o arquivo."
+      );
+    if (!notice.check(error, "gravar a nota")) load();
+  };
+
+  const salvarMeta = async () => {
+    const n = Number(metaEmEdicao.trim());
+    if (!Number.isFinite(n) || n < 1 || n > 999)
+      return notice.show("A meta precisa ser um número de 1 a 999.");
+
+    const uid = await currentUserId(supabase);
+    if (!uid) return notice.show(SESSION_EXPIRED);
+
+    /* upsert na chave (user_id, year): trocar a meta do ano é sobrescrever,
+       não criar uma segunda linha para o mesmo ano. */
+    const { error } = await supabase
+      .from("reading_goals")
+      .upsert(
+        { user_id: uid, year: new Date().getFullYear(), target: Math.round(n) },
+        { onConflict: "user_id,year" }
+      );
+    if (error && /reading_goals/.test(error.message))
+      return notice.show(
+        "A meta precisa de supabase/LEITURA-EXTRAS.sql no banco. Rode o arquivo."
+      );
+    if (!notice.check(error, "salvar a meta")) {
+      setEditandoMeta(false);
+      setMetaEmEdicao("");
+      load();
+    }
+  };
+
   const mudarPrateleira = async (livro: Book, status: BookStatus) => {
     /*
      * As datas seguem o significado da prateleira, não a troca em si.
@@ -469,7 +549,48 @@ export default function LeituraPage() {
   /* ------------------------------ derivados ------------------------------ */
 
   const contagem = (s: BookStatus) => livros.filter((l) => l.status === s).length;
-  const daPrateleira = livros.filter((l) => l.status === prateleira);
+
+  /*
+   * A prateleira, filtrada e ordenada.
+   *
+   * A busca olha título, autor e ISBN — os três jeitos de procurar um livro que
+   * você tem na cabeça mas não na frente. A ordenação existe porque a grade
+   * cresce: "adicionados por último" serve para os primeiros vinte, depois
+   * ninguém acha nada sem ordenar por título.
+   */
+  const daPrateleira = React.useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    const lista = livros
+      .filter((l) => l.status === prateleira)
+      .filter(
+        (l) =>
+          !termo ||
+          l.title.toLowerCase().includes(termo) ||
+          (l.authors ?? "").toLowerCase().includes(termo) ||
+          (l.isbn ?? "").includes(termo)
+      );
+
+    const pct = (l: Book) => pctDe(l) ?? -1;
+    return [...lista].sort((a, b) => {
+      switch (ordem) {
+        case "titulo":
+          return a.title.localeCompare(b.title, "pt-BR");
+        case "autor":
+          /* Sem autor vai para o fim: uma leva de "—" no começo da lista
+             esconderia justamente os que dá para ordenar. */
+          return (a.authors ?? "￿").localeCompare(
+            b.authors ?? "￿",
+            "pt-BR"
+          );
+        case "progresso":
+          return pct(b) - pct(a);
+        case "nota":
+          return (b.rating ?? 0) - (a.rating ?? 0);
+        default:
+          return b.created_at.localeCompare(a.created_at);
+      }
+    });
+  }, [livros, prateleira, busca, ordem]);
   const lendo = livros.filter((l) => l.status === "reading");
   const ver = livros.find((l) => l.id === verId) ?? null;
   const histDoVer = ver ? sessoes.filter((s) => s.book_id === ver.id) : [];
@@ -480,6 +601,12 @@ export default function LeituraPage() {
     sessoes.forEach((s) => soma.set(s.day, (soma.get(s.day) ?? 0) + s.pages));
     return ultimosDias(hoje).map((d) => ({ dia: d, paginas: soma.get(d) ?? 0 }));
   }, [sessoes, hoje]);
+
+  /* Lidos neste ano, pela data de conclusão — não pela de cadastro. */
+  const anoAtual = String(new Date().getFullYear());
+  const lidosNoAno = livros.filter(
+    (l) => l.status === "done" && l.finished_on?.startsWith(anoAtual)
+  ).length;
 
   const naSemana = ritmo.reduce((a, b) => a + b.paginas, 0);
   const pico = Math.max(...ritmo.map((r) => r.paginas), 1);
@@ -617,6 +744,100 @@ export default function LeituraPage() {
         </div>
       )}
 
+      {/* --------------------------- meta do ano --------------------------- */}
+      {/*
+        A meta fica visível mesmo sem estar definida, com convite para definir.
+        Escondida atrás de um ajuste, ninguém lembraria que ela existe — e meta
+        que não se vê não muda comportamento nenhum.
+      */}
+      <Card className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+        <div className="min-w-0">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
+            Meta de {anoAtual}
+          </p>
+          {meta ? (
+            <>
+              <p className="mt-1 text-[22px] font-bold leading-none tnum">
+                {lidosNoAno}
+                <span className="text-[15px] font-semibold text-fg-mute">
+                  /{meta}
+                </span>
+                <span className="ml-1.5 text-[12px] font-medium text-fg-mute">
+                  livros
+                </span>
+              </p>
+              <p className="mt-1.5 text-[11.5px] text-fg-mute">
+                {lidosNoAno >= meta
+                  ? "Meta batida. Pode subir a régua."
+                  : `Faltam ${meta - lidosNoAno}.`}
+              </p>
+            </>
+          ) : (
+            <p className="mt-1 text-[12.5px] text-fg-mute">
+              {lidosNoAno} lido{lidosNoAno === 1 ? "" : "s"} este ano · sem meta
+              definida
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          {meta && (
+            <div className="hidden w-[150px] sm:block">
+              <div className="h-2 overflow-hidden rounded-full bg-ink-800">
+                <div
+                  className={cx(
+                    "h-full w-full origin-left rounded-full transition-transform duration-[320ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]",
+                    lidosNoAno >= meta ? "bg-pos" : "bg-brand-500"
+                  )}
+                  style={{
+                    transform: `scaleX(${Math.min(1, lidosNoAno / meta)})`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+
+          {editandoMeta ? (
+            <div className="flex items-center gap-1.5">
+              <div className="w-[84px]">
+                <Input
+                  autoFocus
+                  type="number"
+                  min={1}
+                  max={999}
+                  value={metaEmEdicao}
+                  onChange={(e) => setMetaEmEdicao(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      salvarMeta();
+                    }
+                    if (e.key === "Escape") setEditandoMeta(false);
+                  }}
+                  placeholder="12"
+                  aria-label="Livros no ano"
+                  className="h-9 text-center"
+                />
+              </div>
+              <Button size="sm" variant="primary" onClick={salvarMeta}>
+                Salvar
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => {
+                setMetaEmEdicao(meta ? String(meta) : "");
+                setEditandoMeta(true);
+              }}
+            >
+              <Target size={14} />
+              {meta ? "Mudar meta" : "Definir meta"}
+            </Button>
+          )}
+        </div>
+      </Card>
+
       {/* ------------------------------ ritmo ------------------------------ */}
       {naSemana > 0 && (
         <Card className="flex flex-wrap items-end justify-between gap-4 px-5 py-4">
@@ -690,21 +911,66 @@ export default function LeituraPage() {
           </div>
         </div>
 
+        {/* Busca e ordenação só aparecem quando há o que procurar: numa estante
+            de três livros os dois controles seriam enfeite ocupando linha. */}
+        {livros.length > 4 && (
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative min-w-[180px] flex-1">
+              <Search
+                size={14}
+                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
+              />
+              <Input
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por título, autor ou ISBN..."
+                className="h-9 pl-9 text-[12.5px]"
+              />
+            </div>
+            <div className="w-[190px]">
+              <Select
+                value={ordem}
+                onChange={(e) => setOrdem(e.target.value as Ordem)}
+                aria-label="Ordenar a biblioteca"
+                className="h-9 text-[12.5px]"
+              >
+                {ORDENS.map((o) => (
+                  <option key={o.valor} value={o.valor}>
+                    {o.rotulo}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        )}
+
         {loading ? null : daPrateleira.length === 0 ? (
           <Card>
             <Empty
               icon={<BookOpen size={18} />}
               title={
-                livros.length
-                  ? `Nada em "${BOOK_STATUS_LABEL[prateleira]}"`
-                  : "Estante vazia"
+                busca.trim()
+                  ? `Nada com “${busca.trim()}”`
+                  : livros.length
+                    ? `Nada em "${BOOK_STATUS_LABEL[prateleira]}"`
+                    : "Estante vazia"
               }
-              sub="Busque por título, autor ou ISBN — a capa e as páginas vêm junto."
+              sub={
+                busca.trim()
+                  ? "Tente outro termo, ou olhe em outra prateleira."
+                  : "Busque por título, autor ou ISBN — a capa e as páginas vêm junto."
+              }
               action={
-                <Button variant="primary" size="sm" onClick={() => setAdd(true)}>
-                  <Plus size={14} />
-                  Adicionar livro
-                </Button>
+                busca.trim() ? (
+                  <Button size="sm" onClick={() => setBusca("")}>
+                    Limpar a busca
+                  </Button>
+                ) : (
+                  <Button variant="primary" size="sm" onClick={() => setAdd(true)}>
+                    <Plus size={14} />
+                    Adicionar livro
+                  </Button>
+                )
               }
             />
           </Card>
@@ -750,8 +1016,11 @@ export default function LeituraPage() {
                       </span>
                     )}
                     {l.status === "done" && (
-                      <span className="mt-1 block text-[9.5px] font-semibold text-pos">
-                        lido {dataCurta(l.finished_on)}
+                      <span className="mt-1 flex flex-wrap items-center gap-x-1.5">
+                        <Estrelas nota={l.rating} tamanho={10} />
+                        <span className="text-[9.5px] font-semibold text-pos">
+                          lido {dataCurta(l.finished_on)}
+                        </span>
                       </span>
                     )}
                     {l.status === "dropped" && l.total_pages && (
@@ -806,6 +1075,24 @@ export default function LeituraPage() {
               onArquivo={(f) => trocarCapa(ver, f)}
               onRemover={ver.cover_url ? () => removerCapa(ver) : undefined}
             />
+
+            {/* A nota vem antes do resto para quem acabou de fechar o livro:
+                é o momento em que se tem opinião, e adiar até rolar a tela é
+                perder a opinião. */}
+            <Field
+              label="Sua nota"
+              hint={
+                ver.rating
+                  ? "Clique na mesma estrela para tirar a nota."
+                  : "De 1 a 5, quando quiser."
+              }
+            >
+              <Estrelas
+                nota={ver.rating}
+                onNota={(n) => darNota(ver, n)}
+                tamanho={22}
+              />
+            </Field>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Prateleira">
