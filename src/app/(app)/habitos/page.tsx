@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { HABIT_COLORS, type Habit, type HabitLog } from "@/lib/types";
+import { type Habit, type HabitLog } from "@/lib/types";
 import { dataCurta, semanaDe, todayISO, ultimosDias } from "@/lib/format";
 import {
   Button,
@@ -28,19 +28,10 @@ import {
   useNotice,
 } from "@/components/ui";
 
-const COR: Record<string, string> = {
-  blue: "#2563a8",
-  violet: "#6d5bd0",
-  emerald: "#1f9d63",
-  amber: "#b8820c",
-  rose: "#cf4a3f",
-  slate: "#666e74",
-};
-
 /** semanaDe devolve segunda→domingo, então os nomes seguem a mesma ordem. */
 const DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 
-const vazio = () => ({ name: "", color: "blue", target_per_week: 7, active: true });
+const vazio = () => ({ name: "", target_per_week: 7, active: true });
 
 export default function HabitosPage() {
   const supabase = React.useMemo(() => createClient(), []);
@@ -142,7 +133,6 @@ export default function HabitosPage() {
     setEditing(h);
     setForm({
       name: h.name,
-      color: h.color,
       target_per_week: h.target_per_week,
       active: h.active,
     });
@@ -158,7 +148,6 @@ export default function HabitosPage() {
     setBusy(true);
     const payload = {
       name: nome,
-      color: form.color,
       target_per_week: Number(form.target_per_week),
       active: form.active,
     };
@@ -295,7 +284,6 @@ export default function HabitosPage() {
               const seq = sequencia(h.id);
               const naSemana = semana.filter((d) => marcado(h.id, d)).length;
               const meta = h.target_per_week;
-              const cor = COR[h.color] ?? COR.blue;
               return (
                 <li
                   key={h.id}
@@ -310,10 +298,11 @@ export default function HabitosPage() {
                   <div className="flex min-w-0 items-start justify-between gap-3 lg:flex-1">
                    <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ background: cor }}
-                      />
+                      {/* Segue o tema: a cor do app já identifica o app, e uma
+                          paleta própria por hábito competia com ela sem
+                          acrescentar informação — os hábitos são poucos e têm
+                          nome, não precisam de código de cor. */}
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-brand-500" />
                       <p className="truncate text-[13.5px] font-semibold">
                         {h.name}
                       </p>
@@ -390,14 +379,13 @@ export default function HabitosPage() {
                             className={cx(
                               "grid h-8 w-8 place-items-center rounded-full border-[1.5px] text-[10px] font-bold uppercase transition-colors",
                               on
-                                ? "border-transparent text-white"
+                                ? "border-transparent bg-brand-500 text-on-brand"
                                 : ehHoje(d)
                                   ? "border-brand-500 bg-white text-brand-400"
                                   : "border-line bg-white text-fg-mute",
                               !travado && !on && "hover:border-brand-500",
                               travado && "cursor-not-allowed opacity-35"
                             )}
-                            style={on ? { background: cor } : undefined}
                           >
                             {on ? <Check size={13} strokeWidth={3} /> : sigla(d)}
                           </button>
@@ -473,29 +461,6 @@ export default function HabitosPage() {
               ))}
             </Select>
           </Field>
-
-          <div>
-            <span className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-fg-mute">
-              Cor
-            </span>
-            <div className="flex gap-2.5">
-              {HABIT_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setForm({ ...form, color: c })}
-                  aria-label={`Cor ${c}`}
-                  aria-pressed={form.color === c}
-                  style={{ background: COR[c] }}
-                  className={cx(
-                    "h-7 w-7 rounded-full transition-transform hover:scale-110",
-                    form.color === c &&
-                      "ring-2 ring-fg-dim ring-offset-2 ring-offset-white"
-                  )}
-                />
-              ))}
-            </div>
-          </div>
 
           <label className="flex cursor-pointer items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3">
             <input

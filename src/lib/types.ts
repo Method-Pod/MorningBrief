@@ -215,6 +215,11 @@ export type Habit = {
   id: string;
   user_id: string;
   name: string;
+  /*
+   * A coluna continua no banco, com default 'blue', mas nada mais a lê: as
+   * bolinhas seguem a cor do tema. Fica aqui para o tipo bater com a tabela —
+   * derrubar a coluna seria uma migração destrutiva sem ganho nenhum.
+   */
   color: string;
   target_per_week: number;
   active: boolean;
@@ -229,4 +234,3 @@ export type HabitLog = {
   created_at: string;
 };
 
-export const HABIT_COLORS = ["blue", "violet", "emerald", "amber", "rose", "slate"];
