@@ -1,0 +1,192 @@
+"use client";
+
+import * as React from "react";
+import { BookOpen, ImagePlus, Loader2, Trash2 } from "lucide-react";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { cx } from "./ui";
+
+export const BUCKET_CAPAS = "capas";
+
+const TIPOS = ["image/jpeg", "image/png", "image/webp"];
+const LIMITE_MB = 3;
+
+const extDe = (tipo: string) =>
+  tipo === "image/png" ? "png" : tipo === "image/webp" ? "webp" : "jpg";
+
+/**
+ * Sobe a capa e devolve o endereço público.
+ *
+ * O caminho é `<id do usuário>/<id do livro>.<ext>`, com upsert: a política do
+ * bucket exige que a primeira pasta seja o id de quem envia, e é isso que
+ * impede subir arquivo na pasta de outra pessoa. Um arquivo por livro, então
+ * trocar a capa substitui em vez de acumular lixo.
+ */
+export async function enviarCapa(
+  supabase: SupabaseClient,
+  uid: string,
+  bookId: string,
+  arquivo: File
+): Promise<{ url?: string; erro?: string }> {
+  if (!TIPOS.includes(arquivo.type)) return { erro: "Use JPG, PNG ou WebP." };
+  if (arquivo.size > LIMITE_MB * 1024 * 1024)
+    return { erro: `A imagem precisa ter menos de ${LIMITE_MB} MB.` };
+
+  const caminho = `${uid}/${bookId}.${extDe(arquivo.type)}`;
+  const { error } = await supabase.storage
+    .from(BUCKET_CAPAS)
+    .upload(caminho, arquivo, { upsert: true, contentType: arquivo.type });
+
+  if (error)
+    return {
+      erro: error.message.toLowerCase().includes("bucket")
+        ? "O bucket de capas ainda não existe. Rode supabase/CAPAS.sql no SQL Editor."
+        : error.message,
+    };
+
+  const { data } = supabase.storage.from(BUCKET_CAPAS).getPublicUrl(caminho);
+  /* ?v= força o navegador a buscar de novo: o caminho é o mesmo a cada troca,
+     e sem isso a capa antiga ficaria em cache. */
+  return { url: `${data.publicUrl}?v=${Date.now()}` };
+}
+
+/** Apaga as três extensões possíveis — não sabemos com qual foi enviada. */
+export async function apagarCapa(
+  supabase: SupabaseClient,
+  uid: string,
+  bookId: string
+) {
+  await supabase.storage
+    .from(BUCKET_CAPAS)
+    .remove([`${uid}/${bookId}.jpg`, `${uid}/${bookId}.png`, `${uid}/${bookId}.webp`]);
+}
+
+/* ------------------------------ capa na estante ------------------------------ */
+
+/**
+ * A capa, ou um lugar onde ela deveria estar.
+ *
+ * Proporção fixa de 2:3 para a grade não dançar quando um livro tem capa alta e
+ * o vizinho não tem nenhuma. `img` cru e não next/image porque a origem é
+ * externa e variável — Google Books, Open Library, Storage — e configurar o
+ * otimizador para cada domínio não paga uma imagem de 100px.
+ */
+export function Capa({
+  url,
+  titulo,
+  className,
+}: {
+  url: string | null;
+  titulo: string;
+  className?: string;
+}) {
+  const [quebrou, setQuebrou] = React.useState(false);
+
+  if (!url || quebrou)
+    return (
+      <div
+        className={cx(
+          "grid aspect-[2/3] w-full place-items-center rounded-[10px] bg-ink-800 p-2 text-center",
+          className
+        )}
+      >
+        <span className="flex flex-col items-center gap-1.5 text-fg-mute">
+          <BookOpen size={18} />
+          <span className="line-clamp-3 text-[9.5px] font-medium leading-tight">
+            {titulo}
+          </span>
+        </span>
+      </div>
+    );
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={url}
+      alt=""
+      onError={() => setQuebrou(true)}
+      className={cx(
+        "aspect-[2/3] w-full rounded-[10px] bg-ink-800 object-cover",
+        className
+      )}
+    />
+  );
+}
+
+/* ------------------------------ escolher arquivo ------------------------------ */
+
+/**
+ * Botão de arquivo com prévia.
+ *
+ * Serve aos dois momentos: no cadastro manual o arquivo fica em memória até o
+ * livro existir (não há id para o caminho antes disso), e no detalhe ele sobe
+ * na hora. Quem decide é o pai, por `onArquivo`.
+ */
+export function EscolherCapa({
+  previa,
+  titulo,
+  ocupado,
+  onArquivo,
+  onRemover,
+}: {
+  previa: string | null;
+  titulo: string;
+  ocupado?: boolean;
+  onArquivo: (f: File) => void;
+  onRemover?: () => void;
+}) {
+  const campo = React.useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex items-end gap-3">
+      <div className="w-[84px] shrink-0">
+        <Capa url={previa} titulo={titulo} />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <input
+          ref={campo}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            /* Zera o campo para que escolher o MESMO arquivo de novo dispare
+               outro change — sem isso, corrigir um envio que falhou exigiria
+               escolher outro arquivo. */
+            e.target.value = "";
+            if (f) onArquivo(f);
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => campo.current?.click()}
+          disabled={ocupado}
+          className="inline-flex h-9 items-center gap-1.5 rounded-[12px] bg-ink-800 px-3 text-[12px] font-medium text-fg-dim transition-colors hover:bg-ink-750 disabled:opacity-50"
+        >
+          {ocupado ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <ImagePlus size={14} />
+          )}
+          {previa ? "Trocar capa" : "Escolher capa"}
+        </button>
+
+        {previa && onRemover && (
+          <button
+            type="button"
+            onClick={onRemover}
+            disabled={ocupado}
+            className="inline-flex h-8 items-center gap-1.5 rounded-[12px] px-3 text-[11.5px] text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg disabled:opacity-50"
+          >
+            <Trash2 size={13} />
+            Remover
+          </button>
+        )}
+
+        <span className="px-0.5 text-[10.5px] text-fg-mute">
+          JPG, PNG ou WebP · até {LIMITE_MB} MB
+        </span>
+      </div>
+    </div>
+  );
+}

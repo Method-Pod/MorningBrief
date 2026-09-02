@@ -237,12 +237,20 @@ export type HabitLog = {
 
 /* ------------------------------ leitura ------------------------------ */
 
+/*
+ * Os três estados de uma estante de verdade: o que está aberto na mesa, o que
+ * já foi, e o que ainda falta comprar.
+ *
+ * Os valores gravados continuam `want`/`reading`/`done` — são os do check
+ * constraint em LEITURA.sql, e trocá-los custaria uma migração para mudar
+ * palavra na tela. `want` é a lista de compra.
+ */
 export type BookStatus = "want" | "reading" | "done";
 
 export const BOOK_STATUS_LABEL: Record<BookStatus, string> = {
-  want: "Quero ler",
   reading: "Lendo",
-  done: "Terminado",
+  done: "Lido",
+  want: "Comprar",
 };
 
 export type Book = {
