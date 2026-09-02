@@ -56,8 +56,19 @@ const PRATELEIRAS: BookStatus[] = [
   "want",
 ];
 
-/** Iniciais dos dias, indexadas por getDay() — 0 é domingo. */
-const INICIAL = ["D", "S", "T", "Q", "Q", "S", "S"];
+/*
+ * "Todos" é filtro de tela, não prateleira do banco.
+ *
+ * Por isso vive num tipo separado de `BookStatus`: se entrasse na mesma lista,
+ * apareceria no seletor de "adicionar em" e no detalhe do livro, e o banco
+ * recusaria "todos" como status. A separação é o que impede esse erro.
+ */
+type Filtro = "todos" | BookStatus;
+
+const FILTROS: Filtro[] = ["todos", ...PRATELEIRAS];
+
+const rotuloFiltro = (f: Filtro) =>
+  f === "todos" ? "Todos" : BOOK_STATUS_LABEL[f];
 
 const anoDe = (v: string | null) => v?.slice(0, 4) ?? null;
 
@@ -99,7 +110,7 @@ export default function LeituraPage() {
   const [sessoes, setSessoes] = React.useState<ReadingSession[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [falta, setFalta] = React.useState("");
-  const [prateleira, setPrateleira] = React.useState<BookStatus>("reading");
+  const [prateleira, setPrateleira] = React.useState<Filtro>("reading");
   const [busca, setBusca] = React.useState("");
   const [ordem, setOrdem] = React.useState<Ordem>("recentes");
 
@@ -548,7 +559,8 @@ export default function LeituraPage() {
 
   /* ------------------------------ derivados ------------------------------ */
 
-  const contagem = (s: BookStatus) => livros.filter((l) => l.status === s).length;
+  const contagem = (f: Filtro) =>
+    f === "todos" ? livros.length : livros.filter((l) => l.status === f).length;
 
   /*
    * A prateleira, filtrada e ordenada.
@@ -561,7 +573,7 @@ export default function LeituraPage() {
   const daPrateleira = React.useMemo(() => {
     const termo = busca.trim().toLowerCase();
     const lista = livros
-      .filter((l) => l.status === prateleira)
+      .filter((l) => prateleira === "todos" || l.status === prateleira)
       .filter(
         (l) =>
           !termo ||
@@ -609,8 +621,6 @@ export default function LeituraPage() {
   ).length;
 
   const naSemana = ritmo.reduce((a, b) => a + b.paginas, 0);
-  const pico = Math.max(...ritmo.map((r) => r.paginas), 1);
-  const diasLidos = ritmo.filter((r) => r.paginas > 0).length;
 
   /* O mesmo controle de página serve ao "continuar lendo" e ao detalhe. */
   const campoPagina = (l: Book, largo?: boolean) => (
@@ -744,62 +754,45 @@ export default function LeituraPage() {
         </div>
       )}
 
-      {/* --------------------------- meta do ano --------------------------- */}
+      {/* ------------------------------ resumo ------------------------------ */}
       {/*
-        A meta fica visível mesmo sem estar definida, com convite para definir.
-        Escondida atrás de um ajuste, ninguém lembraria que ela existe — e meta
-        que não se vê não muda comportamento nenhum.
+        Meta e ritmo numa tira, não em dois cartões.
+        
+        Os dois cartões ocupavam mais altura que o livro que você está lendo, e
+        nenhum dos dois é a razão de abrir a tela — são referência de canto de
+        olho. Como detalhe eles informam igual e param de competir com a
+        estante.
       */}
-      <Card className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-        <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
-            Meta de {anoAtual}
-          </p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-[11.5px] text-fg-mute">
+        <span className="flex items-center gap-2">
+          <Target size={13} className="shrink-0" />
           {meta ? (
             <>
-              <p className="mt-1 text-[22px] font-bold leading-none tnum">
-                {lidosNoAno}
-                <span className="text-[15px] font-semibold text-fg-mute">
-                  /{meta}
-                </span>
-                <span className="ml-1.5 text-[12px] font-medium text-fg-mute">
-                  livros
-                </span>
-              </p>
-              <p className="mt-1.5 text-[11.5px] text-fg-mute">
-                {lidosNoAno >= meta
-                  ? "Meta batida. Pode subir a régua."
-                  : `Faltam ${meta - lidosNoAno}.`}
-              </p>
-            </>
-          ) : (
-            <p className="mt-1 text-[12.5px] text-fg-mute">
-              {lidosNoAno} lido{lidosNoAno === 1 ? "" : "s"} este ano · sem meta
-              definida
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {meta && (
-            <div className="hidden w-[150px] sm:block">
-              <div className="h-2 overflow-hidden rounded-full bg-ink-800">
-                <div
+              <span className="font-semibold text-fg-dim tnum">
+                {lidosNoAno}/{meta}
+              </span>
+              <span>livros em {anoAtual}</span>
+              <span className="h-1 w-[52px] overflow-hidden rounded-full bg-ink-800">
+                <span
                   className={cx(
-                    "h-full w-full origin-left rounded-full transition-transform duration-[320ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]",
+                    "block h-full w-full origin-left rounded-full transition-transform duration-[320ms]",
                     lidosNoAno >= meta ? "bg-pos" : "bg-brand-500"
                   )}
                   style={{
                     transform: `scaleX(${Math.min(1, lidosNoAno / meta)})`,
                   }}
                 />
-              </div>
-            </div>
+              </span>
+            </>
+          ) : (
+            <span>
+              {lidosNoAno} lido{lidosNoAno === 1 ? "" : "s"} em {anoAtual}
+            </span>
           )}
 
           {editandoMeta ? (
-            <div className="flex items-center gap-1.5">
-              <div className="w-[84px]">
+            <span className="flex items-center gap-1">
+              <span className="w-[62px]">
                 <Input
                   autoFocus
                   type="number"
@@ -815,79 +808,49 @@ export default function LeituraPage() {
                     if (e.key === "Escape") setEditandoMeta(false);
                   }}
                   placeholder="12"
-                  aria-label="Livros no ano"
-                  className="h-9 text-center"
+                  aria-label={`Meta de livros para ${anoAtual}`}
+                  className="h-7 text-center text-[11.5px]"
                 />
-              </div>
-              <Button size="sm" variant="primary" onClick={salvarMeta}>
-                Salvar
-              </Button>
-            </div>
+              </span>
+              <button
+                type="button"
+                onClick={salvarMeta}
+                className="font-semibold text-brand-400 hover:underline"
+              >
+                ok
+              </button>
+            </span>
           ) : (
-            <Button
-              size="sm"
+            <button
+              type="button"
               onClick={() => {
                 setMetaEmEdicao(meta ? String(meta) : "");
                 setEditandoMeta(true);
               }}
+              className="text-fg-mute underline decoration-line underline-offset-2 transition-colors hover:text-brand-400"
             >
-              <Target size={14} />
-              {meta ? "Mudar meta" : "Definir meta"}
-            </Button>
+              {meta ? "mudar" : "definir meta"}
+            </button>
           )}
-        </div>
-      </Card>
+        </span>
 
-      {/* ------------------------------ ritmo ------------------------------ */}
-      {naSemana > 0 && (
-        <Card className="flex flex-wrap items-end justify-between gap-4 px-5 py-4">
-          <div>
-            <p className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
-              Últimos 7 dias
-            </p>
-            <p className="mt-1 text-[22px] font-bold leading-none tnum">
-              {naSemana}
-              <span className="ml-1.5 text-[12px] font-medium text-fg-mute">
-                páginas
-              </span>
-            </p>
-            <p className="mt-1.5 text-[11.5px] text-fg-mute tnum">
-              {diasLidos} de 7 dias · {Math.round(naSemana / 7)}/dia
-            </p>
-          </div>
-
-          {/* Barras por altura, não gráfico de biblioteca: são sete pontos, e um
-              runtime de gráfico custaria mais que a tela inteira. */}
-          <div className="flex items-end gap-1.5">
-            {ritmo.map((r, i) => (
-              <div key={r.dia} className="flex flex-col items-center gap-1.5">
-                <div className="flex h-[52px] w-6 items-end">
-                  <div
-                    title={`${dataCurta(r.dia)} · ${r.paginas} pág`}
-                    className={cx(
-                      "w-full rounded-[5px] transition-[height] duration-[260ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]",
-                      r.paginas ? "bg-brand-500" : "bg-ink-800"
-                    )}
-                    style={{
-                      height: r.paginas
-                        ? `${Math.max(8, (r.paginas / pico) * 52)}px`
-                        : "3px",
-                    }}
-                  />
-                </div>
-                <span
-                  className={cx(
-                    "text-[10px] font-semibold",
-                    i === ritmo.length - 1 ? "text-brand-400" : "text-fg-mute"
-                  )}
-                >
-                  {INICIAL[new Date(r.dia + "T00:00:00").getDay()]}
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+        {naSemana > 0 && (
+          <span className="flex items-center gap-2">
+            <span className="text-fg-mute">·</span>
+            {/*
+              Só o número, sem gráfico.
+              
+              Sete barras de 3px não diziam nada além do que o número já diz —
+              na prática viravam um risco solto do lado do texto. O ritmo por
+              dia é uma pergunta de outra tela, não de um detalhe de canto.
+            */}
+            <span className="font-semibold text-fg-dim tnum">{naSemana}</span>
+            <span>
+              página{naSemana === 1 ? "" : "s"} nos últimos 7 dias
+            </span>
+          </span>
+        )}
+      </div>
 
       {/* ------------------------------ estante ------------------------------ */}
       <div className="space-y-3">
@@ -902,10 +865,10 @@ export default function LeituraPage() {
             <Segmented
               value={prateleira}
               onChange={setPrateleira}
-              options={PRATELEIRAS.map((s) => ({
-                value: s,
-                label: BOOK_STATUS_LABEL[s],
-                count: contagem(s),
+              options={FILTROS.map((f) => ({
+                value: f,
+                label: rotuloFiltro(f),
+                count: contagem(f),
               }))}
             />
           </div>
@@ -952,7 +915,7 @@ export default function LeituraPage() {
                 busca.trim()
                   ? `Nada com “${busca.trim()}”`
                   : livros.length
-                    ? `Nada em "${BOOK_STATUS_LABEL[prateleira]}"`
+                    ? `Nada em "${rotuloFiltro(prateleira)}"`
                     : "Estante vazia"
               }
               sub={
@@ -1026,6 +989,14 @@ export default function LeituraPage() {
                     {l.status === "dropped" && l.total_pages && (
                       <span className="mt-1 block text-[9.5px] font-semibold text-fg-mute tnum">
                         parou na pág {l.current_page}
+                      </span>
+                    )}
+                    {/* Só em "Todos": aqui a grade mistura as cinco prateleiras,
+                        e sem a etiqueta não há como saber onde cada livro
+                        mora. Nas outras abas ela repetiria o cabeçalho. */}
+                    {prateleira === "todos" && (
+                      <span className="mt-1 block text-[9.5px] font-medium uppercase tracking-wider text-fg-mute">
+                        {BOOK_STATUS_LABEL[l.status]}
                       </span>
                     )}
                   </button>
