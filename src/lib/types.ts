@@ -234,3 +234,48 @@ export type HabitLog = {
   created_at: string;
 };
 
+
+/* ------------------------------ leitura ------------------------------ */
+
+export type BookStatus = "want" | "reading" | "done";
+
+export const BOOK_STATUS_LABEL: Record<BookStatus, string> = {
+  want: "Quero ler",
+  reading: "Lendo",
+  done: "Terminado",
+};
+
+export type Book = {
+  id: string;
+  user_id: string;
+  title: string;
+  authors: string | null;
+  isbn: string | null;
+  cover_url: string | null;
+  publisher: string | null;
+  /* Texto e não data: a API devolve "2015", "2015-03" ou "2015-03-11", e
+     converter obrigaria a inventar mês e dia. */
+  published_on: string | null;
+  description: string | null;
+  categories: string | null;
+  language: string | null;
+  /* Nulo quando a API não trouxe: a barra some, o registro continua valendo. */
+  total_pages: number | null;
+  current_page: number;
+  status: BookStatus;
+  started_on: string | null;
+  finished_on: string | null;
+  created_at: string;
+};
+
+export type ReadingSession = {
+  id: string;
+  user_id: string;
+  book_id: string;
+  day: string;
+  /** Páginas lidas nesta marcação. */
+  pages: number;
+  /** Página em que parou — guardada para o histórico não depender da soma. */
+  end_page: number;
+  created_at: string;
+};

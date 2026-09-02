@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import {
+  BookOpen,
   CalendarDays,
   ChevronRight,
   ListChecks,
@@ -31,6 +32,7 @@ const NAV = [
   { href: "/", label: "Início", icon: LayoutDashboard },
   { href: "/demandas", label: "Demandas", icon: ListChecks },
   { href: "/habitos", label: "Hábitos", icon: Repeat2 },
+  { href: "/leitura", label: "Leitura", icon: BookOpen },
   { href: "/contas", label: "Contas a pagar", icon: Wallet },
   { href: "/anotacoes", label: "Anotações", icon: StickyNote },
   { href: "/calendario", label: "Calendário", icon: CalendarDays },
