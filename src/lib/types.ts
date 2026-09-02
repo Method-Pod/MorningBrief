@@ -238,18 +238,25 @@ export type HabitLog = {
 /* ------------------------------ leitura ------------------------------ */
 
 /*
- * Os três estados de uma estante de verdade: o que está aberto na mesa, o que
- * já foi, e o que ainda falta comprar.
+ * As prateleiras de uma estante de verdade.
  *
- * Os valores gravados continuam `want`/`reading`/`done` — são os do check
- * constraint em LEITURA.sql, e trocá-los custaria uma migração para mudar
- * palavra na tela. `want` é a lista de compra.
+ * `queue` e `want` são coisas diferentes de propósito: um livro já é seu e
+ * espera a vez, o outro nem foi comprado. Misturar os dois é o que faz a lista
+ * de desejos virar cobrança.
+ *
+ * `dropped` existe porque abandonar livro é normal, e sem essa prateleira ele
+ * fica para sempre em "Lendo" fingindo que está em andamento — o que estraga a
+ * única pergunta que a tela responde bem, "onde eu parei".
+ *
+ * Vem de PRATELEIRAS.sql, que amplia o check constraint criado em LEITURA.sql.
  */
-export type BookStatus = "want" | "reading" | "done";
+export type BookStatus = "want" | "queue" | "reading" | "done" | "dropped";
 
 export const BOOK_STATUS_LABEL: Record<BookStatus, string> = {
   reading: "Lendo",
+  queue: "Ler",
   done: "Lido",
+  dropped: "Abandonado",
   want: "Comprar",
 };
 

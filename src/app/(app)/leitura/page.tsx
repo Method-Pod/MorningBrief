@@ -29,8 +29,17 @@ import {
 } from "@/components/ui";
 import { Capa, EscolherCapa, apagarCapa, enviarCapa } from "@/components/CapaLivro";
 
-/* Ordem das prateleiras: o que está na mão, o que já foi, o que falta ter. */
-const PRATELEIRAS: BookStatus[] = ["reading", "done", "want"];
+/*
+ * Ordem das prateleiras, seguindo o caminho de um livro: está aberto, é o
+ * próximo, terminou, parou no meio, ainda não é seu.
+ */
+const PRATELEIRAS: BookStatus[] = [
+  "reading",
+  "queue",
+  "done",
+  "dropped",
+  "want",
+];
 
 /** Iniciais dos dias, indexadas por getDay() — 0 é domingo. */
 const INICIAL = ["D", "S", "T", "Q", "Q", "S", "S"];
@@ -315,8 +324,9 @@ export default function LeituraPage() {
     const terminou = !!livro.total_pages && nova >= livro.total_pages;
 
     const mudanca: Record<string, unknown> = { current_page: nova };
-    /* Marcar página num livro da lista de compra é o gesto de começar a ler —
-       exigir mudar a prateleira antes seria um passo sem propósito. */
+    /* Marcar página em livro que está em Ler, Comprar ou Abandonado é o gesto
+       de (re)começar a leitura — exigir trocar a prateleira antes seria um
+       passo sem propósito. */
     if (livro.status !== "reading" && !terminou) {
       mudanca.status = "reading";
       mudanca.finished_on = null;
@@ -371,15 +381,36 @@ export default function LeituraPage() {
   };
 
   const mudarPrateleira = async (livro: Book, status: BookStatus) => {
+    /*
+     * As datas seguem o significado da prateleira, não a troca em si.
+     *
+     * "Ler" e "Comprar" são estados de quem não começou, então não inventam
+     * data de início. "Abandonado" preserva a que já existia — parar no meio
+     * não apaga o fato de ter começado. E só "Lido" tem data de fim.
+     */
+    const naoComecou = status === "want" || status === "queue";
     const { error } = await supabase
       .from("books")
       .update({
         status,
         finished_on: status === "done" ? (livro.finished_on ?? hoje) : null,
-        started_on:
-          status !== "want" ? (livro.started_on ?? hoje) : livro.started_on,
+        started_on: naoComecou
+          ? livro.started_on
+          : (livro.started_on ?? hoje),
       })
       .eq("id", livro.id);
+
+    /*
+     * 23514 é violação de check constraint.
+     *
+     * Acontece quando PRATELEIRAS.sql ainda não rodou: o banco só aceita os
+     * três valores originais, e "Ler" ou "Abandonado" viram um erro do
+     * Postgres sem nenhuma pista de como resolver.
+     */
+    if (error?.code === "23514" || /status/.test(error?.message ?? ""))
+      return notice.show(
+        `"${BOOK_STATUS_LABEL[status]}" precisa de supabase/PRATELEIRAS.sql no banco. Rode o arquivo.`
+      );
     if (!notice.check(error, "mudar a prateleira")) load();
   };
 
@@ -492,8 +523,9 @@ export default function LeituraPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Leitura</h1>
           <p className="mt-1 text-sm text-fg-mute">
-            {contagem("reading")} lendo · {contagem("done")} lido
-            {contagem("done") === 1 ? "" : "s"} · {contagem("want")} para comprar
+            {contagem("reading")} lendo · {contagem("queue")} na fila ·{" "}
+            {contagem("done")} lido{contagem("done") === 1 ? "" : "s"} ·{" "}
+            {contagem("want")} para comprar
           </p>
         </div>
         <Button variant="primary" onClick={() => setAdd(true)}>
@@ -642,15 +674,20 @@ export default function LeituraPage() {
           <h2 className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
             Biblioteca
           </h2>
-          <Segmented
-            value={prateleira}
-            onChange={setPrateleira}
-            options={PRATELEIRAS.map((s) => ({
-              value: s,
-              label: BOOK_STATUS_LABEL[s],
-              count: contagem(s),
-            }))}
-          />
+          {/* Rola de lado no lugar de quebrar: com cinco prateleiras os rótulos
+              passam de 375px, e `Segmented` é uma tira só — quebrar deixaria
+              metade dos botões fora do fundo arredondado. */}
+          <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-0.5">
+            <Segmented
+              value={prateleira}
+              onChange={setPrateleira}
+              options={PRATELEIRAS.map((s) => ({
+                value: s,
+                label: BOOK_STATUS_LABEL[s],
+                count: contagem(s),
+              }))}
+            />
+          </div>
         </div>
 
         {loading ? null : daPrateleira.length === 0 ? (
@@ -715,6 +752,11 @@ export default function LeituraPage() {
                     {l.status === "done" && (
                       <span className="mt-1 block text-[9.5px] font-semibold text-pos">
                         lido {dataCurta(l.finished_on)}
+                      </span>
+                    )}
+                    {l.status === "dropped" && l.total_pages && (
+                      <span className="mt-1 block text-[9.5px] font-semibold text-fg-mute tnum">
+                        parou na pág {l.current_page}
                       </span>
                     )}
                   </button>
@@ -846,6 +888,9 @@ export default function LeituraPage() {
                   lido {dataCurta(ver.finished_on)}
                 </Badge>
               )}
+              {ver.status === "dropped" && (
+                <Badge tone="neutral">abandonado</Badge>
+              )}
               {ver.isbn && (
                 <span className="text-[10.5px] text-fg-mute tnum">
                   ISBN {ver.isbn}
@@ -928,14 +973,16 @@ export default function LeituraPage() {
           />
 
           <Field label="Adicionar em">
-            <Segmented
-              value={ondeAdd}
-              onChange={setOndeAdd}
-              options={PRATELEIRAS.map((s) => ({
-                value: s,
-                label: BOOK_STATUS_LABEL[s],
-              }))}
-            />
+            <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-0.5">
+              <Segmented
+                value={ondeAdd}
+                onChange={setOndeAdd}
+                options={PRATELEIRAS.map((s) => ({
+                  value: s,
+                  label: BOOK_STATUS_LABEL[s],
+                }))}
+              />
+            </div>
           </Field>
 
           {modo === "manual" ? (
