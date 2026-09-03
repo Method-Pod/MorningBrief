@@ -1309,6 +1309,10 @@ export default function LeituraPage() {
               </>
             ) : (
               <>
+                <Button onClick={() => abrirEdicao(ver)}>
+                  <Pencil size={14} />
+                  Editar
+                </Button>
                 <Button onClick={() => remover(ver)}>
                   <Trash2 size={14} />
                   Tirar da estante
@@ -1336,6 +1340,24 @@ export default function LeituraPage() {
                 {erroEdit}
               </p>
             )}
+
+            {/*
+              A capa fica só aqui, na edição.
+
+              No detalhe ela ocupava o topo com "Trocar capa" e "Remover" à
+              vista, dois botões de mexer numa tela que serve para olhar. E ao
+              contrário dos campos de texto, a capa vale na hora: enviar arquivo
+              é operação de arquivo, não rascunho — por isso não espera o Salvar.
+            */}
+            <Field label="Capa" hint="Vale no momento do envio, sem esperar o Salvar.">
+              <EscolherCapa
+                previa={ver.cover_url}
+                titulo={ver.title}
+                ocupado={enviandoCapa}
+                onArquivo={(f) => trocarCapa(ver, f)}
+                onRemover={ver.cover_url ? () => removerCapa(ver) : undefined}
+              />
+            </Field>
 
             <Field label="Título">
               <Input
@@ -1420,13 +1442,9 @@ export default function LeituraPage() {
           </div>
         ) : ver ? (
           <div className="space-y-4">
-            <EscolherCapa
-              previa={ver.cover_url}
-              titulo={ver.title}
-              ocupado={enviandoCapa}
-              onArquivo={(f) => trocarCapa(ver, f)}
-              onRemover={ver.cover_url ? () => removerCapa(ver) : undefined}
-            />
+            <div className="w-[84px]">
+              <Capa url={ver.cover_url} titulo={ver.title} />
+            </div>
 
             {/* A nota vem antes do resto para quem acabou de fechar o livro:
                 é o momento em que se tem opinião, e adiar até rolar a tela é
@@ -1521,10 +1539,6 @@ export default function LeituraPage() {
             )}
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={() => abrirEdicao(ver)}>
-                <Pencil size={13} />
-                Editar dados
-              </Button>
               {ver.status === "done" && (
                 <Badge tone="pos">
                   <Check size={10} />
