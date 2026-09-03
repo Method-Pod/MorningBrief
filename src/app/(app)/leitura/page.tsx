@@ -5,6 +5,7 @@ import {
   BookOpen,
   Check,
   Loader2,
+  Pencil,
   Plus,
   Search,
   Target,
@@ -144,6 +145,9 @@ export default function LeituraPage() {
   const [verId, setVerId] = React.useState<string | null>(null);
   const [enviandoCapa, setEnviandoCapa] = React.useState(false);
   const [totalEmEdicao, setTotalEmEdicao] = React.useState("");
+  const [editando, setEditando] = React.useState(false);
+  const [formEdit, setFormEdit] = React.useState(manualVazio());
+  const [erroEdit, setErroEdit] = React.useState("");
 
   /* adicionar */
   const [add, setAdd] = React.useState(false);
@@ -595,6 +599,64 @@ export default function LeituraPage() {
       setMetaEmEdicao("");
       setMeta(Math.round(n));
     }
+  };
+
+  /**
+   * Abre a edição com o que está gravado.
+   *
+   * A descrição vem do cache que o detalhe já preencheu — ela não viaja na
+   * lista, então tentar ler de `ver.description` daria sempre vazio.
+   */
+  const abrirEdicao = (livro: BookLista) => {
+    setFormEdit({
+      title: livro.title,
+      authors: livro.authors ?? "",
+      isbn: livro.isbn ?? "",
+      publisher: livro.publisher ?? "",
+      published_on: livro.published_on ?? "",
+      total_pages: livro.total_pages ? String(livro.total_pages) : "",
+      description: descricoes[livro.id] ?? "",
+    });
+    setErroEdit("");
+    setEditando(true);
+  };
+
+  const salvarEdicao = async (livro: BookLista) => {
+    const title = formEdit.title.trim();
+    if (!title) return setErroEdit("O título não pode ficar vazio.");
+
+    const cru = formEdit.total_pages.trim();
+    const total = cru ? Number(cru) : null;
+    if (cru && (!Number.isFinite(total) || (total ?? 0) <= 0))
+      return setErroEdit("Total de páginas precisa ser um número maior que zero.");
+    /* Total menor que a página atual deixaria o progresso acima de 100% e o
+       livro "lido" numa página que não existe. */
+    if (total && total < livro.current_page)
+      return setErroEdit(
+        `Você está na página ${livro.current_page}; o total não pode ser menor.`
+      );
+
+    const ou = (v: string) => v.trim() || null;
+    const mudanca = {
+      title,
+      authors: ou(formEdit.authors),
+      isbn: ou(formEdit.isbn),
+      publisher: ou(formEdit.publisher),
+      published_on: ou(formEdit.published_on),
+      total_pages: total,
+    };
+    const descricao = ou(formEdit.description);
+
+    setErroEdit("");
+    const { error } = await supabase
+      .from("books")
+      .update({ ...mudanca, description: descricao })
+      .eq("id", livro.id);
+    if (notice.check(error, "salvar as alterações")) return;
+
+    patch(livro.id, mudanca);
+    setDescricoes((v) => ({ ...v, [livro.id]: descricao }));
+    setEditando(false);
   };
 
   const mudarPrateleira = async (livro: BookLista, status: BookStatus) => {
@@ -1225,6 +1287,7 @@ export default function LeituraPage() {
         onClose={() => {
           setVerId(null);
           setTotalEmEdicao("");
+          setEditando(false);
         }}
         title={ver?.title ?? ""}
         sub={
@@ -1237,19 +1300,125 @@ export default function LeituraPage() {
         size="lg"
         footer={
           ver ? (
-            <>
-              <Button onClick={() => remover(ver)}>
-                <Trash2 size={14} />
-                Tirar da estante
-              </Button>
-              <Button variant="primary" onClick={() => setVerId(null)}>
-                Fechar
-              </Button>
-            </>
+            editando ? (
+              <>
+                <Button onClick={() => setEditando(false)}>Cancelar</Button>
+                <Button variant="primary" onClick={() => salvarEdicao(ver)}>
+                  Salvar
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button onClick={() => remover(ver)}>
+                  <Trash2 size={14} />
+                  Tirar da estante
+                </Button>
+                <Button variant="primary" onClick={() => setVerId(null)}>
+                  Fechar
+                </Button>
+              </>
+            )
           ) : null
         }
       >
-        {ver && (
+        {ver && editando ? (
+          /*
+             Edição no mesmo modal, não numa segunda janela.
+
+             O que se corrige quase sempre é o que a API trouxe errado — ano,
+             editora, total de páginas — e é logo acima que esses valores estão
+             à vista. Abrir outra janela obrigaria a decorar o valor antigo para
+             comparar.
+          */
+          <div className="space-y-4">
+            {erroEdit && (
+              <p className="rounded-[14px] bg-neg/10 px-3.5 py-3 text-xs text-neg">
+                {erroEdit}
+              </p>
+            )}
+
+            <Field label="Título">
+              <Input
+                autoFocus
+                value={formEdit.title}
+                onChange={(e) =>
+                  setFormEdit({ ...formEdit, title: e.target.value })
+                }
+              />
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Autor">
+                <Input
+                  value={formEdit.authors}
+                  onChange={(e) =>
+                    setFormEdit({ ...formEdit, authors: e.target.value })
+                  }
+                  placeholder="Opcional"
+                />
+              </Field>
+              <Field label="Editora">
+                <Input
+                  value={formEdit.publisher}
+                  onChange={(e) =>
+                    setFormEdit({ ...formEdit, publisher: e.target.value })
+                  }
+                  placeholder="Opcional"
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_100px_110px]">
+              <Field label="ISBN">
+                <Input
+                  value={formEdit.isbn}
+                  onChange={(e) =>
+                    setFormEdit({ ...formEdit, isbn: e.target.value })
+                  }
+                  placeholder="Opcional"
+                />
+              </Field>
+              <Field label="Ano">
+                <Input
+                  value={formEdit.published_on}
+                  onChange={(e) =>
+                    setFormEdit({ ...formEdit, published_on: e.target.value })
+                  }
+                  placeholder="2024"
+                />
+              </Field>
+              <Field
+                label="Páginas"
+                hint={
+                  ver.current_page
+                    ? `Você está na ${ver.current_page}.`
+                    : undefined
+                }
+              >
+                <Input
+                  type="number"
+                  min={1}
+                  value={formEdit.total_pages}
+                  onChange={(e) =>
+                    setFormEdit({ ...formEdit, total_pages: e.target.value })
+                  }
+                  placeholder="320"
+                />
+              </Field>
+            </div>
+
+            <Field label="Descrição">
+              <Textarea
+                rows={4}
+                value={formEdit.description}
+                onChange={(e) =>
+                  setFormEdit({ ...formEdit, description: e.target.value })
+                }
+                placeholder="Opcional"
+              />
+            </Field>
+          </div>
+        ) : ver ? (
           <div className="space-y-4">
             <EscolherCapa
               previa={ver.cover_url}
@@ -1352,6 +1521,10 @@ export default function LeituraPage() {
             )}
 
             <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" onClick={() => abrirEdicao(ver)}>
+                <Pencil size={13} />
+                Editar dados
+              </Button>
               {ver.status === "done" && (
                 <Badge tone="pos">
                   <Check size={10} />
@@ -1419,7 +1592,7 @@ export default function LeituraPage() {
               </div>
             )}
           </div>
-        )}
+        ) : null}
       </Modal>
 
       {/* ------------------------------ adicionar ------------------------------ */}
