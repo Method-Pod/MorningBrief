@@ -103,6 +103,14 @@ export function Capa({
     <img
       src={url}
       alt=""
+      /*
+       * `lazy` + `async`: a grade pode ter dezenas de capas, e sem isto todas
+       * baixam de uma vez na abertura, competindo com a consulta ao banco. O
+       * `aspect-[2/3]` já reserva o espaço, então nada pula quando cada uma
+       * chega.
+       */
+      loading="lazy"
+      decoding="async"
       onError={() => setQuebrou(true)}
       className={cx(
         "aspect-[2/3] w-full rounded-[10px] bg-ink-800 object-cover",

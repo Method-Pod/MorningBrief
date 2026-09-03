@@ -82,7 +82,24 @@ const ORDENS: { valor: Ordem; rotulo: string }[] = [
   { valor: "nota", rotulo: "Nota" },
 ];
 
-const pctDe = (l: Book) =>
+/*
+ * A lista não traz `description`.
+ *
+ * Medido na estante real: a descrição era 56% do corpo da consulta (11,4 KB de
+ * 20,2 KB em 14 livros), e só o detalhe a mostra. Ela é buscada junto com o
+ * histórico quando o livro abre.
+ *
+ * O tipo diz a verdade sobre isso — `Omit` em vez de fingir que o campo veio,
+ * senão `ver.description` seria `undefined` num objeto tipado como `string`.
+ */
+const COLUNAS_LISTA =
+  "id,user_id,title,authors,isbn,cover_url,publisher,published_on," +
+  "categories,language,total_pages,current_page,status,started_on," +
+  "finished_on,rating,created_at";
+
+type BookLista = Omit<Book, "description">;
+
+const pctDe = (l: BookLista) =>
   l.total_pages
     ? Math.min(100, Math.round((l.current_page / l.total_pages) * 100))
     : null;
@@ -106,7 +123,7 @@ const manualVazio = () => ({
 
 export default function LeituraPage() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [livros, setLivros] = React.useState<Book[]>([]);
+  const [livros, setLivros] = React.useState<BookLista[]>([]);
   const [sessoes, setSessoes] = React.useState<ReadingSession[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [falta, setFalta] = React.useState("");
@@ -149,10 +166,21 @@ export default function LeituraPage() {
   const load = React.useCallback(async () => {
     const ano = new Date().getFullYear();
     const [l, s, m] = await Promise.all([
-      supabase.from("books").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("books")
+        .select(COLUNAS_LISTA)
+        .order("created_at", { ascending: false }),
+      /*
+       * Só a janela do ritmo, não o histórico inteiro.
+       *
+       * Antes era `select("*")` sem limite: a consulta crescia para sempre e
+       * carregava anos de marcações para desenhar sete dias. O histórico de um
+       * livro é buscado quando o detalhe dele abre — é lá que ele é lido.
+       */
       supabase
         .from("reading_sessions")
         .select("*")
+        .gte("day", ultimosDias(todayISO())[0])
         .order("day", { ascending: false }),
       /* A meta tolera falha: sem LEITURA-EXTRAS.sql o cartão simplesmente não
          aparece, e a estante continua funcionando. */
@@ -181,7 +209,7 @@ export default function LeituraPage() {
       return;
     }
     setFalta("");
-    setLivros((l.data as Book[]) ?? []);
+    setLivros((l.data as unknown as BookLista[]) ?? []);
     setSessoes((s.data as ReadingSession[]) ?? []);
     setMeta((m.data as ReadingGoal | null)?.target ?? null);
     setLoading(false);
@@ -190,6 +218,60 @@ export default function LeituraPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  /**
+   * Aplica a mudança de um livro no estado, sem reler o banco.
+   *
+   * É o que substitui o `load()` que rodava depois de cada clique. O update já
+   * foi aceito pelo banco quando isto roda, e o valor novo é conhecido — reler
+   * a estante inteira, as sessões e a meta para descobrir o que já sabemos
+   * custava três consultas por marcação de página.
+   */
+  const patch = React.useCallback((id: string, mudanca: Partial<BookLista>) => {
+    setLivros((v) => v.map((l) => (l.id === id ? { ...l, ...mudanca } : l)));
+  }, []);
+
+  /* ------------------------ histórico do detalhe ------------------------ */
+
+  /*
+   * O histórico é buscado quando o livro é aberto, e guardado por livro.
+   *
+   * Fica fora da carga inicial porque só o detalhe o mostra, e trazer todas as
+   * marcações de todos os livros para talvez abrir um era o desperdício que
+   * mais crescia com o tempo.
+   */
+  const [historico, setHistorico] = React.useState<
+    Record<string, ReadingSession[]>
+  >({});
+  const [descricoes, setDescricoes] = React.useState<
+    Record<string, string | null>
+  >({});
+
+  React.useEffect(() => {
+    if (!verId || historico[verId]) return;
+    let vivo = true;
+    (async () => {
+      /* As duas em paralelo, e as duas só uma vez por livro: o cache é por id,
+         então reabrir o mesmo livro não consulta de novo. */
+      const [h, d] = await Promise.all([
+        supabase
+          .from("reading_sessions")
+          .select("*")
+          .eq("book_id", verId)
+          .order("day", { ascending: false }),
+        supabase.from("books").select("description").eq("id", verId).maybeSingle(),
+      ]);
+      if (!vivo) return;
+      setHistorico((v) => ({ ...v, [verId]: (h.data as ReadingSession[]) ?? [] }));
+      setDescricoes((v) => ({
+        ...v,
+        [verId]: (d.data as { description: string | null } | null)?.description ?? null,
+      }));
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [verId, historico, supabase]);
 
   /* ------------------------------ busca ------------------------------ */
 
@@ -256,7 +338,11 @@ export default function LeituraPage() {
       if (r.ok) a = (await r.json()).livro ?? bruto;
     } catch {}
 
-    const { error } = await supabase.from("books").insert({
+    /* `select().single()` devolve a linha gravada, com o id e os padrões que o
+       banco preencheu. É o que permite mostrar o livro sem reler a estante. */
+    const { data: criado, error } = await supabase
+      .from("books")
+      .insert({
       user_id: uid,
       title: a.title,
       authors: a.authors,
@@ -272,13 +358,15 @@ export default function LeituraPage() {
       /* Só "lendo" nasce com data de início: na Lista de Desejos a data seria
          a de quando foi anotado, não a de quando a leitura começou. */
       started_on: ondeAdd === "reading" ? hoje : null,
-    });
+    })
+      .select(COLUNAS_LISTA)
+      .single();
     setSalvando(null);
 
     if (notice.check(error, "adicionar o livro")) return;
+    if (criado) setLivros((v) => [criado as unknown as BookLista, ...v]);
     setPrateleira(ondeAdd);
     fecharAdd();
-    load();
   };
 
   const adicionarManual = async () => {
@@ -319,7 +407,7 @@ export default function LeituraPage() {
         status: ondeAdd,
         started_on: ondeAdd === "reading" ? hoje : null,
       })
-      .select("id")
+      .select(COLUNAS_LISTA)
       .single();
 
     if (error || !criado) {
@@ -329,6 +417,11 @@ export default function LeituraPage() {
       );
     }
 
+    const novo = criado as unknown as BookLista;
+    /* A descrição digitada já entra no cache: o livro acabou de nascer, não há
+       o que reler do banco para mostrá-la se o detalhe abrir em seguida. */
+    setDescricoes((v) => ({ ...v, [novo.id]: ou(manual.description) }));
+
     /*
      * A capa sobe depois do insert, não antes.
      *
@@ -337,16 +430,19 @@ export default function LeituraPage() {
      * não existir, e a capa pode ser posta depois pelo detalhe.
      */
     if (arquivoCapa) {
-      const { url, erro } = await enviarCapa(supabase, uid, criado.id, arquivoCapa);
-      if (url)
-        await supabase.from("books").update({ cover_url: url }).eq("id", criado.id);
-      else if (erro) notice.show(`Livro salvo, mas a capa não subiu: ${erro}`);
+      const { url, erro } = await enviarCapa(supabase, uid, novo.id, arquivoCapa);
+      if (url) {
+        await supabase.from("books").update({ cover_url: url }).eq("id", novo.id);
+        novo.cover_url = url;
+      } else if (erro) {
+        notice.show(`Livro salvo, mas a capa não subiu: ${erro}`);
+      }
     }
 
     setSalvando(null);
+    setLivros((v) => [novo, ...v]);
     setPrateleira(ondeAdd);
     fecharAdd();
-    load();
   };
 
   /* ------------------------------ progresso ------------------------------ */
@@ -358,7 +454,7 @@ export default function LeituraPage() {
    * conserto de digitação, e uma linha de "-40 páginas" no histórico sujaria o
    * ritmo sem informar nada. A página atual muda nos dois casos.
    */
-  const marcar = async (livro: Book) => {
+  const marcar = async (livro: BookLista) => {
     const cru = (rascunho[livro.id] ?? "").trim();
     const nova = Number(cru);
     if (!cru || !Number.isFinite(nova) || nova < 0) return;
@@ -394,21 +490,41 @@ export default function LeituraPage() {
       .update(mudanca)
       .eq("id", livro.id);
 
-    if (!error && avanco > 0)
-      await supabase.from("reading_sessions").insert({
-        user_id: uid,
-        book_id: livro.id,
-        day: hoje,
-        pages: avanco,
-        end_page: nova,
-      });
+    /*
+     * A sessão volta com `select().single()` para entrar no estado com o id e a
+     * data que o banco gerou. Sem isso, o histórico e o ritmo só mostrariam a
+     * marcação nova depois de um recarregamento.
+     */
+    let sessaoNova: ReadingSession | null = null;
+    if (!error && avanco > 0) {
+      const { data } = await supabase
+        .from("reading_sessions")
+        .insert({
+          user_id: uid,
+          book_id: livro.id,
+          day: hoje,
+          pages: avanco,
+          end_page: nova,
+        })
+        .select("*")
+        .single();
+      sessaoNova = (data as ReadingSession) ?? null;
+    }
 
     setGravando(null);
     setRascunho((r) => ({ ...r, [livro.id]: "" }));
-    if (!notice.check(error, "gravar a página")) {
-      if (terminou) notice.show(`"${livro.title}" lido. Boa.`);
-      load();
+    if (notice.check(error, "gravar a página")) return;
+
+    patch(livro.id, mudanca as Partial<Book>);
+    if (sessaoNova) {
+      setSessoes((v) => [sessaoNova as ReadingSession, ...v]);
+      setHistorico((h) =>
+        h[livro.id]
+          ? { ...h, [livro.id]: [sessaoNova as ReadingSession, ...h[livro.id]] }
+          : h
+      );
     }
+    if (terminou) notice.show(`"${livro.title}" lido. Boa.`);
   };
 
   /**
@@ -417,22 +533,24 @@ export default function LeituraPage() {
    * Necessário porque a fonte falha justo nesse campo, e sem ele não há barra
    * de progresso nem "lido" automático.
    */
-  const gravarTotal = async (livro: Book) => {
+  const gravarTotal = async (livro: BookLista) => {
     const n = Number(totalEmEdicao.trim());
     if (!totalEmEdicao.trim() || !Number.isFinite(n) || n <= 0) return;
     if (n < livro.current_page)
       return notice.show(
         `Você já está na página ${livro.current_page}; o total não pode ser menor.`
       );
+    const total = Math.round(n);
     const { error } = await supabase
       .from("books")
-      .update({ total_pages: Math.round(n) })
+      .update({ total_pages: total })
       .eq("id", livro.id);
     setTotalEmEdicao("");
-    if (!notice.check(error, "gravar o total de páginas")) load();
+    if (!notice.check(error, "gravar o total de páginas"))
+      patch(livro.id, { total_pages: total });
   };
 
-  const darNota = async (livro: Book, nota: number | null) => {
+  const darNota = async (livro: BookLista, nota: number | null) => {
     const { error } = await supabase
       .from("books")
       .update({ rating: nota })
@@ -441,7 +559,7 @@ export default function LeituraPage() {
       return notice.show(
         "Nota precisa de supabase/LEITURA-EXTRAS.sql no banco. Rode o arquivo."
       );
-    if (!notice.check(error, "gravar a nota")) load();
+    if (!notice.check(error, "gravar a nota")) patch(livro.id, { rating: nota });
   };
 
   const salvarMeta = async () => {
@@ -467,11 +585,11 @@ export default function LeituraPage() {
     if (!notice.check(error, "salvar a meta")) {
       setEditandoMeta(false);
       setMetaEmEdicao("");
-      load();
+      setMeta(Math.round(n));
     }
   };
 
-  const mudarPrateleira = async (livro: Book, status: BookStatus) => {
+  const mudarPrateleira = async (livro: BookLista, status: BookStatus) => {
     /*
      * As datas seguem o significado da prateleira, não a troca em si.
      *
@@ -480,15 +598,14 @@ export default function LeituraPage() {
      * no meio não apaga o fato de ter começado. E só "Lido" tem data de fim.
      */
     const naoComecou = status === "want" || status === "queue";
+    const mudanca = {
+      status,
+      finished_on: status === "done" ? (livro.finished_on ?? hoje) : null,
+      started_on: naoComecou ? livro.started_on : (livro.started_on ?? hoje),
+    };
     const { error } = await supabase
       .from("books")
-      .update({
-        status,
-        finished_on: status === "done" ? (livro.finished_on ?? hoje) : null,
-        started_on: naoComecou
-          ? livro.started_on
-          : (livro.started_on ?? hoje),
-      })
+      .update(mudanca)
       .eq("id", livro.id);
 
     /*
@@ -502,10 +619,10 @@ export default function LeituraPage() {
       return notice.show(
         `"${BOOK_STATUS_LABEL[status]}" precisa de supabase/PRATELEIRAS.sql no banco. Rode o arquivo.`
       );
-    if (!notice.check(error, "mudar a prateleira")) load();
+    if (!notice.check(error, "mudar a prateleira")) patch(livro.id, mudanca);
   };
 
-  const trocarCapa = async (livro: Book, arquivo: File) => {
+  const trocarCapa = async (livro: BookLista, arquivo: File) => {
     setEnviandoCapa(true);
     const uid = await currentUserId(supabase);
     if (!uid) {
@@ -522,10 +639,11 @@ export default function LeituraPage() {
       .update({ cover_url: url })
       .eq("id", livro.id);
     setEnviandoCapa(false);
-    if (!notice.check(error, "gravar a capa")) load();
+    if (!notice.check(error, "gravar a capa"))
+      patch(livro.id, { cover_url: url ?? null });
   };
 
-  const removerCapa = async (livro: Book) => {
+  const removerCapa = async (livro: BookLista) => {
     setEnviandoCapa(true);
     const uid = await currentUserId(supabase);
     if (!uid) {
@@ -538,10 +656,11 @@ export default function LeituraPage() {
       .update({ cover_url: null })
       .eq("id", livro.id);
     setEnviandoCapa(false);
-    if (!notice.check(error, "remover a capa")) load();
+    if (!notice.check(error, "remover a capa"))
+      patch(livro.id, { cover_url: null });
   };
 
-  const remover = (livro: Book) =>
+  const remover = (livro: BookLista) =>
     confirm.ask(
       `Tirar "${livro.title}" da estante? O histórico de leitura dele sai junto.`,
       async () => {
@@ -552,15 +671,32 @@ export default function LeituraPage() {
         const { error } = await supabase.from("books").delete().eq("id", livro.id);
         if (!notice.check(error, "tirar o livro")) {
           setVerId(null);
-          load();
+          setLivros((v) => v.filter((l) => l.id !== livro.id));
+          /* As sessões saem por cascade no banco; aqui saem do estado para o
+             ritmo não contar páginas de um livro que já não existe. */
+          setSessoes((v) => v.filter((x) => x.book_id !== livro.id));
+          setHistorico(({ [livro.id]: _, ...resto }) => resto);
         }
       }
     );
 
   /* ------------------------------ derivados ------------------------------ */
 
-  const contagem = (f: Filtro) =>
-    f === "todos" ? livros.length : livros.filter((l) => l.status === f).length;
+  /*
+   * As contagens numa passada só.
+   *
+   * `contagem` era chamada seis vezes por render — uma por prateleira — e cada
+   * chamada varria a estante inteira. Agora é um `reduce` memoizado.
+   */
+  const contagens = React.useMemo(() => {
+    const c: Record<string, number> = { todos: livros.length };
+    livros.forEach((l) => {
+      c[l.status] = (c[l.status] ?? 0) + 1;
+    });
+    return c;
+  }, [livros]);
+
+  const contagem = (f: Filtro) => contagens[f] ?? 0;
 
   /*
    * A prateleira, filtrada e ordenada.
@@ -582,7 +718,7 @@ export default function LeituraPage() {
           (l.isbn ?? "").includes(termo)
       );
 
-    const pct = (l: Book) => pctDe(l) ?? -1;
+    const pct = (l: BookLista) => pctDe(l) ?? -1;
     return [...lista].sort((a, b) => {
       switch (ordem) {
         case "titulo":
@@ -605,7 +741,7 @@ export default function LeituraPage() {
   }, [livros, prateleira, busca, ordem]);
   const lendo = livros.filter((l) => l.status === "reading");
   const ver = livros.find((l) => l.id === verId) ?? null;
-  const histDoVer = ver ? sessoes.filter((s) => s.book_id === ver.id) : [];
+  const histDoVer = (ver && historico[ver.id]) || [];
 
   /** Páginas por dia nos últimos 7 dias — o ritmo. */
   const ritmo = React.useMemo(() => {
@@ -623,7 +759,7 @@ export default function LeituraPage() {
   const naSemana = ritmo.reduce((a, b) => a + b.paginas, 0);
 
   /* O mesmo controle de página serve ao "continuar lendo" e ao detalhe. */
-  const campoPagina = (l: Book, largo?: boolean) => (
+  const campoPagina = (l: BookLista, largo?: boolean) => (
     <div className="flex items-center gap-1.5">
       <div className={largo ? "w-[104px]" : "w-[76px]"}>
         <Input
@@ -1159,9 +1295,9 @@ export default function LeituraPage() {
               )}
             </div>
 
-            {ver.description && (
+            {descricoes[ver.id] && (
               <p className="max-h-[22vh] overflow-y-auto rounded-[14px] bg-ink-800 px-3.5 py-3 text-[12px] leading-relaxed text-fg-dim">
-                {ver.description}
+                {descricoes[ver.id]}
               </p>
             )}
 
