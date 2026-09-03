@@ -175,3 +175,52 @@ export function completar(base: LivroAchado, extra: LivroAchado): LivroAchado {
     total_pages: (base.total_pages ?? extra.total_pages) as number | null,
   };
 }
+
+/**
+ * Um livro pelo ISBN exato, na forma do endpoint `/api/books` do Open Library.
+ *
+ * Existe porque `search.json` NÃO faz consulta por ISBN: medido, um ISBN
+ * desconhecido devolvia 24 resultados sem relação nenhuma, e o prefixo `isbn:`
+ * não mudava nada — a busca cai em correspondência difusa. Era isso que fazia
+ * "procurar pelo ISBN" devolver uma lista de livros errados.
+ *
+ * Já `/api/books?bibkeys=ISBN:...&jscmd=data` é consulta exata, e ainda traz o
+ * nome dos autores e a capa prontos, sem a segunda chamada que `/isbn/` exigia.
+ */
+export function normalizarOpenLibraryIsbn(
+  v: unknown,
+  isbn: string
+): LivroAchado | null {
+  const d = v as Record<string, unknown>;
+  const title = texto(d?.title);
+  if (!title) return null;
+
+  const sub = texto(d.subtitle);
+  const nomes = Array.isArray(d.authors)
+    ? (d.authors as { name?: string }[]).map((a) => a?.name).filter(Boolean)
+    : [];
+  const capa = (d.cover as Record<string, string> | undefined)?.medium;
+
+  /* `publish_date` vem como "Sep 26, 2008", então o ano sai por regex: cortar
+     os quatro primeiros caracteres daria "Sep " no lugar do ano. */
+  const ano = texto(d.publish_date)?.match(/\b(1[5-9]\d{2}|20\d{2})\b/)?.[1];
+
+  return {
+    id: `oi:${isbn}`,
+    title: sub ? `${title}: ${sub}` : title,
+    authors: nomes.length ? nomes.join(", ") : null,
+    isbn,
+    cover_url: texto(capa),
+    publisher: Array.isArray(d.publishers)
+      ? texto((d.publishers as { name?: string }[])[0]?.name)
+      : null,
+    published_on: ano ?? texto(d.publish_date),
+    description: texto((d.notes as string) ?? null),
+    categories: Array.isArray(d.subjects)
+      ? lista((d.subjects as { name?: string }[]).slice(0, 6).map((x) => x?.name))
+      : null,
+    language: null,
+    total_pages: paginas(d.number_of_pages),
+    fonte: "openlibrary",
+  };
+}

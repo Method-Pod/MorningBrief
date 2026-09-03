@@ -152,6 +152,8 @@ export default function LeituraPage() {
   const [achados, setAchados] = React.useState<LivroAchado[]>([]);
   const [buscando, setBuscando] = React.useState(false);
   const [erroBusca, setErroBusca] = React.useState("");
+  /* Status do Google na última busca, para explicar um "nada encontrado". */
+  const [statusGoogle, setStatusGoogle] = React.useState<number | null>(null);
   const [ondeAdd, setOndeAdd] = React.useState<BookStatus>("reading");
   const [salvando, setSalvando] = React.useState<string | null>(null);
   const [manual, setManual] = React.useState(manualVazio());
@@ -295,7 +297,9 @@ export default function LeituraPage() {
       try {
         const r = await fetch(`/api/livros?q=${encodeURIComponent(t)}`);
         if (!r.ok) throw new Error();
-        setAchados((await r.json()).itens ?? []);
+        const d = await r.json();
+        setAchados(d.itens ?? []);
+        setStatusGoogle(typeof d.google === "number" ? d.google : null);
         setErroBusca("");
       } catch {
         setErroBusca("Não consegui buscar agora. Tente de novo.");
@@ -811,6 +815,22 @@ export default function LeituraPage() {
   const lidosNoAno = livros.filter(
     (l) => l.status === "done" && l.finished_on?.startsWith(anoAtual)
   ).length;
+
+  /** Traduz o status do Google numa frase que diz o que fazer. */
+  const avisoGoogle = (() => {
+    switch (statusGoogle) {
+      case 400:
+        return "A chave do Google Books parece inválida (erro 400). Confira o valor de GOOGLE_BOOKS_KEY.";
+      case 403:
+        return "O Google recusou a chave (erro 403). Verifique se a Books API está ativada no projeto e se a restrição da chave permite ela.";
+      case 429:
+        return "Cota do Google Books estourada (erro 429). A busca voltou a usar o Open Library.";
+      case 0:
+        return "Não consegui falar com o Google Books. A busca usou o Open Library.";
+      default:
+        return null;
+    }
+  })();
 
   const naSemana = ritmo.reduce((a, b) => a + b.paginas, 0);
 
@@ -1630,18 +1650,31 @@ export default function LeituraPage() {
                 !erroBusca &&
                 termo.trim().length >= 2 &&
                 !achados.length && (
-                  <p className="px-1 text-[12px] text-fg-mute">
-                    Nada encontrado para “{termo.trim()}”. Se o livro não está em
-                    nenhuma base, use{" "}
-                    <button
-                      type="button"
-                      onClick={() => setModo("manual")}
-                      className="font-semibold text-brand-400 underline"
-                    >
-                      Manual
-                    </button>
-                    .
-                  </p>
+                  <div className="space-y-2 px-1">
+                    <p className="text-[12px] text-fg-mute">
+                      Nada encontrado para “{termo.trim()}”. Se o livro não está
+                      em nenhuma base, use{" "}
+                      <button
+                        type="button"
+                        onClick={() => setModo("manual")}
+                        className="font-semibold text-brand-400 underline"
+                      >
+                        Manual
+                      </button>
+                      .
+                    </p>
+                    {/*
+                      Quando o Google reclamou, o problema é a chave e não o
+                      livro. Sem esta linha os dois casos chegavam idênticos na
+                      tela, e não havia como distinguir "não existe" de "a
+                      configuração está errada".
+                    */}
+                    {avisoGoogle && (
+                      <p className="rounded-[12px] bg-warn/10 px-3 py-2 text-[11.5px] text-fg-dim">
+                        {avisoGoogle}
+                      </p>
+                    )}
+                  </div>
                 )}
             </>
           )}

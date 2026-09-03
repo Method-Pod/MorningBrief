@@ -3,6 +3,7 @@ import {
   completar,
   normalizarGoogle,
   normalizarOpenLibrary,
+  normalizarOpenLibraryIsbn,
   pareceIsbn,
   soIsbn,
   type LivroAchado,
@@ -24,44 +25,81 @@ import {
 
 const CHAVE = process.env.GOOGLE_BOOKS_KEY;
 
-/** Falha de rede ou cota não é erro daqui: é motivo para tentar a outra fonte. */
-async function json(url: string) {
+/**
+ * Falha de rede ou cota não é erro daqui: é motivo para tentar a outra fonte.
+ *
+ * Devolve o status junto porque sem ele um "não achei" e um "a chave está
+ * errada" chegam iguais na tela — foi exatamente o que travou o diagnóstico de
+ * uma busca por ISBN que não achava nada.
+ */
+async function json(url: string): Promise<{ d: unknown; status: number }> {
   try {
     const r = await fetch(url, { next: { revalidate: 3600 } });
-    return r.ok ? await r.json() : null;
+    if (!r.ok) return { d: null, status: r.status };
+    return { d: await r.json(), status: r.status };
   } catch {
-    return null;
+    return { d: null, status: 0 };
   }
 }
 
-async function google(termo: string): Promise<LivroAchado[]> {
-  if (!CHAVE) return [];
+async function google(
+  termo: string
+): Promise<{ itens: LivroAchado[]; status: number }> {
+  if (!CHAVE) return { itens: [], status: -1 };
   const q = pareceIsbn(termo) ? `isbn:${soIsbn(termo)}` : termo;
-  const d = await json(
+  const { d, status } = await json(
     "https://www.googleapis.com/books/v1/volumes?maxResults=12" +
       `&q=${encodeURIComponent(q)}&key=${encodeURIComponent(CHAVE)}`
   );
-  const itens: unknown[] = Array.isArray(d?.items) ? d.items : [];
-  return itens
-    .map(normalizarGoogle)
-    .filter((x): x is LivroAchado => x !== null);
+  const brutos: unknown[] = Array.isArray((d as { items?: unknown[] })?.items)
+    ? (d as { items: unknown[] }).items
+    : [];
+  return {
+    itens: brutos
+      .map(normalizarGoogle)
+      .filter((x): x is LivroAchado => x !== null),
+    status,
+  };
 }
 
-async function openLibrary(termo: string): Promise<LivroAchado[]> {
-  /* Sempre search.json, inclusive para ISBN: o endpoint /isbn/ não traz o nome
-     do autor, só uma referência que exigiria uma segunda chamada por livro. */
-  const q = pareceIsbn(termo) ? soIsbn(termo) : termo;
-  const d = await json(
+/**
+ * ISBN no Open Library: consulta exata, não busca.
+ *
+ * `search.json` NÃO consulta por ISBN — medido: um ISBN desconhecido devolvia
+ * 24 livros sem relação, e o prefixo `isbn:` não mudava nada, porque a busca
+ * cai em correspondência difusa. Era a causa de "procurar pelo ISBN e receber
+ * uma lista de livros errados".
+ */
+async function openLibraryIsbn(termo: string): Promise<LivroAchado[]> {
+  const isbn = soIsbn(termo);
+  const { d } = await json(
+    `https://openlibrary.org/api/books?format=json&jscmd=data` +
+      `&bibkeys=ISBN:${encodeURIComponent(isbn)}`
+  );
+  const achado = (d as Record<string, unknown> | null)?.[`ISBN:${isbn}`];
+  if (!achado) return [];
+  const livro = normalizarOpenLibraryIsbn(achado, isbn);
+  return livro ? [livro] : [];
+}
+
+/** Texto no Open Library: aqui `search.json` é o endpoint certo. */
+async function openLibraryTexto(termo: string): Promise<LivroAchado[]> {
+  const { d } = await json(
     "https://openlibrary.org/search.json?limit=12" +
       "&fields=key,title,author_name,isbn,number_of_pages_median,publisher," +
       "first_publish_year,language,subject,cover_i" +
-      `&q=${encodeURIComponent(q)}`
+      `&q=${encodeURIComponent(termo)}`
   );
-  const docs: unknown[] = Array.isArray(d?.docs) ? d.docs : [];
+  const docs: unknown[] = Array.isArray((d as { docs?: unknown[] })?.docs)
+    ? (d as { docs: unknown[] }).docs
+    : [];
   return docs
     .map(normalizarOpenLibrary)
     .filter((x): x is LivroAchado => x !== null);
 }
+
+const openLibrary = (termo: string) =>
+  pareceIsbn(termo) ? openLibraryIsbn(termo) : openLibraryTexto(termo);
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -77,14 +115,39 @@ export async function GET(req: Request) {
    * tela nem precisa saber.
    */
   const g = await google(termo);
-  const o = g.length ? [] : await openLibrary(termo);
-  const itens = g.length ? g : o;
+  const usouGoogle = g.itens.length > 0;
+  const itens = usouGoogle ? g.itens : await openLibrary(termo);
 
   return NextResponse.json(
-    { itens, fonte: g.length ? "google" : "openlibrary", comChave: !!CHAVE },
-    /* Um título buscado não é dado de ninguém, mas o resultado é o mesmo para
-       todos: cache compartilhado serve, e poupa cota. */
-    { headers: { "Cache-Control": "public, max-age=3600" } }
+    {
+      itens,
+      fonte: usouGoogle ? "google" : "openlibrary",
+      comChave: !!CHAVE,
+      /*
+       * O que o Google respondeu, para o caso de a busca não achar nada.
+       *
+       * -1 = sem chave. 200 com lista vazia = a chave funciona e o livro não
+       * está lá. 400 = chave inválida ou malformada. 403 = Books API não
+       * habilitada no projeto, ou restrição de chave barrando. 429 = cota.
+       * Sem isso, todos esses casos chegavam na tela como "nada encontrado".
+       */
+      google: g.status,
+    },
+    {
+      /*
+       * Resultado vazio não entra em cache.
+       *
+       * Com `max-age` fixo, um "nada encontrado" causado por chave errada ou
+       * cota estourada ficava guardado uma hora — e continuava vazio nas
+       * tentativas seguintes mesmo depois do problema resolvido. Era o defeito
+       * que fazia a busca parecer quebrada em definitivo.
+       */
+      headers: {
+        "Cache-Control": itens.length
+          ? "public, max-age=3600"
+          : "no-store",
+      },
+    }
   );
 }
 
@@ -111,7 +174,7 @@ export async function POST(req: Request) {
   const outra =
     livro.fonte === "google"
       ? await openLibrary(livro.isbn)
-      : await google(livro.isbn);
+      : (await google(livro.isbn)).itens;
 
   return NextResponse.json({
     livro: outra.length ? completar(livro, outra[0]) : livro,
