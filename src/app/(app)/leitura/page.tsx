@@ -258,7 +258,11 @@ export default function LeituraPage() {
           .from("reading_sessions")
           .select("*")
           .eq("book_id", verId)
-          .order("day", { ascending: false }),
+          /* `created_at` como segundo critério: duas marcações no mesmo dia
+             ficavam em ordem indefinida, e é justo essa ordem que decide qual
+             delas é "a última" ao apagar. */
+          .order("day", { ascending: false })
+          .order("created_at", { ascending: false }),
         supabase.from("books").select("description").eq("id", verId).maybeSingle(),
       ]);
       if (!vivo) return;
@@ -658,6 +662,58 @@ export default function LeituraPage() {
     setEnviandoCapa(false);
     if (!notice.check(error, "remover a capa"))
       patch(livro.id, { cover_url: null });
+  };
+
+  /**
+   * Apaga uma marcação do histórico.
+   *
+   * A página atual só volta atrás quando a marcação apagada era a última: aí a
+   * posição do livro passa a ser o fim da marcação anterior, ou zero se não
+   * sobrou nenhuma. Apagar uma do meio não mexe na página — você continua onde
+   * está, só o registro de como chegou lá que muda.
+   *
+   * E se apagar a marcação que terminou o livro, ele deixa de estar lido: ficar
+   * em "Lido" numa página que não é a última seria uma contradição na tela.
+   */
+  const apagarSessao = (livro: BookLista, sessao: ReadingSession) => {
+    const lista = historico[livro.id] ?? [];
+    const eraAUltima = lista[0]?.id === sessao.id;
+
+    confirm.ask(
+      `Apagar a marcação de ${dataCurta(sessao.day)} (+${sessao.pages} ${
+        sessao.pages === 1 ? "página" : "páginas"
+      })?${eraAUltima ? " A página atual volta para onde estava antes dela." : ""}`,
+      async () => {
+        const { error } = await supabase
+          .from("reading_sessions")
+          .delete()
+          .eq("id", sessao.id);
+        if (notice.check(error, "apagar a marcação")) return;
+
+        const restantes = lista.filter((x) => x.id !== sessao.id);
+        setHistorico((h) => ({ ...h, [livro.id]: restantes }));
+        setSessoes((v) => v.filter((x) => x.id !== sessao.id));
+
+        if (!eraAUltima) return;
+
+        const volta = restantes[0]?.end_page ?? 0;
+        const mudanca: Partial<BookLista> = { current_page: volta };
+        if (
+          livro.status === "done" &&
+          livro.total_pages &&
+          volta < livro.total_pages
+        ) {
+          mudanca.status = "reading";
+          mudanca.finished_on = null;
+        }
+        const { error: erroLivro } = await supabase
+          .from("books")
+          .update(mudanca)
+          .eq("id", livro.id);
+        if (!notice.check(erroLivro, "voltar a página")) patch(livro.id, mudanca);
+      },
+      { titulo: "Apagar marcação", rotulo: "Apagar" }
+    );
   };
 
   const remover = (livro: BookLista) =>
@@ -1307,17 +1363,35 @@ export default function LeituraPage() {
                   Histórico
                 </p>
                 <ul className="max-h-[20vh] space-y-1 overflow-y-auto rounded-[12px] bg-ink-800 px-3 py-2.5">
-                  {histDoVer.map((s) => (
+                  {histDoVer.map((s, i) => (
                     <li
                       key={s.id}
-                      className="flex items-center justify-between text-[11.5px] tnum"
+                      className="group/s flex items-center justify-between gap-2 text-[11.5px] tnum"
                     >
                       <span className="text-fg-mute">{dataCurta(s.day)}</span>
-                      <span className="text-fg-dim">
-                        <span className="font-semibold text-brand-400">
-                          +{s.pages}
-                        </span>{" "}
-                        → pág {s.end_page}
+                      <span className="flex items-center gap-1.5 text-fg-dim">
+                        <span>
+                          <span className="font-semibold text-brand-400">
+                            +{s.pages}
+                          </span>{" "}
+                          → pág {s.end_page}
+                        </span>
+                        {/* A lixeira aparece no hover e é sempre visível no
+                            toque: só a primeira linha é "a última marcação", e
+                            é a que se erra mais — vale estar à mão. */}
+                        <button
+                          type="button"
+                          onClick={() => apagarSessao(ver, s)}
+                          aria-label={`Apagar a marcação de ${dataCurta(s.day)}`}
+                          title={
+                            i === 0
+                              ? "Apagar — a página atual volta atrás"
+                              : "Apagar esta marcação"
+                          }
+                          className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg lg:opacity-0 lg:group-hover/s:opacity-100 lg:focus-visible:opacity-100"
+                        >
+                          <Trash2 size={12} />
+                        </button>
                       </span>
                     </li>
                   ))}
