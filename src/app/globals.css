@@ -342,7 +342,20 @@ textarea::placeholder {
   }
 }
 .entra {
-  animation: entra 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  /*
+   * `backwards`, não `both`.
+   *
+   * Com `both`, o valor do último quadro-chave continua aplicado depois de a
+   * animação acabar — e animação vence declaração normal na cascata. O
+   * `transform: translate3d(0,0,0)` do fim ficava travado no elemento e
+   * anulava o levantar no hover e o encolher no arrasto, sem erro nenhum:
+   * simplesmente nada acontecia.
+   *
+   * `backwards` ainda aplica o primeiro quadro durante o atraso — que é o que
+   * evita o piscar antes da vez de cada item — e solta o elemento ao terminar.
+   * O último quadro é equivalente a não ter transform, então nada salta.
+   */
+  animation: entra 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) backwards;
   animation-delay: calc(min(var(--i, 0), 8) * 30ms);
 }
 
@@ -386,6 +399,41 @@ textarea::placeholder {
     transform: translate3d(0, -2px, 0);
     box-shadow: 0 10px 24px -12px rgb(20 24 26 / 0.18);
   }
+}
+
+/*
+ * Arrasto entre colunas.
+ *
+ * Os dois estados são marcados por atributo no próprio elemento, escrito
+ * direto no DOM pelos handlers — não por estado do React. Em estado, começar a
+ * arrastar re-renderizava o quadro inteiro no momento em que o navegador
+ * precisa da thread livre para acompanhar o ponteiro.
+ */
+
+/* O cartão que está saindo: some parcialmente e encolhe um tico, para ficar
+   claro qual dos cartões é o que está na mão. */
+[data-arrastando="1"] {
+  opacity: 0.35;
+  transform: scale(0.98);
+  cursor: grabbing;
+}
+
+/* A coluna que vai receber. Antes não havia aviso nenhum: dava para soltar em
+   qualquer lugar sem saber onde ia cair. */
+[data-alvo="1"] {
+  border-color: var(--a);
+  background: color-mix(in oklab, var(--a) 7%, transparent);
+}
+[data-alvo="1"] .solte {
+  border-color: var(--a);
+  color: var(--a-text);
+}
+
+/* Transição própria, para o realce entrar e sair macio em vez de piscar. */
+.coluna {
+  transition:
+    border-color 0.16s ease-out,
+    background-color 0.16s ease-out;
 }
 
 @media (prefers-reduced-motion: reduce) {

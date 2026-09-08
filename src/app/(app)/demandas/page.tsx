@@ -838,14 +838,29 @@ export default function DemandasPage() {
             return (
               <div
                 key={col}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => {
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  /* "move" troca o cursor de "+" (copiar) para o de mover — o
+                     navegador mostra copiar por padrão, e o gesto aqui não
+                     duplica nada. */
+                  e.dataTransfer.dropEffect = "move";
+                  e.currentTarget.dataset.alvo = "1";
+                }}
+                onDragLeave={(e) => {
+                  /* `dragleave` também dispara ao passar sobre os filhos, então
+                     sem esta checagem o realce piscava a cada cartão que o
+                     ponteiro cruzava dentro da própria coluna. */
+                  if (!e.currentTarget.contains(e.relatedTarget as Node))
+                    delete e.currentTarget.dataset.alvo;
+                }}
+                onDrop={(e) => {
+                  delete e.currentTarget.dataset.alvo;
                   const t = rows.find((x) => x.id === arrastando.current);
                   if (t) move(t, col);
                   arrastando.current = null;
                 }}
                 className={cx(
-                  "flex min-h-[220px] flex-col rounded-2xl border border-line bg-ink-900/40 p-2.5",
+                  "coluna flex min-h-[220px] flex-col rounded-2xl border border-line bg-ink-900/40 p-2.5",
                   esconderNoCelular && "hidden lg:flex"
                 )}
               >
@@ -878,7 +893,7 @@ export default function DemandasPage() {
 
                 <div className="flex flex-1 flex-col gap-2">
                   {items.length === 0 ? (
-                    <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-line-soft py-8 text-[11px] text-fg-mute">
+                    <div className="solte flex flex-1 items-center justify-center rounded-xl border border-dashed border-line-soft py-8 text-[11px] text-fg-mute transition-colors duration-150">
                       Arraste aqui
                     </div>
                   ) : (
@@ -890,8 +905,16 @@ export default function DemandasPage() {
                         itens={itens[t.id] ?? []}
                         onAlternarItem={alternarItem}
                         marcando={marcando}
-                        onDragStart={() => {
+                        onDragStart={(e) => {
                           arrastando.current = t.id;
+                          e.dataTransfer.effectAllowed = "move";
+                          /* Atributo no próprio elemento: o cartão que sai fica
+                             translúcido sem que nada em volta re-renderize. */
+                          e.currentTarget.dataset.arrastando = "1";
+                        }}
+                        onDragEnd={(e) => {
+                          delete e.currentTarget.dataset.arrastando;
+                          arrastando.current = null;
                         }}
                         onEdit={() => startEdit(t)}
                         onDelete={() => remove(t)}
@@ -1470,6 +1493,7 @@ function TaskCard({
   onAlternarItem,
   marcando,
   onDragStart,
+  onDragEnd,
   onEdit,
   onDelete,
   onAdvance,
@@ -1480,7 +1504,8 @@ function TaskCard({
   itens: TaskItem[];
   onAlternarItem: (i: TaskItem) => void;
   marcando: string | null;
-  onDragStart: () => void;
+  onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
+  onDragEnd: (e: React.DragEvent<HTMLDivElement>) => void;
   onEdit: () => void;
   onDelete: () => void;
   onAdvance: () => void;
@@ -1496,6 +1521,7 @@ function TaskCard({
     <div
       draggable
       onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       /* `--i` alimenta o atraso da cascata; `levanta` troca o realce de borda
          por um deslocamento de 2px, que o compositor resolve e que não empurra
          o conteúdo como mudar espessura de borda fazia. */
