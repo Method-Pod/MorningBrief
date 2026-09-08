@@ -312,21 +312,39 @@ export default function LeituraPage() {
       return;
     }
     setBuscando(true);
+    /*
+     * O atraso segura as teclas, mas não segura a resposta que já saiu.
+     *
+     * Digitar "sapi" e completar "sapiens" dispara a segunda busca enquanto a
+     * primeira ainda volta; se a primeira chegar depois, ela sobrescreve o
+     * resultado certo e a tela mostra achados do termo antigo. O abort corta a
+     * requisição velha, e a trava garante que nada dela escreva na tela.
+     */
+    const corte = new AbortController();
+    let valendo = true;
     const id = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/livros?q=${encodeURIComponent(t)}`);
+        const r = await fetch(`/api/livros?q=${encodeURIComponent(t)}`, {
+          signal: corte.signal,
+        });
         if (!r.ok) throw new Error();
         const d = await r.json();
+        if (!valendo) return;
         setAchados(d.itens ?? []);
         setStatusGoogle(typeof d.google === "number" ? d.google : null);
         setErroBusca("");
       } catch {
-        setErroBusca("Não consegui buscar agora. Tente de novo.");
+        /* Abortar não é falha: é a busca anterior saindo de cena. */
+        if (valendo) setErroBusca("Não consegui buscar agora. Tente de novo.");
       } finally {
-        setBuscando(false);
+        if (valendo) setBuscando(false);
       }
     }, 450);
-    return () => clearTimeout(id);
+    return () => {
+      valendo = false;
+      clearTimeout(id);
+      corte.abort();
+    };
   }, [termo]);
 
   const fecharAdd = () => {

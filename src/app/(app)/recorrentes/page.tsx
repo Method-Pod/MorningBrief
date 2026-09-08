@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { NADA_GRAVADO } from "@/lib/erros";
 import {
   FREQUENCY_LABEL,
   PRIORITY_LABEL,
@@ -152,10 +153,23 @@ export default function RecorrentesPage() {
 
     let error;
     if (editing) {
-      ({ error } = await supabase
+      /*
+       * `select("id")` para saber se gravou de verdade.
+       *
+       * Sem ele, um update que não atinge linha nenhuma volta 204 sem erro: o
+       * formulário fecha, a lista recarrega e o valor antigo continua ali sem
+       * explicação. Ver NADA_GRAVADO.
+       */
+      const { data: salvo, error: falha } = await supabase
         .from("recurring_tasks")
         .update(payload)
-        .eq("id", editing.id));
+        .eq("id", editing.id)
+        .select("id");
+      error = falha;
+      if (!falha && !salvo?.length) {
+        setBusy(false);
+        return setErr(NADA_GRAVADO);
+      }
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {
@@ -191,8 +205,11 @@ export default function RecorrentesPage() {
       .from("recurring_tasks")
       .update({ active: !r.active })
       .eq("id", r.id);
-    notice.check(error, r.active ? "pausar a recorrência" : "ativar a recorrência");
-    load();
+    /* Recarrega só quando falhou, para desfazer. Recarregar sempre jogaria a
+       tabela inteira de volta pela rede e faria a linha piscar — apagando o
+       efeito da troca otimista que acabou de acontecer acima. */
+    if (notice.check(error, r.active ? "pausar a recorrência" : "ativar a recorrência"))
+      load();
   };
 
   /** Gera a demanda agora, sem esperar a data. */
@@ -211,11 +228,22 @@ export default function RecorrentesPage() {
       ...(r.links?.length ? { links: r.links } : {}),
     });
     if (error) return notice.show(`Não foi possível gerar a demanda: ${error.message}`);
-    await supabase
+    /*
+     * `last_run_on` é o que impede a duplicata: a manutenção diária olha essa
+     * data para decidir se já gerou hoje. O erro dela era descartado, então
+     * uma falha aqui passava por sucesso e a mesma demanda voltaria sozinha
+     * mais tarde — com a pessoa sem motivo para desconfiar.
+     */
+    const { data: marcou, error: erroMarca } = await supabase
       .from("recurring_tasks")
       .update({ last_run_on: today })
-      .eq("id", r.id);
-    notice.show(`"${r.title}" foi criada em Demandas.`);
+      .eq("id", r.id)
+      .select("id");
+    notice.show(
+      erroMarca || !marcou?.length
+        ? `"${r.title}" foi criada em Demandas, mas não consegui marcar a recorrência como já gerada hoje — ela pode gerar de novo. Recarregue e confira.`
+        : `"${r.title}" foi criada em Demandas.`
+    );
     load();
   };
 
@@ -223,11 +251,14 @@ export default function RecorrentesPage() {
     confirm.ask(
       `Excluir a recorrência "${r.title}"? As demandas já geradas continuam em Demandas.`,
       async () => {
-        const { error } = await supabase
+        const { data: saiu, error } = await supabase
           .from("recurring_tasks")
           .delete()
-          .eq("id", r.id);
-        if (!notice.check(error, "excluir a recorrência")) load();
+          .eq("id", r.id)
+          .select("id");
+        if (notice.check(error, "excluir a recorrência")) return;
+        if (!saiu?.length) return notice.show(NADA_GRAVADO);
+        setRows((v) => v.filter((x) => x.id !== r.id));
       }
     );
 

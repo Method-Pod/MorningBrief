@@ -147,11 +147,6 @@ export type TaskItem = {
 };
 
 /** Quantos itens estão feitos, para o rótulo "3/5" e a barra. */
-export const progressoDe = (itens: Pick<TaskItem, "done">[]) => ({
-  feitos: itens.filter((i) => i.done).length,
-  total: itens.length,
-});
-
 export const PRIORITY_LABEL: Record<Priority, string> = {
   low: "Baixa",
   medium: "Média",

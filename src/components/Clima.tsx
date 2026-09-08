@@ -202,6 +202,17 @@ export function Clima({ className }: { className?: string }) {
   const [abrindo, setAbrindo] = React.useState(false);
   const [rascunho, setRascunho] = React.useState("");
   const [erro, setErro] = React.useState(false);
+  const [salvando, setSalvando] = React.useState(false);
+  /*
+   * Se as três fontes falharam.
+   *
+   * Serve para o caso que o app não pode resolver sozinho: sem isso, o
+   * componente devolvia `null` e desaparecia — e com ele o campo de cidade,
+   * que é justamente o conserto. O jeito de escrever a cidade só existia
+   * quando alguma fonte automática já tinha funcionado, ou seja, quando não
+   * era necessário.
+   */
+  const [semFonte, setSemFonte] = React.useState(false);
 
   React.useEffect(() => {
     let vivo = true;
@@ -267,6 +278,7 @@ export function Clima({ className }: { className?: string }) {
             fonte: "rede",
           });
       } catch {}
+      if (vivo) setSemFonte(true);
     })();
 
     /* Evita gravar estado depois que a página saiu — o fetch continua no ar
@@ -280,27 +292,43 @@ export function Clima({ className }: { className?: string }) {
     const nome = rascunho.trim();
     if (!nome) return;
     setErro(false);
+    setSalvando(true);
     const lugar = await acharCidade(nome);
-    if (!lugar) return setErro(true);
+    /*
+     * A cidade só é gravada depois que a temperatura dela chega.
+     *
+     * Gravar antes tinha um efeito colateral ruim: uma falha de rede na
+     * segunda consulta deixava a cidade salva e o clima vazio, e o componente
+     * sumia da tela levando o próprio campo de cidade embora. Confirmando
+     * primeiro, uma falha só mostra o aviso e o painel continua aberto.
+     */
+    const c = lugar ? await buscarClima(lugar) : null;
+    setSalvando(false);
+    if (!lugar || !c) return setErro(true);
     gravar(CHAVE_CIDADE, JSON.stringify(lugar));
-    const c = await buscarClima(lugar);
-    if (c) setClima({ ...c, lugar: lugar.nome ?? null, fonte: "cidade" });
+    setClima({ ...c, lugar: lugar.nome ?? null, fonte: "cidade" });
     setAbrindo(false);
     setRascunho("");
   };
 
-  if (!clima) return null;
+  /* Enquanto as fontes ainda respondem, nada na tela: um ícone que aparece e
+     troca de valor sozinho chamaria mais atenção que o próprio dado. */
+  if (!clima && !semFonte) return null;
 
-  const { Icone, rotulo } = faixaDe(clima.codigo);
+  const { Icone, rotulo } = clima
+    ? faixaDe(clima.codigo)
+    : { Icone: Cloud, rotulo: "clima indisponível" };
 
   return (
     <span className={cx("relative", className)}>
       <button
         type="button"
         onClick={() => setAbrindo((v) => !v)}
-        title={`${rotulo}${clima.lugar ? ` · ${clima.lugar}` : ""} · ${
-          COMO[clima.fonte]
-        }`}
+        title={
+          clima
+            ? `${rotulo}${clima.lugar ? ` · ${clima.lugar}` : ""} · ${COMO[clima.fonte]}`
+            : "Não consegui o clima automaticamente. Clique para escrever sua cidade."
+        }
         className="flex items-center gap-1.5 rounded-md transition-opacity hover:opacity-70"
       >
         <Icone
@@ -309,10 +337,10 @@ export function Clima({ className }: { className?: string }) {
             "shrink-0",
             /* Cinza mais apagado quando o número é só palpite: discreto, mas dá
                para ver que aquele valor é o menos confiável dos três. */
-            clima.fonte === "rede" ? "text-fg-mute/60" : "text-fg-mute"
+            clima && clima.fonte !== "rede" ? "text-fg-mute" : "text-fg-mute/60"
           )}
         />
-        <span className="tnum">{clima.temp}°</span>
+        <span className="tnum">{clima ? `${clima.temp}°` : "--°"}</span>
       </button>
 
       {abrindo && (
@@ -339,7 +367,11 @@ export function Clima({ className }: { className?: string }) {
             className="h-9 text-[12.5px] font-normal"
           />
           <span className="px-0.5 text-[10.5px] font-normal text-fg-mute">
-            {erro ? "Não encontrei essa cidade." : "Enter para salvar."}
+            {salvando
+              ? "Buscando..."
+              : erro
+                ? "Não encontrei o clima dessa cidade. Confira o nome."
+                : "Enter para salvar."}
           </span>
         </span>
       )}

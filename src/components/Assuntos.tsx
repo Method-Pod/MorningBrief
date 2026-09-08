@@ -5,6 +5,7 @@ import { Plus, Tag, Trash2 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import type { Subject } from "@/lib/types";
+import { NADA_GRAVADO } from "@/lib/erros";
 import { Button, Empty, Field, Input, Modal, Select, cx } from "./ui";
 
 /**
@@ -74,21 +75,40 @@ export function GerenciarAssuntos({
       return;
     }
     setErro("");
-    const { error } = await supabase
+    /*
+     * `select("id")` porque aqui o silêncio mente duas vezes: o campo já mostra
+     * o nome novo, e sem a linha de volta um update que não achou nada passaria
+     * por sucesso — o nome ficaria trocado na tela e intacto no banco.
+     */
+    const { data: salvo, error } = await supabase
       .from("subjects")
       .update({ name })
-      .eq("id", a.id);
-    if (error) {
+      .eq("id", a.id)
+      .select("id");
+    if (error || !salvo?.length) {
       setNomes((n) => ({ ...n, [a.id]: a.name }));
-      return setErro(repetido(error) ? `"${name}" já existe.` : error.message);
+      return setErro(
+        !error
+          ? NADA_GRAVADO
+          : repetido(error)
+            ? `"${name}" já existe.`
+            : error.message
+      );
     }
     onMudou();
   };
 
   const apagar = async (a: Subject) => {
     setErro("");
-    const { error } = await supabase.from("subjects").delete().eq("id", a.id);
+    const { data: saiu, error } = await supabase
+      .from("subjects")
+      .delete()
+      .eq("id", a.id)
+      .select("id");
     if (error) return setErro(error.message);
+    /* Zero linhas apagadas com a etiqueta ainda na tela significa que ela não
+       existe mais no banco — recarregar a lista põe as duas em acordo. */
+    if (!saiu?.length) return setErro(NADA_GRAVADO);
     onMudou();
   };
 

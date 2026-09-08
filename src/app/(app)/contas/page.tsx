@@ -26,6 +26,7 @@ import {
 } from "@/lib/limpeza";
 import { sugerirCategoria } from "@/lib/categoriaSugerida";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { NADA_GRAVADO } from "@/lib/erros";
 import {
   ehAbatida,
   restanteDe,
@@ -299,10 +300,23 @@ export default function ContasPage() {
 
     let error;
     if (editing) {
-      ({ error } = await supabase
+      /*
+       * `select("id")` para saber se gravou de verdade.
+       *
+       * Sem ele, um update que não atinge linha nenhuma volta 204 sem erro: o
+       * formulário fecha, a lista recarrega e o valor antigo continua ali sem
+       * explicação. Ver NADA_GRAVADO.
+       */
+      const { data: salvo, error: falha } = await supabase
         .from("bills")
         .update(payload)
-        .eq("id", editing.id));
+        .eq("id", editing.id)
+        .select("id");
+      error = falha;
+      if (!falha && !salvo?.length) {
+        setBusy(false);
+        return setErr(NADA_GRAVADO);
+      }
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {
@@ -380,12 +394,34 @@ export default function ContasPage() {
 
   const alternar = async (b: Bill) => {
     const proximo: BillStatus = b.status === "paid" ? "pending" : "paid";
-    setRows((r) => r.map((x) => (x.id === b.id ? { ...x, status: proximo } : x)));
+    /*
+     * Numa conta abatida, o abatimento acompanha o status.
+     *
+     * O botão só mexia em `status`, e isso deixava a conta se contradizendo:
+     * reabrir uma abatida por inteiro voltava para "em aberto" com R$ 0,00
+     * restando — e se o vencimento fosse de um mês anterior ela sumia do mês
+     * atual, porque o recorte só puxa abatida com resto a pagar. Marcar como
+     * paga tinha o espelho do problema: ficava "paga" mostrando abatimento
+     * parcial. Quitar leva o abatido ao total; reabrir zera.
+     *
+     * O campo só entra quando a conta já é abatida — assim um banco sem
+     * ABATIDAS.sql, que não tem a coluna, continua funcionando.
+     */
+    const abatimento = ehAbatida(b)
+      ? { paid_amount: proximo === "paid" ? Number(b.amount) : 0 }
+      : {};
+
+    setRows((r) =>
+      r.map((x) =>
+        x.id === b.id ? { ...x, status: proximo, ...abatimento } : x
+      )
+    );
     const { error } = await supabase
       .from("bills")
       .update({
         status: proximo,
         paid_at: proximo === "paid" ? new Date().toISOString() : null,
+        ...abatimento,
       })
       .eq("id", b.id);
     if (
@@ -446,8 +482,16 @@ export default function ContasPage() {
 
   const excluir = (b: Bill) =>
     confirm.ask(`Excluir "${b.description}"? Não pode ser desfeito.`, async () => {
-      const { error } = await supabase.from("bills").delete().eq("id", b.id);
-      if (!notice.check(error, "excluir a conta")) load();
+      /* `select("id")` faz duas coisas: prova que apagou e dispensa a
+         releitura da tabela inteira, porque o que sai da tela é conhecido. */
+      const { data: saiu, error } = await supabase
+        .from("bills")
+        .delete()
+        .eq("id", b.id)
+        .select("id");
+      if (notice.check(error, "excluir a conta")) return;
+      if (!saiu?.length) return notice.show(NADA_GRAVADO);
+      setRows((r) => r.filter((x) => x.id !== b.id));
     });
 
   /* ------------------------------ derivados ------------------------------ */

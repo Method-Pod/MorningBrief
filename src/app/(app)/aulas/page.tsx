@@ -254,11 +254,24 @@ export default function AulasPage() {
    * chama direto. Telegram não tem equivalente — canal privado não expõe
    * metadado — então lá o título fica para você digitar.
    */
+  /*
+   * `ultimoLink` guarda qual link está valendo.
+   *
+   * O oEmbed é rede: colar um link, ver o erro e colar o certo dispara duas
+   * consultas, e a primeira pode voltar depois da segunda — preenchendo o
+   * formulário com o título do vídeo errado. Pior ainda depois de fechar o
+   * modal: a resposta atrasada caía num formulário já limpo. Comparar com o
+   * link atual descarta o que chegou fora de hora.
+   */
+  const ultimoLink = React.useRef("");
+
   const lerLink = async (url: string) => {
     const limpo = normalizarUrl(url);
     if (!limpo) return;
+    ultimoLink.current = limpo;
     setBuscando(true);
     const d = await dadosDoLink(limpo);
+    if (ultimoLink.current !== limpo) return;
     setBuscando(false);
     setForm((f) => ({
       ...f,
@@ -274,6 +287,10 @@ export default function AulasPage() {
     setAddAula(false);
     setForm(aulaVazia());
     setErro("");
+    /* Invalida a consulta em voo: sem isso, o oEmbed que ainda estava vindo
+       preencheria o formulário limpo do próximo cadastro. */
+    ultimoLink.current = "";
+    setBuscando(false);
   };
 
   const adicionarAula = async () => {

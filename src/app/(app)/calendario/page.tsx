@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { limparEventosPassados } from "@/lib/limpeza";
+import { NADA_GRAVADO } from "@/lib/erros";
 import {
   estenderEventosRecorrentes,
   fimDaJanelaDeEventos,
@@ -253,10 +254,24 @@ export default function CalendarioPage() {
 
     let error;
     if (editing) {
-      ({ error } = await supabase
+      /*
+       * `select("id")` para saber se gravou de verdade.
+       *
+       * Sem ele, um update que não atinge linha nenhuma volta 204 sem erro: o
+       * modal fecha, o mês recarrega, e o evento continua com a hora antiga
+       * sem nenhuma pista. Pior aqui do que em outras telas, porque em "todas"
+       * o resto da série seria alterado como se a primeira tivesse ido.
+       */
+      const { data: salvo, error: falha } = await supabase
         .from("events")
         .update(payload)
-        .eq("id", editing.id));
+        .eq("id", editing.id)
+        .select("id");
+      error = falha;
+      if (!falha && !salvo?.length) {
+        setBusy(false);
+        return setErr(NADA_GRAVADO);
+      }
 
       /*
        * "Todas": leva as mudanças para as outras ocorrências da repetição.

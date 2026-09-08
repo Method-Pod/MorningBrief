@@ -5,6 +5,7 @@ import { Pencil, Pin, PinOff, Plus, Search, StickyNote, Trash2 } from "lucide-re
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { NADA_GRAVADO } from "@/lib/erros";
 import { NOTE_COLORS, type Note } from "@/lib/types";
 import { dateTimeBR } from "@/lib/format";
 import {
@@ -96,10 +97,23 @@ export default function AnotacoesPage() {
 
     let error;
     if (editing) {
-      ({ error } = await supabase
+      /*
+       * `select("id")` para saber se gravou de verdade.
+       *
+       * Sem ele, um update que não atinge linha nenhuma volta 204 sem erro: o
+       * formulário fecha, a lista recarrega e o valor antigo continua ali sem
+       * explicação. Ver NADA_GRAVADO.
+       */
+      const { data: salvo, error: falha } = await supabase
         .from("notes")
         .update(payload)
-        .eq("id", editing.id));
+        .eq("id", editing.id)
+        .select("id");
+      error = falha;
+      if (!falha && !salvo?.length) {
+        setBusy(false);
+        return setErr(NADA_GRAVADO);
+      }
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {
@@ -130,8 +144,14 @@ export default function AnotacoesPage() {
 
   const remove = (n: Note) =>
     confirm.ask(`Excluir "${n.title || "esta anotação"}"?`, async () => {
-      const { error } = await supabase.from("notes").delete().eq("id", n.id);
-      if (!notice.check(error, "excluir a anotação")) load();
+      const { data: saiu, error } = await supabase
+        .from("notes")
+        .delete()
+        .eq("id", n.id)
+        .select("id");
+      if (notice.check(error, "excluir a anotação")) return;
+      if (!saiu?.length) return notice.show(NADA_GRAVADO);
+      setRows((v) => v.filter((x) => x.id !== n.id));
     });
 
   const view = React.useMemo(() => {

@@ -38,6 +38,8 @@ import {
 import {
   estenderEventosRecorrentes,
   lancarProximoMesDasFixas,
+  marcarManutencaoFeita,
+  precisaDeManutencao,
   reporRecorrentesPerdidas,
 } from "@/lib/manutencao";
 import { Card, useNotice, cx } from "@/components/ui";
@@ -149,7 +151,11 @@ export default function HomePage() {
        * quem chegar primeiro faz, e a outra passada não encontra nada a fazer.
        * Com o cron diário no ar, quase sempre não há nada a fazer aqui.
        */
-      const [apagadas, criadas, lancadas, eventos] = await Promise.all([
+      /* Uma vez por dia por aparelho: ver precisaDeManutencao. Voltar para o
+         Início pela navegação não repete as cinco varreduras. */
+      if (!precisaDeManutencao(today)) return;
+
+      const [apagadas, criadas, lancadas, eventos, aulas] = await Promise.all([
         limparConcluidas(supabase),
         reporRecorrentesPerdidas(supabase),
         lancarProximoMesDasFixas(supabase),
@@ -159,6 +165,14 @@ export default function HomePage() {
         limparAulasAssistidas(supabase),
       ]);
       if (!alive) return;
+
+      /* O dia só é marcado quando todas responderam. Um `null` é falha, e
+         gravar por cima dela pularia a manutenção até amanhã. */
+      if (
+        [apagadas, criadas, lancadas, eventos, aulas].every((r) => r !== null)
+      )
+        marcarManutencaoFeita(today);
+
       if (apagadas && apagadas > 0) setLimpas(apagadas);
       if ((criadas ?? 0) > 0) setGenerated(criadas ?? 0);
       if ((criadas ?? 0) > 0 || (lancadas ?? 0) > 0 || (eventos ?? 0) > 0)

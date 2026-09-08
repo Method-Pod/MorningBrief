@@ -52,3 +52,17 @@ export function recadoDeErro(
 
   return { texto: m };
 }
+
+/**
+ * Recado para update que não atingiu linha nenhuma.
+ *
+ * O PostgREST responde 204 sem erro quando o `eq("id", ...)` não casa com
+ * nada — porque zero linhas alteradas não é falha, é resultado. Só que na tela
+ * isso vira o pior dos mundos: o formulário fecha, a lista recarrega, e o
+ * valor antigo continua ali sem nenhuma explicação. Foi assim que "mudei o
+ * prazo e a demanda continua atrasada" ficou sem pista para investigar.
+ *
+ * Quem escreve precisa pedir a linha de volta com `.select("id")` e conferir.
+ */
+export const NADA_GRAVADO =
+  "Nada foi gravado: o item não foi encontrado. Recarregue a página e tente de novo.";

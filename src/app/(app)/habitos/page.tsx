@@ -15,6 +15,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { NADA_GRAVADO } from "@/lib/erros";
 import { type Habit, type HabitLog } from "@/lib/types";
 import { dataCurta, semanaDe, todayISO, ultimosDias } from "@/lib/format";
 import {
@@ -157,10 +158,23 @@ export default function HabitosPage() {
     };
     let error;
     if (editing) {
-      ({ error } = await supabase
+      /*
+       * `select("id")` para saber se gravou de verdade.
+       *
+       * Sem ele, um update que não atinge linha nenhuma volta 204 sem erro: o
+       * formulário fecha, a lista recarrega e o valor antigo continua ali sem
+       * explicação. Ver NADA_GRAVADO.
+       */
+      const { data: salvo, error: falha } = await supabase
         .from("habits")
         .update(payload)
-        .eq("id", editing.id));
+        .eq("id", editing.id)
+        .select("id");
+      error = falha;
+      if (!falha && !salvo?.length) {
+        setBusy(false);
+        return setErr(NADA_GRAVADO);
+      }
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {
@@ -181,8 +195,17 @@ export default function HabitosPage() {
     confirm.ask(
       `Excluir "${h.name}"? O histórico de marcações vai junto.`,
       async () => {
-        const { error } = await supabase.from("habits").delete().eq("id", h.id);
-        if (!notice.check(error, "excluir o hábito")) load();
+        const { data: saiu, error } = await supabase
+          .from("habits")
+          .delete()
+          .eq("id", h.id)
+          .select("id");
+        if (notice.check(error, "excluir o hábito")) return;
+        if (!saiu?.length) return notice.show(NADA_GRAVADO);
+        setHabits((v) => v.filter((x) => x.id !== h.id));
+        /* Os registros saem por cascade no banco; aqui saem do estado para a
+           contagem da semana não somar dias de um hábito que já não existe. */
+        setLogs((v) => v.filter((l) => l.habit_id !== h.id));
       }
     );
 
@@ -198,10 +221,26 @@ export default function HabitosPage() {
       load();
   };
 
+  /*
+   * Os 90 dias, de hoje para trás, calculados uma vez.
+   *
+   * Estavam sendo montados dentro de `sequencia`, que roda uma vez por hábito
+   * a cada render: dez hábitos eram novecentos objetos Date e novecentas
+   * strings montadas para responder a mesma pergunta. A lista só depende de
+   * `hoje`, então é aqui que ela pertence.
+   *
+   * Já vem invertida porque `reverse` altera o próprio array — invertê-la a
+   * cada chamada mexeria no valor memoizado.
+   */
+  const diasParaTras = React.useMemo(
+    () => ultimosDias(hoje, 90).reverse(),
+    [hoje]
+  );
+
   /** Dias seguidos terminando hoje (ou ontem, se hoje ainda não foi marcado). */
   const sequencia = React.useCallback(
     (id: string) => {
-      const dias = ultimosDias(hoje, 90).reverse();
+      const dias = diasParaTras;
       const inicio = marcado(id, dias[0]) ? 0 : 1;
       let n = 0;
       for (let i = inicio; i < dias.length; i++) {
@@ -211,7 +250,7 @@ export default function HabitosPage() {
       return n;
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [feitos, hoje]
+    [feitos, diasParaTras]
   );
 
   const ativos = habits.filter((h) => h.active);

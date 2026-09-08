@@ -21,27 +21,6 @@ export function Card({
   );
 }
 
-export function CardHead({
-  title,
-  sub,
-  right,
-}: {
-  title: React.ReactNode;
-  sub?: React.ReactNode;
-  right?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-4">
-      <div className="min-w-0">
-        <h2 className="text-[15px] font-semibold tracking-tight text-fg">
-          {title}
-        </h2>
-        {sub && <p className="mt-0.5 text-xs text-fg-mute">{sub}</p>}
-      </div>
-      {right && <div className="shrink-0">{right}</div>}
-    </div>
-  );
-}
 
 /* ------------------------------ Button ------------------------------ */
 
@@ -530,14 +509,23 @@ export function useNotice() {
     return () => clearTimeout(id);
   }, [msg]);
 
-  const show = (m: string) => setMsg(m);
+  /*
+   * `useCallback` porque estas funções entram em `load` e outros callbacks das
+   * páginas. Recriadas a cada render, elas mudariam a identidade de quem as
+   * usa; um `load` com `notice` nas dependências viraria um laço de releituras
+   * sem fim. Estáveis, o laço não tem como nascer.
+   */
+  const show = React.useCallback((m: string) => setMsg(m), []);
 
   /** Passa o erro do Supabase; devolve true quando houve falha. */
-  const check = (error: { message: string } | null, quando: string) => {
-    if (!error) return false;
-    show(`Não foi possível ${quando}: ${error.message}`);
-    return true;
-  };
+  const check = React.useCallback(
+    (error: { message: string } | null, quando: string) => {
+      if (!error) return false;
+      show(`Não foi possível ${quando}: ${error.message}`);
+      return true;
+    },
+    [show]
+  );
 
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
@@ -557,5 +545,5 @@ export function useNotice() {
         )
       : null;
 
-  return { show, check, node };
+  return React.useMemo(() => ({ show, check, node }), [show, check, node]);
 }

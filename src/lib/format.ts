@@ -1,16 +1,32 @@
+/*
+ * Os formatadores nascem uma vez, fora das funções.
+ *
+ * `new Intl.NumberFormat` é caro: construir resolve dados de locale, e medido
+ * aqui deu 44µs contra 0,6µs de um `.format()` em formatador já pronto — 73
+ * vezes. Como estava, cada valor em real na tela construía o seu próprio, e a
+ * tela de contas mostra dezenas deles por render, dentro de listas que
+ * redesenham a cada clique. Fora da função, o custo é pago uma vez na vida do
+ * módulo.
+ *
+ * Mesma razão para os de data e hora abaixo.
+ */
+const FMT_BRL = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+const FMT_BRL_CURTO = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
 export const brl = (v: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(Number.isFinite(v) ? v : 0);
+  FMT_BRL.format(Number.isFinite(v) ? v : 0);
 
 export const brlCompact = (v: number) =>
-  new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(Number.isFinite(v) ? v : 0);
+  FMT_BRL_CURTO.format(Number.isFinite(v) ? v : 0);
 
 /** "2026-08-26" -> "26/08/2026" sem escorregar de fuso. */
 export const dateBR = (iso: string | null | undefined) => {
@@ -19,16 +35,17 @@ export const dateBR = (iso: string | null | undefined) => {
   return `${d}/${m}/${y}`;
 };
 
+const FMT_DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 export const dateTimeBR = (iso: string | null | undefined) => {
   if (!iso) return "—";
-  const dt = new Date(iso);
-  return dt.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return FMT_DATA_HORA.format(new Date(iso));
 };
 
 /** Data local de hoje em ISO (YYYY-MM-DD), sem converter para UTC. */
@@ -67,13 +84,15 @@ export const localDay = (iso: string | null | undefined) => {
   return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
 };
 
+const FMT_HORA = new Intl.DateTimeFormat("pt-BR", {
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
 /** Hora local HH:MM de um timestamptz. */
 export const localTime = (iso: string | null | undefined) => {
   if (!iso) return "";
-  return new Date(iso).toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return FMT_HORA.format(new Date(iso));
 };
 
 const MES_ABREV = [

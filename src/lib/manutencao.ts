@@ -414,3 +414,43 @@ export async function estenderEventosRecorrentes(
   if (erroInsert) return erroInsert.code === "23505" ? 0 : null;
   return criadas?.length ?? 0;
 }
+
+/* ------------------------------ uma vez por dia ------------------------------ */
+
+const CHAVE_DIA = "mb.manutencao.dia";
+
+/**
+ * A manutenção da página precisa rodar agora?
+ *
+ * As cinco rotinas acima rodavam a cada montagem do painel — ou seja, a cada
+ * volta para o Início pela navegação, cada uma com as suas próprias idas ao
+ * banco. Só que o trabalho delas é por dia, não por visita: depois da primeira
+ * passada do dia todas percorrem o banco para concluir que não há nada a
+ * fazer.
+ *
+ * Quem faz o serviço de verdade é o cron diário; esta cópia na página existe
+ * para o caso de o cron não ter rodado. Uma vez por dia por aparelho cobre
+ * isso igual, e as visitas seguintes ao painel abrem sem as cinco varreduras.
+ *
+ * A marca é local ao navegador de propósito: gravá-la no banco custaria a ida
+ * que o atalho quer evitar, e errar para o lado de rodar de novo é inofensivo
+ * — as rotinas são idempotentes.
+ */
+export function precisaDeManutencao(hoje = todayISO()) {
+  if (typeof window === "undefined") return true;
+  try {
+    return window.localStorage.getItem(CHAVE_DIA) !== hoje;
+  } catch {
+    /* Navegador com armazenamento bloqueado: roda, que é o comportamento
+       antigo, em vez de nunca rodar. */
+    return true;
+  }
+}
+
+/** Marca o dia como feito. Só chame quando nenhuma rotina falhou. */
+export function marcarManutencaoFeita(hoje = todayISO()) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(CHAVE_DIA, hoje);
+  } catch {}
+}
