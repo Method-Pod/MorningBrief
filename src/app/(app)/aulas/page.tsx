@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Check,
+  Clock,
   ExternalLink,
   GraduationCap,
   Layers,
@@ -73,6 +74,52 @@ const ICONE: Record<FonteAula, typeof Youtube> = {
   telegram: Send,
   outro: ExternalLink,
 };
+
+/**
+ * A miniatura da aula, ou um lugar onde ela deveria estar.
+ *
+ * O espaço é sempre reservado, com o ícone da fonte quando não há imagem. Sem
+ * isto, aula sem miniatura — toda do Telegram, e as adicionadas à mão — virava
+ * uma linha vazia com o título encostado na borda e nada ancorando o olho.
+ *
+ * 16:9 porque é a proporção de vídeo: um quadrado cortaria a imagem do YouTube.
+ */
+function MiniaturaAula({
+  url,
+  fonte,
+  feita,
+}: {
+  url: string | null;
+  fonte: FonteAula;
+  feita: boolean;
+}) {
+  const Icone = ICONE[fonte];
+  return (
+    <span
+      className={cx(
+        "relative block aspect-video w-[76px] shrink-0 overflow-hidden rounded-[10px] bg-ink-800 sm:w-[104px]",
+        /* Aula vista fica apagada, como o título riscado: a linha inteira
+           precisa dizer "já foi", não só o texto. */
+        feita && "opacity-55"
+      )}
+    >
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <span className="grid h-full w-full place-items-center text-brand-400/45">
+          <Icone size={22} />
+        </span>
+      )}
+    </span>
+  );
+}
 
 const aulaVazia = () => ({
   url: "",
@@ -917,7 +964,7 @@ export default function AulasPage() {
                 return (
                   <li
                     key={l.id}
-                    className="entra group flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-ink-800/40 sm:px-5"
+                    className="entra group flex items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800/40 sm:gap-3.5 sm:px-5"
                     style={{ "--i": i } as React.CSSProperties}
                   >
                     <button
@@ -927,14 +974,14 @@ export default function AulasPage() {
                       aria-label={`${l.feita ? "Desmarcar" : "Marcar"} ${l.title}`}
                       aria-pressed={l.feita}
                       className={cx(
-                        "mt-0.5 grid h-[19px] w-[19px] shrink-0 place-items-center rounded-[6px] border transition-[background-color,border-color] duration-[180ms] disabled:opacity-50",
+                        "mt-[3px] grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-[180ms] disabled:opacity-50",
                         l.feita
                           ? "border-pos bg-pos text-white"
                           : "border-line bg-white hover:border-brand-400"
                       )}
                     >
                       <Check
-                        size={12}
+                        size={13}
                         strokeWidth={3.5}
                         className={cx(
                           "transition-[transform,opacity] duration-[180ms] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
@@ -943,53 +990,65 @@ export default function AulasPage() {
                       />
                     </button>
 
-                    {l.thumb_url && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={l.thumb_url}
-                        alt=""
-                        loading="lazy"
-                        decoding="async"
-                        className="hidden aspect-video w-[88px] shrink-0 rounded-lg bg-ink-800 object-cover sm:block"
-                      />
-                    )}
+                    <MiniaturaAula
+                      url={l.thumb_url}
+                      fonte={l.fonte}
+                      feita={l.feita}
+                    />
 
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 py-0.5">
                       <p
                         className={cx(
-                          "text-[13px] font-semibold leading-snug",
-                          l.feita && "text-fg-mute line-through"
+                          "text-[13.5px] font-semibold leading-snug",
+                          l.feita ? "text-fg-mute line-through" : "text-fg"
                         )}
                       >
                         {l.title}
                       </p>
 
-                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="inline-flex items-center gap-1 text-[10.5px] text-fg-mute">
-                          <Icone size={11} className="shrink-0" />
-                          {l.canal || FONTE_AULA_LABEL[l.fonte]}
+                      {/*
+                        Uma linha de metadados com pesos diferentes, não quatro
+                        textos cinzas iguais.
+
+                        Antes o canal, a duração e o "abrir" tinham o mesmo
+                        tamanho e a mesma cor: o olho não achava onde começar.
+                        Agora o canal é o texto, a duração é uma pastilha com
+                        número, e "abrir" é um botão pequeno.
+                      */}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                        <span className="inline-flex min-w-0 items-center gap-1.5 text-[11.5px] text-fg-dim">
+                          <Icone size={12} className="shrink-0 text-fg-mute" />
+                          <span className="truncate">
+                            {l.canal || FONTE_AULA_LABEL[l.fonte]}
+                          </span>
                         </span>
-                        <Etiqueta nome={nomeDoAssunto.get(l.subject_id ?? "")} />
+
                         {duracaoCurta(l.minutos) && (
-                          <span className="text-[10.5px] text-fg-mute tnum">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-ink-800 px-2 py-0.5 text-[10px] font-semibold text-fg-mute tnum">
+                            <Clock size={9} />
                             {duracaoCurta(l.minutos)}
                           </span>
                         )}
+
+                        <Etiqueta nome={nomeDoAssunto.get(l.subject_id ?? "")} />
+
+                        {l.feita && l.feita_em && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-pos/12 px-2 py-0.5 text-[10px] font-semibold text-pos">
+                            <Check size={9} strokeWidth={3} />
+                            visto {dataCurta(l.feita_em.slice(0, 10))}
+                          </span>
+                        )}
+
                         {l.url && (
                           <a
                             href={l.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[10.5px] text-brand-400 hover:underline"
+                            className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-white px-2.5 text-[10.5px] font-semibold text-brand-400 transition-colors hover:border-brand-400 hover:bg-brand-500/8"
                           >
                             <ExternalLink size={10} />
                             abrir
                           </a>
-                        )}
-                        {l.feita && l.feita_em && (
-                          <span className="text-[10.5px] text-pos">
-                            visto {dataCurta(l.feita_em.slice(0, 10))}
-                          </span>
                         )}
                       </div>
 
