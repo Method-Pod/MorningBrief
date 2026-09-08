@@ -7,6 +7,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RotateCw,
   Search,
   Target,
   Trash2,
@@ -23,6 +24,7 @@ import {
 import { dataCurta, todayISO, ultimosDias } from "@/lib/format";
 import { type LivroAchado } from "@/lib/livros";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
+import { recadoDeErro } from "@/lib/erros";
 import {
   Badge,
   Button,
@@ -134,7 +136,10 @@ export default function LeituraPage() {
   const [loading, setLoading] = React.useState(
     () => !temCache("books", "reading_sessions")
   );
-  const [falta, setFalta] = React.useState("");
+  const [falta, setFalta] = React.useState<{
+    texto: string;
+    recarregar?: boolean;
+  } | null>(null);
   const [prateleira, setPrateleira] = React.useState<Filtro>("reading");
   const [busca, setBusca] = React.useState("");
   const [ordem, setOrdem] = React.useState<Ordem>("recentes");
@@ -215,13 +220,16 @@ export default function LeituraPage() {
     if (l.error) {
       setFalta(
         /books|reading_sessions/.test(l.error.message)
-          ? "A estante precisa de supabase/LEITURA.sql no banco. Rode o arquivo e recarregue."
-          : l.error.message
+          ? {
+              texto:
+                "A estante precisa de supabase/LEITURA.sql no banco. Rode o arquivo e recarregue.",
+            }
+          : (recadoDeErro(l.error) ?? { texto: l.error.message })
       );
       setLoading(false);
       return;
     }
-    setFalta("");
+    setFalta(null);
     setLivros((l.data as unknown as BookLista[]) ?? []);
     setSessoes((s.data as ReadingSession[]) ?? []);
     setMeta((m.data as ReadingGoal | null)?.target ?? null);
@@ -952,9 +960,23 @@ export default function LeituraPage() {
         </Button>
       </div>
 
+      {/* Aviso com saída: erro passageiro não pode virar caixa parada. */}
       {falta && (
-        <Card className="border-warn/40 bg-warn/10 px-5 py-4">
-          <p className="text-[12.5px] text-fg-dim">{falta}</p>
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-warn/40 bg-warn/10 px-5 py-4">
+          <p className="min-w-0 flex-1 text-[12.5px] text-fg-dim">
+            {falta.texto}
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setFalta(null);
+              setLoading(true);
+              load();
+            }}
+          >
+            <RotateCw size={13} />
+            Tentar de novo
+          </Button>
         </Card>
       )}
 

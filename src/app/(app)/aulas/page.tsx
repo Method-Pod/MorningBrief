@@ -12,6 +12,7 @@ import {
   Minus,
   Pencil,
   Plus,
+  RotateCw,
   Send,
   Tag,
   Target,
@@ -39,6 +40,7 @@ import {
   type AulaDaPlaylist,
 } from "@/lib/aulas";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
+import { recadoDeErro } from "@/lib/erros";
 import {
   CampoAssunto,
   Etiqueta,
@@ -147,7 +149,11 @@ export default function AulasPage() {
   const [loading, setLoading] = React.useState(
     () => !temCache("lessons", "courses", "subjects")
   );
-  const [falta, setFalta] = React.useState("");
+  /* O que impediu a leitura, já traduzido, e se recarregar resolve. */
+  const [falta, setFalta] = React.useState<{
+    texto: string;
+    recarregar?: boolean;
+  } | null>(null);
   const [aba, setAba] = React.useState<Aba>("fila");
   const [filtro, setFiltro] = React.useState<"all" | string>("all");
   const [marcando, setMarcando] = React.useState<string | null>(null);
@@ -200,15 +206,21 @@ export default function AulasPage() {
     if (problema) {
       setFalta(
         /lessons/.test(problema.message)
-          ? "As aulas precisam de supabase/AULAS.sql no banco. Rode o arquivo e recarregue."
+          ? {
+              texto:
+                "As aulas precisam de supabase/AULAS.sql no banco. Rode o arquivo e recarregue.",
+            }
           : /courses|subjects/.test(problema.message)
-            ? "Cursos e etiquetas precisam de supabase/CURSOS-E-ASSUNTOS.sql no banco. Rode o arquivo e recarregue."
-            : problema.message
+            ? {
+                texto:
+                  "Cursos e etiquetas precisam de supabase/CURSOS-E-ASSUNTOS.sql no banco. Rode o arquivo e recarregue.",
+              }
+            : (recadoDeErro(problema) ?? { texto: problema.message })
       );
       setLoading(false);
       return;
     }
-    setFalta("");
+    setFalta(null);
     setRows((l.data as Lesson[]) ?? []);
     setCursos((c.data as Course[]) ?? []);
     setAssuntos((a.data as Subject[]) ?? []);
@@ -689,9 +701,29 @@ export default function AulasPage() {
         </div>
       </div>
 
+      {/*
+        Aviso com saída.
+        
+        Antes era só o texto, e um erro passageiro — sessão que caiu, relógio
+        fora de hora — virava uma caixa parada da qual não se saía sem
+        recarregar a mão. O botão faz o que a caixa está pedindo.
+      */}
       {falta && (
-        <Card className="border-warn/40 bg-warn/10 px-5 py-4">
-          <p className="text-[12.5px] text-fg-dim">{falta}</p>
+        <Card className="flex flex-wrap items-center justify-between gap-3 border-warn/40 bg-warn/10 px-5 py-4">
+          <p className="min-w-0 flex-1 text-[12.5px] text-fg-dim">
+            {falta.texto}
+          </p>
+          <Button
+            size="sm"
+            onClick={() => {
+              setFalta(null);
+              setLoading(true);
+              load();
+            }}
+          >
+            <RotateCw size={13} />
+            Tentar de novo
+          </Button>
         </Card>
       )}
 
