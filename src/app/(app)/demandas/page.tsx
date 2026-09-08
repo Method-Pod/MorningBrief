@@ -115,7 +115,15 @@ export default function DemandasPage() {
   const [form, setForm] = React.useState(blank());
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
-  const [drag, setDrag] = React.useState<string | null>(null);
+  /*
+   * O que está sendo arrastado fica em ref, não em estado.
+   *
+   * Em estado, começar a arrastar re-renderizava o quadro inteiro — todos os
+   * cartões, com todos os checklists — no exato momento em que o navegador
+   * precisa da thread livre para acompanhar o ponteiro. E o valor só é lido no
+   * `onDrop`, então nada na tela depende dele.
+   */
+  const arrastando = React.useRef<string | null>(null);
   /* Itens de checklist agrupados por demanda. */
   const [itens, setItens] = React.useState<Record<string, TaskItem[]>>({});
   const [marcando, setMarcando] = React.useState<string | null>(null);
@@ -567,9 +575,13 @@ export default function DemandasPage() {
         status,
         completed_at: status === "done" ? new Date().toISOString() : null,
       })
-      .eq("id", t.id);
-    notice.check(error, "mover a demanda");
-    load();
+      .eq("id", t.id)
+      .select("id");
+
+    /* O estado local já foi corrigido acima, então o `load()` que existia aqui
+       relia as duas tabelas para confirmar o que a tela já mostrava. Só volta a
+       ler quando a gravação falha — aí a tela precisa voltar à verdade. */
+    if (notice.check(error, "mover a demanda")) load();
   };
 
   const move = async (t: Task, status: TaskStatus) => {
@@ -608,7 +620,9 @@ export default function DemandasPage() {
   const remove = (t: Task) =>
     confirm.ask(`Excluir "${t.title}"?`, async () => {
       const { error } = await supabase.from("tasks").delete().eq("id", t.id);
-      if (!notice.check(error, "excluir a demanda")) load();
+      if (notice.check(error, "excluir a demanda")) return;
+      setRows((r) => r.filter((x) => x.id !== t.id));
+      setItens(({ [t.id]: _, ...resto }) => resto);
     });
 
   /* ------------------------------ derivados ------------------------------ */
@@ -679,6 +693,8 @@ export default function DemandasPage() {
         .filter((g) => g.tarefas.length > 0),
     [clientes, filtered]
   );
+  /* Alguma coluna tem cartão? Decide se as vazias podem sumir no celular. */
+  const algumaCheia = COLUMNS.some((c) => byStatus(c).length > 0);
   const openCount = rows.filter((t) => t.status !== "done").length;
   const lateCount = rows.filter(
     (t) => t.status !== "done" && t.due_date && daysUntil(t.due_date) < 0
@@ -694,48 +710,67 @@ export default function DemandasPage() {
             {lateCount > 0 && <span className="text-neg"> · {lateCount} atrasada{lateCount === 1 ? "" : "s"}</span>}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        {/*
+          No celular os dois botões dividem a linha em vez de empilhar.
+
+          Empilhados, eram duas faixas cheias de altura antes de qualquer
+          demanda aparecer — e junto com o aviso e os dois filtros davam cinco
+          faixas de controle numa tela de 812px.
+        */}
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           {/* Atalho para as regras. Sem ele a página de recorrentes só era
               alcançável pela URL: ela saiu do menu da esquerda a pedido, mas
               continua sendo onde se pausa, edita e gera na hora. */}
-          <Link href="/recorrentes">
-            <Button>
-              <Repeat2 size={15} />
-              Gerenciar recorrentes
+          <Link href="/recorrentes" className="min-w-0 flex-1 sm:flex-none">
+            <Button className="w-full justify-center sm:w-auto">
+              <Repeat2 size={15} className="shrink-0" />
+              <span className="truncate">Recorrentes</span>
             </Button>
           </Link>
-          <Button variant="primary" onClick={() => startNew()}>
-            <Plus size={15} />
-            Nova demanda
+          <Button
+            variant="primary"
+            onClick={() => startNew()}
+            className="min-w-0 flex-1 justify-center sm:flex-none"
+          >
+            <Plus size={15} className="shrink-0" />
+            <span className="truncate">Nova demanda</span>
           </Button>
         </div>
       </div>
 
       {/* A remoção automática precisa estar escrita: sem isso, a demanda
           desaparece do quadro e parece que o app perdeu o dado. */}
-      <p className="mb-4 flex items-center gap-2 text-[12px] text-fg-mute">
-        <Info size={13} className="shrink-0" />
-        Demandas concluídas são removidas {HORAS_RETENCAO}h depois.
+      {/* Aviso encolhe no celular: é informação de fundo, e ocupava uma faixa
+          inteira acima dos filtros. */}
+      <p className="mb-3 flex items-center gap-1.5 text-[11px] text-fg-mute sm:mb-4 sm:gap-2 sm:text-[12px]">
+        <Info size={12} className="shrink-0" />
+        Concluídas saem {HORAS_RETENCAO}h depois.
       </p>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Segmented
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "board", label: "Quadro" },
-            { value: "list", label: "Lista" },
-            { value: "cliente", label: "Por cliente" },
-          ]}
-        />
-        <Segmented
-          value={prio}
-          onChange={setPrio}
-          options={[
-            { value: "all", label: "Todas" },
-            ...PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] })),
-          ]}
-        />
+      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+        {/* Cada tira rola de lado. Antes cada uma tomava uma faixa própria no
+            celular, e as duas somavam mais altura que o primeiro cartão. */}
+        <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-0.5">
+          <Segmented
+            value={view}
+            onChange={setView}
+            options={[
+              { value: "board", label: "Quadro" },
+              { value: "list", label: "Lista" },
+              { value: "cliente", label: "Por cliente" },
+            ]}
+          />
+        </div>
+        <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-0.5">
+          <Segmented
+            value={prio}
+            onChange={setPrio}
+            options={[
+              { value: "all", label: "Todas" },
+              ...PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABEL[p] })),
+            ]}
+          />
+        </div>
         {/* Dropdown e não Segmented: cliente é lista aberta — com seis canais
             os botões já quebrariam a linha dos filtros. O número é o que está
             em aberto, que é a pergunta real ("o que devo pro canal X"). */}
@@ -790,16 +825,29 @@ export default function DemandasPage() {
         <div className="grid gap-4 lg:grid-cols-4">
           {COLUMNS.map((col) => {
             const items = byStatus(col);
+            /*
+             * Coluna vazia desaparece no celular.
+             *
+             * No desktop as quatro ficam lado a lado e a vazia é o alvo do
+             * arrasto. Empilhadas no celular, três caixas de 220px dizendo
+             * "Arraste aqui" viravam a maior parte da rolagem — num aparelho
+             * onde arrastar entre colunas nem funciona bem. O `algumaCheia`
+             * evita a tela em branco quando o filtro não deixa nada.
+             */
+            const esconderNoCelular = items.length === 0 && algumaCheia;
             return (
               <div
                 key={col}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
-                  const t = rows.find((x) => x.id === drag);
+                  const t = rows.find((x) => x.id === arrastando.current);
                   if (t) move(t, col);
-                  setDrag(null);
+                  arrastando.current = null;
                 }}
-                className="flex min-h-[220px] flex-col rounded-2xl border border-line bg-ink-900/40 p-2.5"
+                className={cx(
+                  "flex min-h-[220px] flex-col rounded-2xl border border-line bg-ink-900/40 p-2.5",
+                  esconderNoCelular && "hidden lg:flex"
+                )}
               >
                 <div className="flex items-center justify-between px-2 py-2">
                   <div className="flex items-center gap-2">
@@ -841,7 +889,9 @@ export default function DemandasPage() {
                         itens={itens[t.id] ?? []}
                         onAlternarItem={alternarItem}
                         marcando={marcando}
-                        onDragStart={() => setDrag(t.id)}
+                        onDragStart={() => {
+                          arrastando.current = t.id;
+                        }}
                         onEdit={() => startEdit(t)}
                         onDelete={() => remove(t)}
                         onAdvance={() => {
