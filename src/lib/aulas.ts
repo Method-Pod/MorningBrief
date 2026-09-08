@@ -68,21 +68,63 @@ export async function dadosDoLink(url: string): Promise<AulaDoLink> {
   }
 }
 
-/** "1h50" ou "42min" — minuto cru fica ilegível passando de uma hora. */
-export const duracaoCurta = (min: number | null) => {
-  if (!min || min <= 0) return null;
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  return h ? (m ? `${h}h${String(m).padStart(2, "0")}` : `${h}h`) : `${m}min`;
+/**
+ * Segundos → "1h23m45s", "23m45s", "45s".
+ *
+ * Mostra o segundo, que é o que a duração passou a guardar. As partes que
+ * valem zero saem fora: "1h" em vez de "1h00m00s", que é ruído para dizer a
+ * mesma coisa. Segundo cru passando de um minuto fica ilegível, então nunca
+ * aparece sozinho acima de 59.
+ */
+export const duracaoExata = (seg: number | null | undefined) => {
+  if (!seg || seg <= 0) return null;
+  const h = Math.floor(seg / 3600);
+  const m = Math.floor((seg % 3600) / 60);
+  const s = seg % 60;
+
+  /* Com hora, minuto e segundo ganham dois dígitos: "1h23m45s" alinha, e
+     "1h3m5s" parece truncado. Sem hora, o minuto vem cru — "3m34s", não
+     "03m34s". */
+  const partes = [
+    h ? `${h}h` : "",
+    m ? `${h ? String(m).padStart(2, "0") : m}m` : "",
+    s ? `${h || m ? String(s).padStart(2, "0") : s}s` : "",
+  ];
+  return partes.join("") || null;
 };
 
+/**
+ * A duração da aula em segundos, venha de onde vier.
+ *
+ * Entre subir o código novo e rodar DURACAO-EXATA.sql existe uma janela em que
+ * o banco ainda tem `minutos` e não tem `duracao_seg`. Sem esta ponte, nesse
+ * intervalo toda aula já cadastrada apareceria sem duração — um susto por uma
+ * migração de um minuto. Depois de migrar, `minutos` não existe mais e só o
+ * primeiro caminho é usado.
+ */
+export const duracaoDaAula = (l: {
+  duracao_seg?: number | null;
+  minutos?: number | null;
+}) => l.duracao_seg ?? (l.minutos ? l.minutos * 60 : null);
+
+/**
+ * Quanto da aula já foi vista.
+ *
+ * `em_minuto` é onde a pessoa parou, em minutos — é o que ela digita, e
+ * minuto é a granularidade certa para "parei aqui". A duração é em segundos,
+ * então o minuto é convertido antes de dividir; comparar as duas na unidade
+ * errada daria 60 vezes menos.
+ */
 export const pctAssistido = (l: {
-  minutos: number | null;
+  duracao_seg?: number | null;
+  minutos?: number | null;
   em_minuto: number | null;
-}) =>
-  l.minutos && l.em_minuto != null
-    ? Math.min(100, Math.round((l.em_minuto / l.minutos) * 100))
+}) => {
+  const total = duracaoDaAula(l);
+  return total && l.em_minuto != null
+    ? Math.min(100, Math.round(((l.em_minuto * 60) / total) * 100))
     : null;
+};
 
 /* ------------------------------ playlist ------------------------------ */
 
@@ -108,19 +150,19 @@ export function idDaPlaylist(url: string): string | null {
 }
 
 /**
- * Duração ISO 8601 do YouTube ("PT1H2M10S") em minutos.
+ * Duração ISO 8601 do YouTube ("PT1H2M10S") em segundos.
  *
- * Arredonda para o minuto mais próximo, com piso de 1: um vídeo de 40
- * segundos é "1min" e não "0min", que viraria uma barra impossível de
- * completar.
+ * Exato, sem arredondar: o segundo é justamente o que se quer guardar. O `D`
+ * opcional no começo aparece em transmissão longa; é aceito e ignorado,
+ * porque uma aula de mais de um dia não existe.
  */
-export function minutosDaDuracao(iso: unknown): number | null {
+export function segundosDaDuracao(iso: unknown): number | null {
   if (typeof iso !== "string") return null;
   const m = iso.match(/^P(?:\d+D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
   if (!m) return null;
   const total =
-    Number(m[1] ?? 0) * 60 + Number(m[2] ?? 0) + Number(m[3] ?? 0) / 60;
-  return total > 0 ? Math.max(1, Math.round(total)) : null;
+    Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
+  return total > 0 ? total : null;
 }
 
 export type AulaDaPlaylist = {
@@ -128,7 +170,7 @@ export type AulaDaPlaylist = {
   url: string;
   canal: string | null;
   thumb_url: string | null;
-  minutos: number | null;
+  duracao_seg: number | null;
 };
 
 /* ------------------------------ duração ------------------------------ */
@@ -164,19 +206,18 @@ export function idDoVideo(url: string): string | null {
 const limparId = (v: string) => (/^[\w-]{11}$/.test(v) ? v : null);
 
 /**
- * "1:23:45", "1h23", "83min", "45s", "83" → minutos.
+ * "1:23:45", "1h23m45s", "83min", "45s", "83" → segundos.
  *
  * O campo era um `type="number"` em minutos, e para um vídeo de uma hora e
  * vinte era preciso fazer a conta de cabeça — hora e segundo não tinham onde
- * entrar. Aqui qualquer das formas serve, e o resultado é sempre em minutos,
- * que é a unidade em que a aula é gravada e em que o marcador de "onde parei"
- * anda.
+ * entrar. Aqui qualquer das formas serve, e o resultado é sempre em segundos,
+ * que é a unidade em que a aula é gravada.
  *
- * Arredonda para o minuto mais próximo, com piso de 1: um corte de 40
- * segundos é "1min" e não "0min", que viraria uma barra impossível de
- * completar. Devolve null quando não dá para entender.
+ * Exato, sem arredondar: escrever "1:23:45" grava os 45 segundos. Número sem
+ * unidade é minuto, porque é o que "83" quer dizer. Devolve null quando não dá
+ * para entender.
  */
-export function minutosDoTexto(cru: string): number | null {
+export function segundosDoTexto(cru: string): number | null {
   const t = cru.trim().toLowerCase().replace(/\s+/g, "");
   if (!t) return null;
 
@@ -189,7 +230,7 @@ export function minutosDoTexto(cru: string): number | null {
       c === undefined
         ? Number(a) * 60 + Number(b)
         : Number(a) * 3600 + Number(b) * 60 + Number(c);
-    return segundosEmMinutos(segundos);
+    return segundos > 0 ? segundos : null;
   }
 
   /*
@@ -198,9 +239,7 @@ export function minutosDoTexto(cru: string): number | null {
    * Lido como uma sequência de "número + unidade", e não como um único padrão
    * com grupos opcionais. Com grupos opcionais o motor de expressão regular
    * reparte o número para fazer o resto casar: "45s" saía como 4 minutos e 5
-   * segundos, porque assim sobrava um dígito para o "s". Aqui cada número
-   * carrega a sua unidade, e número sem unidade é minuto — que é o que "83"
-   * quer dizer.
+   * segundos, porque assim sobrava um dígito para o "s".
    */
   const pedacos = [...t.matchAll(/(\d+)(h|min|m|s)?/g)];
   const sobra = t.replace(/(\d+)(h|min|m|s)?/g, "");
@@ -213,18 +252,15 @@ export function minutosDoTexto(cru: string): number | null {
     else if (unidade === "s") segundos += n;
     else segundos += n * 60;
   }
-  return segundosEmMinutos(segundos);
+  return segundos > 0 ? segundos : null;
 }
-
-const segundosEmMinutos = (s: number) =>
-  s > 0 ? Math.max(1, Math.round(s / 60)) : null;
 
 /**
  * Segundos → o texto que vai no campo, no formato que ele mesmo entende.
  *
- * Devolve "1h23" ou "42min", que é o que `minutosDoTexto` lê de volta sem
+ * Devolve "1h23m45s" ou "42m", que é o que `segundosDoTexto` lê de volta sem
  * perder nada — o campo pode ser preenchido pelo link e editado à mão sem
  * mudar de linguagem no meio.
  */
-export const textoDaDuracao = (minutos: number | null) =>
-  duracaoCurta(minutos) ?? "";
+export const textoDaDuracao = (segundos: number | null) =>
+  duracaoExata(segundos) ?? "";

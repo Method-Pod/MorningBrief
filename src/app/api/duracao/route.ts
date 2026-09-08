@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { idDoVideo, minutosDaDuracao } from "@/lib/aulas";
+import { idDoVideo, segundosDaDuracao } from "@/lib/aulas";
 import { htmlAte, metatag } from "@/lib/paginaYoutube";
 
 /**
@@ -9,7 +9,8 @@ import { htmlAte, metatag } from "@/lib/paginaYoutube";
  * e sem ela a barra de "onde parei" não tem fim, e a meta semanal não sabe
  * quanto tempo cada aula custa. Digitar à mão era a alternativa, e era ela que
  * emperrava: o campo pedia minutos, então uma aula de 1h23m45s exigia fazer a
- * conta antes de cadastrar.
+ * conta antes de cadastrar — e o minuto arredondado ainda jogava os 45
+ * segundos fora. A resposta daqui é em segundos, exata.
  *
  * Dois caminhos, na ordem de confiança:
  *
@@ -37,8 +38,8 @@ async function pelaApi(id: string) {
     if (!r.ok) return null;
     const d = await r.json();
     const iso = d?.items?.[0]?.contentDetails?.duration;
-    const minutos = minutosDaDuracao(iso);
-    return minutos ? { minutos, fonte: "api" as const } : null;
+    const segundos = segundosDaDuracao(iso);
+    return segundos ? { segundos, fonte: "api" as const } : null;
   } catch {
     return null;
   }
@@ -61,16 +62,13 @@ async function pelaPagina(id: string) {
   const exato = html.match(/"lengthSeconds":"(\d+)"/);
   if (exato) {
     const segundos = Number(exato[1]);
-    if (segundos > 0)
-      return {
-        minutos: Math.max(1, Math.round(segundos / 60)),
-        segundos,
-        fonte: "pagina" as const,
-      };
+    if (segundos > 0) return { segundos, fonte: "pagina" as const };
   }
 
-  const minutos = minutosDaDuracao(metatag(html, "duration"));
-  return minutos ? { minutos, fonte: "pagina" as const } : null;
+  /* A metatag arredonda para o segundo de cima — 213s aparece como PT3M34S.
+     Fica como reserva, para quando o formato do primeiro mudar. */
+  const segundos = segundosDaDuracao(metatag(html, "duration"));
+  return segundos ? { segundos, fonte: "meta" as const } : null;
 }
 
 export async function GET(req: Request) {
@@ -81,12 +79,12 @@ export async function GET(req: Request) {
   /*
    * Link que não é vídeo do YouTube não é erro: aula de Telegram, Drive ou PDF
    * entra do mesmo jeito, só sem duração automática. Devolver 200 com
-   * `minutos: null` deixa a tela seguir sem tratar isto como falha.
+   * `segundos: null` deixa a tela seguir sem tratar isto como falha.
    */
-  if (!id) return NextResponse.json({ minutos: null, fonte: "nao-youtube" });
+  if (!id) return NextResponse.json({ segundos: null, fonte: "nao-youtube" });
 
   const achado = (await pelaApi(id)) ?? (await pelaPagina(id));
-  if (!achado) return NextResponse.json({ minutos: null, fonte: "nao-achou" });
+  if (!achado) return NextResponse.json({ segundos: null, fonte: "nao-achou" });
 
   return NextResponse.json(achado);
 }

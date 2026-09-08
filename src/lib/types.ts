@@ -323,9 +323,30 @@ export type Lesson = {
   /* Aponta para a etiqueta, não guarda o nome. Renomear o assunto é uma
      linha em `subjects`, e não uma varredura em todas as aulas. */
   subject_id: string | null;
-  /** Duração total, quando conhecida. */
-  minutos: number | null;
-  /** Onde parou. Nulo é diferente de zero: "não anotei" não é "no começo". */
+  /**
+   * Duração total em segundos, quando conhecida.
+   *
+   * Em segundos e não em minutos porque minuto arredondado descarta o que não
+   * volta: um vídeo de 1h23m45s gravado como 84 perde os 45 segundos para
+   * sempre. O minuto é uma divisão na hora de mostrar. Ver DURACAO-EXATA.sql.
+   */
+  duracao_seg: number | null;
+  /**
+   * A coluna antiga, em minutos arredondados.
+   *
+   * Só existe em banco onde DURACAO-EXATA.sql ainda não rodou, e é opcional
+   * por isso. Existe para a tela não ficar sem duração nenhuma entre o deploy
+   * e a migração: `duracaoDaAula` lê esta quando a nova está vazia. Depois de
+   * migrar, a coluna deixa de existir e o campo nunca chega.
+   */
+  minutos?: number | null;
+  /**
+   * Onde parou, em minutos.
+   *
+   * Continua em minutos de propósito: é o número que se digita ao pausar, e
+   * ninguém anota o segundo em que parou. Nulo é diferente de zero — "não
+   * anotei" não é "no começo".
+   */
   em_minuto: number | null;
   feita: boolean;
   /** Quando foi marcada — é por esta data que a limpeza dos 7 dias conta. */

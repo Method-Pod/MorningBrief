@@ -34,13 +34,14 @@ import { dataCurta, semanaDe, todayISO } from "@/lib/format";
 import { DIAS_RETENCAO_AULAS } from "@/lib/limpeza";
 import {
   dadosDoLink,
-  duracaoCurta,
+  duracaoDaAula,
+  duracaoExata,
   fonteDoLink,
   idDaPlaylist,
   idDoVideo,
-  minutosDoTexto,
   normalizarUrl,
   pctAssistido,
+  segundosDoTexto,
   textoDaDuracao,
   type AulaDaPlaylist,
 } from "@/lib/aulas";
@@ -133,7 +134,7 @@ const aulaVazia = () => ({
   title: "",
   canal: "",
   subject_id: "",
-  minutos: "",
+  duracao: "",
   thumb_url: "",
 });
 
@@ -343,7 +344,7 @@ export default function AulasPage() {
       title: f.title.trim() || d.title || "",
       canal: f.canal.trim() || d.canal || "",
       thumb_url: d.thumb_url ?? f.thumb_url,
-      minutos: f.minutos.trim() || textoDaDuracao(dur),
+      duracao: f.duracao.trim() || textoDaDuracao(dur),
     }));
   };
 
@@ -361,7 +362,7 @@ export default function AulasPage() {
       const r = await fetch(`/api/duracao?url=${encodeURIComponent(url)}`);
       if (!r.ok) return null;
       const d = await r.json();
-      return typeof d?.minutos === "number" ? d.minutos : null;
+      return typeof d?.segundos === "number" ? d.segundos : null;
     } catch {
       return null;
     }
@@ -381,11 +382,11 @@ export default function AulasPage() {
     const title = form.title.trim();
     if (!title) return setErro("Dê um nome à aula.");
 
-    const cru = form.minutos.trim();
-    const minutos = cru ? minutosDoTexto(cru) : null;
-    if (cru && !minutos)
+    const cru = form.duracao.trim();
+    const duracao_seg = cru ? segundosDoTexto(cru) : null;
+    if (cru && !duracao_seg)
       return setErro(
-        "Não entendi a duração. Escreva como 1:23:45, 1h23 ou 83min."
+        "Não entendi a duração. Escreva como 1:23:45, 1h23m45s ou 83min."
       );
 
     setErro("");
@@ -407,7 +408,7 @@ export default function AulasPage() {
         canal: ou(form.canal),
         thumb_url: ou(form.thumb_url),
         subject_id: form.subject_id || null,
-        minutos,
+        duracao_seg,
         feita: false,
       })
       .select("*")
@@ -418,6 +419,12 @@ export default function AulasPage() {
       if (/subject_id/.test(error.message))
         return setErro(
           "Etiquetas precisam de supabase/CURSOS-E-ASSUNTOS.sql no banco. Rode o arquivo."
+        );
+      /* PGRST204 nesta coluna é a migração da duração exata ainda pendente —
+         um arquivo para rodar, não um defeito. */
+      if (/duracao_seg/.test(error.message))
+        return setErro(
+          "A duração em segundos precisa de supabase/DURACAO-EXATA.sql no banco. Rode o arquivo e recarregue."
         );
       return setErro(error.message);
     }
@@ -443,8 +450,13 @@ export default function AulasPage() {
     const cru = (minutoEmEdicao[l.id] ?? "").trim();
     const n = Number(cru);
     if (!cru || !Number.isFinite(n) || n < 0) return;
-    if (l.minutos && n > l.minutos)
-      return notice.show(`A aula tem ${l.minutos} minutos.`);
+    /* O marcador é em minutos e a duração em segundos: o teto é a duração
+       arredondada para cima, senão o último minuto de uma aula de 3m34s
+       (o minuto 4) seria recusado. */
+    const total = duracaoDaAula(l);
+    const teto = total ? Math.ceil(total / 60) : null;
+    if (teto && n > teto)
+      return notice.show(`A aula tem ${duracaoExata(total)}.`);
 
     const { error } = await supabase
       .from("lessons")
@@ -811,13 +823,19 @@ export default function AulasPage() {
           canal: a.canal,
           thumb_url: a.thumb_url,
           subject_id: assuntoImport || null,
-          minutos: a.minutos,
+          duracao_seg: a.duracao_seg,
           feita: false,
         }))
       )
       .select("*");
     setSalvando(false);
 
+    if (error && /duracao_seg/.test(error.message)) {
+      setErroImport(
+        "A duração em segundos precisa de supabase/DURACAO-EXATA.sql no banco. Rode o arquivo e recarregue."
+      );
+      return;
+    }
     if (notice.check(error, "importar a playlist")) return;
     if (data) setRows((v) => [...(data as Lesson[]), ...v]);
     const pulou = achados.length - novas.length;
@@ -1411,10 +1429,10 @@ export default function AulasPage() {
                           </span>
                         </span>
 
-                        {duracaoCurta(l.minutos) && (
+                        {duracaoExata(duracaoDaAula(l)) && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-ink-800 px-2 py-0.5 text-[10px] font-semibold text-fg-mute tnum">
                             <Clock size={9} />
-                            {duracaoCurta(l.minutos)}
+                            {duracaoExata(duracaoDaAula(l))}
                           </span>
                         )}
 
@@ -1440,7 +1458,7 @@ export default function AulasPage() {
                         )}
                       </div>
 
-                      {!l.feita && l.minutos && (
+                      {!l.feita && duracaoDaAula(l) && (
                         <div className="mt-2 flex flex-wrap items-center gap-2">
                           {pct !== null && (
                             <>
@@ -1451,7 +1469,8 @@ export default function AulasPage() {
                                 />
                               </span>
                               <span className="text-[10px] font-bold text-fg-mute tnum">
-                                {l.em_minuto}/{l.minutos}min
+                                {l.em_minuto}min de{" "}
+                                {duracaoExata(duracaoDaAula(l))}
                               </span>
                             </>
                           )}
@@ -1460,7 +1479,7 @@ export default function AulasPage() {
                               <Input
                                 type="number"
                                 min={0}
-                                max={l.minutos}
+                                max={Math.ceil(duracaoDaAula(l)! / 60)}
                                 value={minutoEmEdicao[l.id] ?? ""}
                                 onChange={(e) =>
                                   setMinutoEmEdicao((r) => ({
@@ -1592,15 +1611,16 @@ export default function AulasPage() {
               Texto, e não `type="number"` em minutos.
               
               Como número, hora e segundo não tinham onde entrar: uma aula de
-              1h23m45s exigia calcular 84 antes de cadastrar. Agora vale
-              "1:23:45", "1h23", "83min" ou "83" — e o link preenche sozinho,
-              então na maioria das vezes não se digita nada aqui.
+              1h23m45s exigia calcular 84 antes de cadastrar, e os 45 segundos
+              iam embora. Agora vale "1:23:45", "1h23m45s", "83min" ou "83", e
+              o segundo é gravado como está — e o link preenche sozinho, então
+              na maioria das vezes não se digita nada aqui.
             */}
             <Field label="Duração" hint="1:23:45">
               <Input
-                value={form.minutos}
-                onChange={(e) => setForm({ ...form, minutos: e.target.value })}
-                placeholder="1h23"
+                value={form.duracao}
+                onChange={(e) => setForm({ ...form, duracao: e.target.value })}
+                placeholder="1h23m45s"
               />
             </Field>
           </div>
@@ -1943,7 +1963,7 @@ export default function AulasPage() {
                         {a.title}
                       </span>
                       <span className="block text-[10.5px] text-fg-mute">
-                        {[a.canal, duracaoCurta(a.minutos)]
+                        {[a.canal, duracaoExata(a.duracao_seg)]
                           .filter(Boolean)
                           .join(" · ")}
                       </span>

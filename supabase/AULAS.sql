@@ -23,9 +23,15 @@ create table if not exists public.lessons (
   assunto     text,
 
   -- Duração e onde parou, os dois opcionais: a maioria das aulas se vê de
-  -- uma vez, e aí só a caixinha importa. O minuto serve para a aula longa
+  -- uma vez, e aí só a caixinha importa. Os dois servem para a aula longa
   -- que se vê em pedaços.
-  minutos     int check (minutos is null or minutos > 0),
+  --
+  -- A duração é em segundos, e não em minutos: minuto arredondado joga
+  -- fora o que não volta — 1h23m45s viraria 84 e os 45 segundos morriam na
+  -- gravação. Onde parou continua em minutos, que é o número que se digita
+  -- ao pausar; ninguém anota o segundo. Banco criado antes disto migra com
+  -- DURACAO-EXATA.sql.
+  duracao_seg int check (duracao_seg is null or duracao_seg > 0),
   em_minuto   int check (em_minuto is null or em_minuto >= 0),
 
   feita       boolean not null default false,

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  minutosDaDuracao,
+  segundosDaDuracao,
   type AulaDaPlaylist,
 } from "@/lib/aulas";
 
@@ -52,7 +52,7 @@ async function json(url: string) {
   }
 }
 
-/** As durações, em uma chamada por lote de 50 ids. */
+/** As durações em segundos, em uma chamada por lote de 50 ids. */
 async function duracoes(ids: string[]): Promise<Map<string, number>> {
   const fora = new Map<string, number>();
   for (let i = 0; i < ids.length; i += POR_PAGINA) {
@@ -65,8 +65,8 @@ async function duracoes(ids: string[]): Promise<Map<string, number>> {
       ?.items;
     if (!Array.isArray(itens)) continue;
     itens.forEach((v) => {
-      const min = minutosDaDuracao(v.contentDetails?.duration);
-      if (v.id && min) fora.set(v.id, min);
+      const seg = segundosDaDuracao(v.contentDetails?.duration);
+      if (v.id && seg) fora.set(v.id, seg);
     });
   }
   return fora;
@@ -143,7 +143,7 @@ export async function GET(req: Request) {
         thumb_url: texto(
           t.medium?.url ?? t.high?.url ?? t.default?.url ?? null
         ),
-        minutos: null,
+        duracao_seg: null,
       });
     });
 
@@ -155,7 +155,7 @@ export async function GET(req: Request) {
      aula, e a cota da API é contada por chamada. */
   const mapa = await duracoes(ids);
   itens.forEach((a, i) => {
-    a.minutos = mapa.get(ids[i]) ?? null;
+    a.duracao_seg = mapa.get(ids[i]) ?? null;
   });
 
   return NextResponse.json({ itens, total: itens.length });
