@@ -253,6 +253,22 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Faixa que rola para o lado, sem a barra à mostra.
+ *
+ * A barra de rolagem horizontal é grossa e some sozinha em parte dos sistemas,
+ * então numa faixa de poucos itens ela é mais ruído que informação. Quem diz
+ * que tem mais conteúdo é o esmaecido nas pontas, que o Carrossel acende só do
+ * lado onde há.
+ */
+@utility sem-barra {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 input::placeholder,
 textarea::placeholder {
   color: var(--color-fg-mute);

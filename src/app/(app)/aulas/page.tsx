@@ -47,6 +47,7 @@ import {
 } from "@/lib/aulas";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { NADA_GRAVADO, recadoDeErro } from "@/lib/erros";
+import { Carrossel } from "@/components/Carrossel";
 import {
   CampoAssunto,
   Etiqueta,
@@ -964,9 +965,13 @@ export default function AulasPage() {
             <Tv size={15} />
             <span className="hidden sm:inline">Canal</span>
           </Button>
-          <Button onClick={() => abrirCurso()} className="min-w-0 flex-1 sm:flex-none">
-            <Layers size={15} className="shrink-0" />
-            <span className="truncate">Curso</span>
+          {/* Rótulo escondido no telefone, como Etiquetas, Playlist e Canal.
+              Com cinco botões na linha, "Curso" e "Aula" apareciam cortados
+              como "C…" e "A…" — e num par assim é melhor um ícone limpo e um
+              rótulo inteiro no botão principal do que dois pela metade. */}
+          <Button onClick={() => abrirCurso()} className="shrink-0" title="Adicionar curso">
+            <Layers size={15} />
+            <span className="hidden sm:inline">Curso</span>
           </Button>
           <Button
             variant="primary"
@@ -1146,11 +1151,19 @@ export default function AulasPage() {
               · {canais.length}
             </span>
           </h2>
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {/*
+            Carrossel, e não grade.
+            
+            Em grade o cartão esticava até a largura da coluna — um avatar de
+            36px e um nome curto ocupando um terço da tela, com o resto vazio.
+            Aqui cada cartão tem a largura do seu conteúdo e eles ficam lado a
+            lado; passando da tela, arrasta-se para o lado.
+          */}
+          <Carrossel>
             {canais.map((c, i) => (
               <Card
                 key={c.id}
-                className="entra group flex items-center gap-2.5 p-2.5"
+                className="entra group relative flex w-[188px] shrink-0 items-center gap-2 p-2"
                 style={{ "--i": i } as React.CSSProperties}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1159,11 +1172,12 @@ export default function AulasPage() {
                     src={c.avatar_url}
                     alt=""
                     loading="lazy"
-                    className="h-9 w-9 shrink-0 rounded-full object-cover"
+                    draggable={false}
+                    className="h-8 w-8 shrink-0 rounded-full object-cover"
                   />
                 ) : (
-                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-800 text-fg-mute">
-                    <Tv size={15} />
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-ink-800 text-fg-mute">
+                    <Tv size={14} />
                   </span>
                 )}
 
@@ -1172,27 +1186,40 @@ export default function AulasPage() {
                     href={c.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="block truncate text-[12.5px] font-semibold leading-snug hover:text-brand-400"
-                    title={c.url}
+                    /* `draggable={false}`: o arraste nativo de link roubaria o
+                       gesto do carrossel e sairia o fantasma da URL. */
+                    draggable={false}
+                    className="block truncate text-[12px] font-semibold leading-tight hover:text-brand-400"
+                    title={[c.name, c.url, c.notes].filter(Boolean).join(" · ")}
                   >
                     {c.name}
                   </a>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                    <Etiqueta nome={nomeDoAssunto.get(c.subject_id ?? "")} />
-                    {c.notes && (
-                      <span
-                        className="truncate text-[10.5px] text-fg-mute"
-                        title={c.notes}
-                      >
+                  {/* Etiqueta se houver; senão a anotação, que é o outro jeito
+                      de a linha dizer o que se estuda ali. As duas juntas não
+                      cabem num cartão deste tamanho, e as duas estão no title. */}
+                  {nomeDoAssunto.get(c.subject_id ?? "") ? (
+                    <Etiqueta
+                      nome={nomeDoAssunto.get(c.subject_id ?? "")}
+                      className="mt-0.5"
+                    />
+                  ) : (
+                    c.notes && (
+                      <span className="mt-0.5 block truncate text-[10px] text-fg-mute">
                         {c.notes}
                       </span>
-                    )}
-                  </div>
+                    )
+                  )}
                 </div>
 
-                <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                  {/* O gesto que o canal existe para permitir: chegou a hora de
-                      estudar, o nome do canal já vem preenchido. */}
+                {/*
+                  As ações por cima, e não ao lado.
+                  
+                  Num cartão de 188px, três botões em coluna própria não
+                  sobrariam largura para o nome. Aparecem sobre a direita do
+                  cartão no hover, com o fundo esmaecendo o que está atrás para
+                  os ícones não brigarem com o texto.
+                */}
+                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 rounded-r-[1.375rem] pl-6 pr-1.5 opacity-0 transition-opacity [background:linear-gradient(to_right,transparent,#fff_24px)] group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
                   <button
                     type="button"
                     onClick={() => aulaDoCanal(c)}
@@ -1218,10 +1245,10 @@ export default function AulasPage() {
                   >
                     <Trash2 size={13} />
                   </button>
-                </div>
+                </span>
               </Card>
             ))}
-          </div>
+          </Carrossel>
         </div>
       )}
 
