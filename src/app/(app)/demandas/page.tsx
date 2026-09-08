@@ -49,6 +49,7 @@ import {
   cx,
 } from "@/components/ui";
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
+import { useArrastarCartao } from "@/components/arrastarCartao";
 import {
   EditorChecklist,
   ListaDeItens,
@@ -115,15 +116,7 @@ export default function DemandasPage() {
   const [form, setForm] = React.useState(blank());
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
-  /*
-   * O que está sendo arrastado fica em ref, não em estado.
-   *
-   * Em estado, começar a arrastar re-renderizava o quadro inteiro — todos os
-   * cartões, com todos os checklists — no exato momento em que o navegador
-   * precisa da thread livre para acompanhar o ponteiro. E o valor só é lido no
-   * `onDrop`, então nada na tela depende dele.
-   */
-  const arrastando = React.useRef<string | null>(null);
+
   /* Itens de checklist agrupados por demanda. */
   const [itens, setItens] = React.useState<Record<string, TaskItem[]>>({});
   const [marcando, setMarcando] = React.useState<string | null>(null);
@@ -617,6 +610,15 @@ export default function DemandasPage() {
     await aplicarStatus(t, status);
   };
 
+  /*
+   * O arrasto entrega a coluna onde o cartão foi solto, e `move` decide o
+   * resto — inclusive a regra do checklist, que continua valendo: soltar em
+   * "Concluída" com item em aberto abre a mesma confirmação do botão.
+   */
+  const { iniciar: iniciarArrasto } = useArrastarCartao<Task>({
+    onSoltar: (t, coluna) => move(t, coluna as TaskStatus),
+  });
+
   const remove = (t: Task) =>
     confirm.ask(`Excluir "${t.title}"?`, async () => {
       const { error } = await supabase.from("tasks").delete().eq("id", t.id);
@@ -838,27 +840,10 @@ export default function DemandasPage() {
             return (
               <div
                 key={col}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  /* "move" troca o cursor de "+" (copiar) para o de mover — o
-                     navegador mostra copiar por padrão, e o gesto aqui não
-                     duplica nada. */
-                  e.dataTransfer.dropEffect = "move";
-                  e.currentTarget.dataset.alvo = "1";
-                }}
-                onDragLeave={(e) => {
-                  /* `dragleave` também dispara ao passar sobre os filhos, então
-                     sem esta checagem o realce piscava a cada cartão que o
-                     ponteiro cruzava dentro da própria coluna. */
-                  if (!e.currentTarget.contains(e.relatedTarget as Node))
-                    delete e.currentTarget.dataset.alvo;
-                }}
-                onDrop={(e) => {
-                  delete e.currentTarget.dataset.alvo;
-                  const t = rows.find((x) => x.id === arrastando.current);
-                  if (t) move(t, col);
-                  arrastando.current = null;
-                }}
+                /* `data-coluna` é como o arrasto acha o destino: ele consulta
+                   `elementFromPoint` no ponto onde o cartão foi solto e sobe até
+                   o ancestral que carrega este atributo. */
+                data-coluna={col}
                 className={cx(
                   "coluna flex min-h-[220px] flex-col rounded-2xl border border-line bg-ink-900/40 p-2.5",
                   esconderNoCelular && "hidden lg:flex"
@@ -905,17 +890,7 @@ export default function DemandasPage() {
                         itens={itens[t.id] ?? []}
                         onAlternarItem={alternarItem}
                         marcando={marcando}
-                        onDragStart={(e) => {
-                          arrastando.current = t.id;
-                          e.dataTransfer.effectAllowed = "move";
-                          /* Atributo no próprio elemento: o cartão que sai fica
-                             translúcido sem que nada em volta re-renderize. */
-                          e.currentTarget.dataset.arrastando = "1";
-                        }}
-                        onDragEnd={(e) => {
-                          delete e.currentTarget.dataset.arrastando;
-                          arrastando.current = null;
-                        }}
+                        onPointerDown={(e) => iniciarArrasto(e, t)}
                         onEdit={() => startEdit(t)}
                         onDelete={() => remove(t)}
                         onAdvance={() => {
@@ -1492,8 +1467,7 @@ function TaskCard({
   itens,
   onAlternarItem,
   marcando,
-  onDragStart,
-  onDragEnd,
+  onPointerDown,
   onEdit,
   onDelete,
   onAdvance,
@@ -1504,8 +1478,7 @@ function TaskCard({
   itens: TaskItem[];
   onAlternarItem: (i: TaskItem) => void;
   marcando: string | null;
-  onDragStart: (e: React.DragEvent<HTMLDivElement>) => void;
-  onDragEnd: (e: React.DragEvent<HTMLDivElement>) => void;
+  onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   onEdit: () => void;
   onDelete: () => void;
   onAdvance: () => void;
@@ -1519,9 +1492,7 @@ function TaskCard({
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      onPointerDown={onPointerDown}
       /* `--i` alimenta o atraso da cascata; `levanta` troca o realce de borda
          por um deslocamento de 2px, que o compositor resolve e que não empurra
          o conteúdo como mudar espessura de borda fazia. */

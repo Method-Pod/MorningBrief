@@ -418,6 +418,13 @@ textarea::placeholder {
   cursor: grabbing;
 }
 
+/* A cópia que segue o ponteiro. O `cursor` fica no body durante o gesto, e o
+   `select-none` evita que arrastar sobre o texto vire seleção. */
+[data-arrastando="1"],
+[data-arrastando="1"] * {
+  user-select: none;
+}
+
 /* A coluna que vai receber. Antes não havia aviso nenhum: dava para soltar em
    qualquer lugar sem saber onde ia cair. */
 [data-alvo="1"] {
