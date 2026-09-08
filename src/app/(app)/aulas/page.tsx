@@ -17,12 +17,14 @@ import {
   Tag,
   Target,
   Trash2,
+  Tv,
   Youtube,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   FONTE_AULA_LABEL,
+  type Channel,
   type Course,
   type FonteAula,
   type Lesson,
@@ -35,12 +37,15 @@ import {
   duracaoCurta,
   fonteDoLink,
   idDaPlaylist,
+  idDoVideo,
+  minutosDoTexto,
   normalizarUrl,
   pctAssistido,
+  textoDaDuracao,
   type AulaDaPlaylist,
 } from "@/lib/aulas";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
-import { recadoDeErro } from "@/lib/erros";
+import { NADA_GRAVADO, recadoDeErro } from "@/lib/erros";
 import {
   CampoAssunto,
   Etiqueta,
@@ -132,6 +137,32 @@ const aulaVazia = () => ({
   thumb_url: "",
 });
 
+/**
+ * Recado de erro do canal.
+ *
+ * Dois casos merecem texto próprio: a tabela que ainda não existe (é um
+ * arquivo para rodar, não um defeito) e o canal repetido, que o índice único
+ * recusa e que sem tradução chegaria como "duplicate key value".
+ */
+const recadoDoCanal = (e: { code?: string; message: string }) => {
+  if (
+    e.code === "PGRST205" ||
+    /find the table|does not exist/i.test(e.message)
+  )
+    return "Os canais precisam de supabase/CANAIS.sql no banco. Rode o arquivo e recarregue.";
+  if (e.code === "23505" || /duplicate|unique/i.test(e.message))
+    return "Esse canal já está salvo.";
+  return recadoDeErro(e)?.texto ?? e.message;
+};
+
+const canalVazio = () => ({
+  url: "",
+  name: "",
+  avatar_url: "",
+  subject_id: "",
+  notes: "",
+});
+
 const cursoVazio = () => ({
   title: "",
   plataforma: "",
@@ -173,6 +204,19 @@ export default function AulasPage() {
   const [formCurso, setFormCurso] = React.useState(cursoVazio());
   const [erroCurso, setErroCurso] = React.useState("");
 
+  /* canais para estudar */
+  const [canais, setCanais] = useEstadoCacheado<Channel[]>("channels", []);
+  /* Verdadeiro quando a tabela ainda não existe no banco: a seção some e o
+     recado aparece só quando se tenta usar, em vez de virar um erro na
+     entrada da página. */
+  const [semTabelaCanais, setSemTabelaCanais] = React.useState(false);
+  const [addCanal, setAddCanal] = React.useState(false);
+  const [editandoCanal, setEditandoCanal] = React.useState<Channel | null>(null);
+  const [formCanal, setFormCanal] = React.useState(canalVazio());
+  const [buscandoCanal, setBuscandoCanal] = React.useState(false);
+  const [salvandoCanal, setSalvandoCanal] = React.useState(false);
+  const [erroCanal, setErroCanal] = React.useState("");
+
   const [gerindo, setGerindo] = React.useState(false);
 
   /* meta semanal */
@@ -192,13 +236,16 @@ export default function AulasPage() {
   const notice = useNotice();
 
   const load = React.useCallback(async () => {
-    const [l, c, a, m] = await Promise.all([
+    const [l, c, a, m, ca] = await Promise.all([
       supabase.from("lessons").select("*").order("created_at", { ascending: false }),
       supabase.from("courses").select("*").order("created_at", { ascending: false }),
       supabase.from("subjects").select("*").order("name"),
       /* A meta tolera falha: sem AULAS-EXTRAS.sql a tira não aparece e o resto
          da aba continua funcionando. */
       supabase.from("lesson_goals").select("per_week").maybeSingle(),
+      /* Canais também toleram: sem CANAIS.sql a seção não aparece, e o resto
+         da aba não sabe que ela existe. */
+      supabase.from("channels").select("*").order("name"),
     ]);
 
     /* Tabela que falta é recado que fica na tela, não aviso que passa. */
@@ -225,8 +272,12 @@ export default function AulasPage() {
     setCursos((c.data as Course[]) ?? []);
     setAssuntos((a.data as Subject[]) ?? []);
     setMeta((m.data as { per_week: number } | null)?.per_week ?? null);
+    /* PGRST205 é tabela inexistente. Qualquer outra falha aqui também deixa a
+       lista vazia, e o recado do modal explica o que rodar. */
+    setSemTabelaCanais(!!ca.error);
+    setCanais((ca.data as Channel[]) ?? []);
     setLoading(false);
-  }, [supabase, setRows, setCursos, setAssuntos, setMeta]);
+  }, [supabase, setRows, setCursos, setAssuntos, setMeta, setCanais]);
 
   React.useEffect(() => {
     load();
@@ -270,7 +321,19 @@ export default function AulasPage() {
     if (!limpo) return;
     ultimoLink.current = limpo;
     setBuscando(true);
-    const d = await dadosDoLink(limpo);
+
+    /*
+     * As duas leituras ao mesmo tempo, porque saem de lugares diferentes.
+     *
+     * Título, canal e capa vêm do oEmbed, que o navegador chama direto. A
+     * duração não está lá — ela sai da rota própria, que lê a página do vídeo
+     * (ou a Data API, se houver chave). Em série, o formulário esperaria a soma
+     * das duas; em paralelo, espera a mais lenta.
+     */
+    const [d, dur] = await Promise.all([
+      dadosDoLink(limpo),
+      duracaoDoLink(limpo),
+    ]);
     if (ultimoLink.current !== limpo) return;
     setBuscando(false);
     setForm((f) => ({
@@ -280,7 +343,28 @@ export default function AulasPage() {
       title: f.title.trim() || d.title || "",
       canal: f.canal.trim() || d.canal || "",
       thumb_url: d.thumb_url ?? f.thumb_url,
+      minutos: f.minutos.trim() || textoDaDuracao(dur),
     }));
+  };
+
+  /**
+   * A duração pela rota do servidor.
+   *
+   * Silenciosa de propósito: quando não vem — vídeo privado, link de Telegram,
+   * formato da página mudado — o campo fica vazio e é digitado, como antes.
+   * Recusar o cadastro porque a duração não foi encontrada transformaria uma
+   * comodidade em obstáculo.
+   */
+  const duracaoDoLink = async (url: string): Promise<number | null> => {
+    if (!idDoVideo(url)) return null;
+    try {
+      const r = await fetch(`/api/duracao?url=${encodeURIComponent(url)}`);
+      if (!r.ok) return null;
+      const d = await r.json();
+      return typeof d?.minutos === "number" ? d.minutos : null;
+    } catch {
+      return null;
+    }
   };
 
   const fecharAula = () => {
@@ -298,9 +382,11 @@ export default function AulasPage() {
     if (!title) return setErro("Dê um nome à aula.");
 
     const cru = form.minutos.trim();
-    const minutos = cru ? Number(cru) : null;
-    if (cru && (!Number.isFinite(minutos) || (minutos ?? 0) <= 0))
-      return setErro("A duração precisa ser um número de minutos maior que zero.");
+    const minutos = cru ? minutosDoTexto(cru) : null;
+    if (cru && !minutos)
+      return setErro(
+        "Não entendi a duração. Escreva como 1:23:45, 1h23 ou 83min."
+      );
 
     setErro("");
     setSalvando(true);
@@ -375,6 +461,155 @@ export default function AulasPage() {
       if (notice.check(error, "tirar a aula")) return;
       setRows((v) => v.filter((x) => x.id !== l.id));
     });
+
+  /* ------------------------------ canais ------------------------------ */
+
+  const abrirCanal = (c?: Channel) => {
+    setEditandoCanal(c ?? null);
+    setFormCanal(
+      c
+        ? {
+            url: c.url,
+            name: c.name,
+            avatar_url: c.avatar_url ?? "",
+            subject_id: c.subject_id ?? "",
+            notes: c.notes ?? "",
+          }
+        : canalVazio()
+    );
+    setErroCanal("");
+    setAddCanal(true);
+  };
+
+  const fecharCanal = () => {
+    setAddCanal(false);
+    setEditandoCanal(null);
+    setFormCanal(canalVazio());
+    setErroCanal("");
+    ultimoCanal.current = "";
+    setBuscandoCanal(false);
+  };
+
+  /*
+   * Nome e foto pelo link, como na aula.
+   *
+   * Aceita o endereço do canal ou o link de um vídeo dele — guardar um canal
+   * normalmente acontece estando num vídeo, e obrigar a voltar ao canal para
+   * copiar o endereço "certo" seria trabalho que o servidor faz sozinho.
+   */
+  const ultimoCanal = React.useRef("");
+
+  const lerLinkCanal = async (url: string) => {
+    const limpo = normalizarUrl(url);
+    if (!limpo) return;
+    ultimoCanal.current = limpo;
+    setBuscandoCanal(true);
+    try {
+      const r = await fetch(`/api/canal?url=${encodeURIComponent(limpo)}`);
+      const d = await r.json();
+      /* Resposta atrasada de um link já trocado não escreve na tela. */
+      if (ultimoCanal.current !== limpo) return;
+      setBuscandoCanal(false);
+      if (d?.erro) return setErroCanal(d.recado ?? "Não reconheci esse link.");
+      setErroCanal("");
+      setFormCanal((f) => ({
+        ...f,
+        /* O endereço colado é trocado pelo canônico: o mesmo canal colado como
+           /@nome e como /channel/UC... viraria duas linhas. */
+        url: typeof d?.url === "string" ? d.url : f.url,
+        name: f.name.trim() || d?.nome || "",
+        avatar_url: d?.avatar_url ?? f.avatar_url,
+      }));
+    } catch {
+      if (ultimoCanal.current === limpo) {
+        setBuscandoCanal(false);
+        setErroCanal("Não consegui ler o canal agora. Preencha o nome à mão.");
+      }
+    }
+  };
+
+  const salvarCanal = async () => {
+    const name = formCanal.name.trim();
+    const url = normalizarUrl(formCanal.url);
+    if (!name) return setErroCanal("Dê um nome ao canal.");
+    if (!url) return setErroCanal("Cole o endereço do canal.");
+
+    setSalvandoCanal(true);
+    setErroCanal("");
+    const dados = {
+      name,
+      url,
+      avatar_url: formCanal.avatar_url.trim() || null,
+      subject_id: formCanal.subject_id || null,
+      notes: formCanal.notes.trim() || null,
+    };
+
+    if (editandoCanal) {
+      const { data, error } = await supabase
+        .from("channels")
+        .update(dados)
+        .eq("id", editandoCanal.id)
+        .select("*")
+        .maybeSingle();
+      setSalvandoCanal(false);
+      if (error) return setErroCanal(recadoDoCanal(error));
+      /* Linha nenhuma de volta é o 204 silencioso: nada gravou. */
+      if (!data) return setErroCanal(NADA_GRAVADO);
+      setCanais((v) =>
+        v
+          .map((c) => (c.id === editandoCanal.id ? (data as Channel) : c))
+          .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+      );
+      return fecharCanal();
+    }
+
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      setSalvandoCanal(false);
+      return setErroCanal(SESSION_EXPIRED);
+    }
+    const { data, error } = await supabase
+      .from("channels")
+      .insert({ ...dados, user_id: uid })
+      .select("*")
+      .maybeSingle();
+    setSalvandoCanal(false);
+    if (error) return setErroCanal(recadoDoCanal(error));
+    if (data)
+      setCanais((v) =>
+        [...v, data as Channel].sort((a, b) =>
+          a.name.localeCompare(b.name, "pt-BR")
+        )
+      );
+    fecharCanal();
+  };
+
+  const removerCanal = (c: Channel) =>
+    confirm.ask(
+      `Tirar "${c.name}" dos canais? As aulas que você já cadastrou dele continuam na lista.`,
+      async () => {
+        const { data: saiu, error } = await supabase
+          .from("channels")
+          .delete()
+          .eq("id", c.id)
+          .select("id");
+        if (notice.check(error, "tirar o canal")) return;
+        if (!saiu?.length) return notice.show(NADA_GRAVADO);
+        setCanais((v) => v.filter((x) => x.id !== c.id));
+      }
+    );
+
+  /**
+   * Abre o cadastro de aula já com o canal preenchido.
+   *
+   * É o motivo de o canal estar salvo: chegou a hora de estudar, o nome do
+   * canal não precisa ser digitado de novo.
+   */
+  const aulaDoCanal = (c: Channel) => {
+    setForm({ ...aulaVazia(), canal: c.name, subject_id: c.subject_id ?? "" });
+    setErro("");
+    setAddAula(true);
+  };
 
   /* ------------------------------ cursos ------------------------------ */
 
@@ -703,6 +938,14 @@ export default function AulasPage() {
             <ListVideo size={15} />
             <span className="hidden sm:inline">Playlist</span>
           </Button>
+          <Button
+            onClick={() => abrirCanal()}
+            className="shrink-0"
+            title="Salvar um canal para estudar"
+          >
+            <Tv size={15} />
+            <span className="hidden sm:inline">Canal</span>
+          </Button>
           <Button onClick={() => abrirCurso()} className="min-w-0 flex-1 sm:flex-none">
             <Layers size={15} className="shrink-0" />
             <span className="truncate">Curso</span>
@@ -864,6 +1107,102 @@ export default function AulasPage() {
                 </Card>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------ canais ------------------------------ */}
+      {/*
+        Canal é fonte, não item de fila.
+        
+        Não termina como um curso e não sai da tela como uma aula assistida —
+        fica como o lugar onde procurar quando der vontade de estudar um
+        assunto. Por isso mora numa faixa própria, discreta, e não na lista do
+        dia: um canal no meio das aulas viraria uma linha que nunca se marca.
+      */}
+      {canais.length > 0 && (
+        <div className="space-y-2.5">
+          <h2 className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
+            Canais para estudar
+            <span className="ml-1.5 normal-case text-fg-mute/70">
+              · {canais.length}
+            </span>
+          </h2>
+          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {canais.map((c, i) => (
+              <Card
+                key={c.id}
+                className="entra group flex items-center gap-2.5 p-2.5"
+                style={{ "--i": i } as React.CSSProperties}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {c.avatar_url ? (
+                  <img
+                    src={c.avatar_url}
+                    alt=""
+                    loading="lazy"
+                    className="h-9 w-9 shrink-0 rounded-full object-cover"
+                  />
+                ) : (
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-ink-800 text-fg-mute">
+                    <Tv size={15} />
+                  </span>
+                )}
+
+                <div className="min-w-0 flex-1">
+                  <a
+                    href={c.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate text-[12.5px] font-semibold leading-snug hover:text-brand-400"
+                    title={c.url}
+                  >
+                    {c.name}
+                  </a>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                    <Etiqueta nome={nomeDoAssunto.get(c.subject_id ?? "")} />
+                    {c.notes && (
+                      <span
+                        className="truncate text-[10.5px] text-fg-mute"
+                        title={c.notes}
+                      >
+                        {c.notes}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                  {/* O gesto que o canal existe para permitir: chegou a hora de
+                      estudar, o nome do canal já vem preenchido. */}
+                  <button
+                    type="button"
+                    onClick={() => aulaDoCanal(c)}
+                    aria-label={`Cadastrar aula de ${c.name}`}
+                    title="Cadastrar uma aula deste canal"
+                    className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-brand-500/15 hover:text-brand-400"
+                  >
+                    <Plus size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => abrirCanal(c)}
+                    aria-label={`Editar ${c.name}`}
+                    className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-ink-750 hover:text-fg"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removerCanal(c)}
+                    aria-label={`Tirar ${c.name}`}
+                    className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </Card>
+            ))}
           </div>
         </div>
       )}
@@ -1173,7 +1512,7 @@ export default function AulasPage() {
         open={addAula}
         onClose={fecharAula}
         title="Adicionar aula"
-        sub="Cole o link. Do YouTube vem título, canal e capa."
+        sub="Cole o link. Do YouTube vêm título, canal, capa e duração."
         size="lg"
         footer={
           <>
@@ -1249,13 +1588,19 @@ export default function AulasPage() {
                 placeholder="Opcional"
               />
             </Field>
-            <Field label="Duração" hint="min">
+            {/*
+              Texto, e não `type="number"` em minutos.
+              
+              Como número, hora e segundo não tinham onde entrar: uma aula de
+              1h23m45s exigia calcular 84 antes de cadastrar. Agora vale
+              "1:23:45", "1h23", "83min" ou "83" — e o link preenche sozinho,
+              então na maioria das vezes não se digita nada aqui.
+            */}
+            <Field label="Duração" hint="1:23:45">
               <Input
-                type="number"
-                min={1}
                 value={form.minutos}
                 onChange={(e) => setForm({ ...form, minutos: e.target.value })}
-                placeholder="42"
+                placeholder="1h23"
               />
             </Field>
           </div>
@@ -1266,6 +1611,123 @@ export default function AulasPage() {
               onValor={(v) => setForm({ ...form, subject_id: v })}
               assuntos={assuntos}
               onGerenciar={() => setGerindo(true)}
+            />
+          </Field>
+        </div>
+      </Modal>
+
+      {/* ------------------------------ canal ------------------------------ */}
+      <Modal
+        open={addCanal}
+        onClose={fecharCanal}
+        title={editandoCanal ? "Editar canal" : "Salvar canal"}
+        sub="Cole o endereço do canal — ou o link de um vídeo dele. O nome e a foto vêm sozinhos."
+        footer={
+          <>
+            <Button onClick={fecharCanal}>Cancelar</Button>
+            <Button
+              variant="primary"
+              onClick={salvarCanal}
+              disabled={salvandoCanal}
+            >
+              {salvandoCanal ? "Salvando..." : editandoCanal ? "Salvar" : "Salvar canal"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {semTabelaCanais && (
+            <p className="rounded-[14px] bg-warn/10 px-3.5 py-3 text-xs text-fg-dim">
+              Os canais precisam de <b>supabase/CANAIS.sql</b> no banco. Rode o
+              arquivo no SQL Editor do Supabase e recarregue esta página.
+            </p>
+          )}
+          {erroCanal && (
+            <p className="rounded-[14px] bg-neg/10 px-3.5 py-3 text-xs text-neg">
+              {erroCanal}
+            </p>
+          )}
+
+          <Field label="Link do canal" hint="youtube.com/@nome — ou um vídeo dele">
+            <div className="relative">
+              <Input
+                autoFocus
+                type="url"
+                inputMode="url"
+                value={formCanal.url}
+                onChange={(e) =>
+                  setFormCanal({ ...formCanal, url: e.target.value })
+                }
+                /* No `blur` e no Enter, não a cada tecla: o link é colado de
+                   uma vez, e buscar por caractere seria uma chamada por letra. */
+                onBlur={(e) => lerLinkCanal(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    lerLinkCanal((e.target as HTMLInputElement).value);
+                  }
+                }}
+                placeholder="youtube.com/@canal"
+              />
+              {buscandoCanal && (
+                <Loader2
+                  size={14}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 animate-spin text-fg-mute"
+                />
+              )}
+            </div>
+          </Field>
+
+          {(formCanal.avatar_url || formCanal.name) && (
+            <div className="flex items-center gap-3 rounded-[14px] bg-ink-800 p-2.5">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {formCanal.avatar_url ? (
+                <img
+                  src={formCanal.avatar_url}
+                  alt=""
+                  className="h-10 w-10 shrink-0 rounded-full object-cover"
+                />
+              ) : (
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-ink-750 text-fg-mute">
+                  <Tv size={16} />
+                </span>
+              )}
+              <span className="min-w-0 text-[11.5px] text-fg-mute">
+                {formCanal.avatar_url
+                  ? "Foto do canal, veio do link."
+                  : "Sem foto — o canal entra assim mesmo."}
+              </span>
+            </div>
+          )}
+
+          <Field label="Nome do canal">
+            <Input
+              value={formCanal.name}
+              onChange={(e) =>
+                setFormCanal({ ...formCanal, name: e.target.value })
+              }
+              placeholder="Como você chama esse canal"
+            />
+          </Field>
+
+          <Field label="Assunto" hint="Escolha uma etiqueta, ou crie no botão ao lado.">
+            <CampoAssunto
+              valor={formCanal.subject_id}
+              onValor={(v) => setFormCanal({ ...formCanal, subject_id: v })}
+              assuntos={assuntos}
+              onGerenciar={() => setGerindo(true)}
+            />
+          </Field>
+
+          {/* O motivo de o canal estar salvo. Sem isso, em três meses a faixa
+              de fotos não diz mais o que ia ser estudado ali. */}
+          <Field label="O que estudar aqui" hint="Opcional">
+            <Input
+              value={formCanal.notes}
+              onChange={(e) =>
+                setFormCanal({ ...formCanal, notes: e.target.value })
+              }
+              placeholder="Cortes verticais, retenção nos 3s"
             />
           </Field>
         </div>

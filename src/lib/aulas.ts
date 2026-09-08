@@ -130,3 +130,101 @@ export type AulaDaPlaylist = {
   thumb_url: string | null;
   minutos: number | null;
 };
+
+/* ------------------------------ duração ------------------------------ */
+
+/**
+ * O id do vídeo dentro do link.
+ *
+ * Cobre as formas que aparecem ao copiar do YouTube: a página normal
+ * (`/watch?v=`), o link curto de compartilhar (`youtu.be/`), o Shorts, o
+ * embed e a transmissão. Aceitar só a primeira faria o botão de compartilhar
+ * do celular — que dá `youtu.be` — não funcionar.
+ */
+export function idDoVideo(url: string): string | null {
+  try {
+    const u = new URL(normalizarUrl(url));
+    const host = u.hostname.replace(/^www\.|^m\./, "").toLowerCase();
+
+    if (host === "youtu.be") return limparId(u.pathname.slice(1));
+    if (!/(^|\.)youtube\.com$/.test(host)) return null;
+
+    const v = u.searchParams.get("v");
+    if (v) return limparId(v);
+
+    const m = u.pathname.match(/^\/(?:shorts|embed|live|v)\/([^/?]+)/);
+    return m ? limparId(m[1]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/* Um id de vídeo tem 11 caracteres do alfabeto de URL. Conferir isto evita
+   montar um endereço com um pedaço de caminho que não é id. */
+const limparId = (v: string) => (/^[\w-]{11}$/.test(v) ? v : null);
+
+/**
+ * "1:23:45", "1h23", "83min", "45s", "83" → minutos.
+ *
+ * O campo era um `type="number"` em minutos, e para um vídeo de uma hora e
+ * vinte era preciso fazer a conta de cabeça — hora e segundo não tinham onde
+ * entrar. Aqui qualquer das formas serve, e o resultado é sempre em minutos,
+ * que é a unidade em que a aula é gravada e em que o marcador de "onde parei"
+ * anda.
+ *
+ * Arredonda para o minuto mais próximo, com piso de 1: um corte de 40
+ * segundos é "1min" e não "0min", que viraria uma barra impossível de
+ * completar. Devolve null quando não dá para entender.
+ */
+export function minutosDoTexto(cru: string): number | null {
+  const t = cru.trim().toLowerCase().replace(/\s+/g, "");
+  if (!t) return null;
+
+  /* Relógio: 1:23:45 (h:m:s) ou 23:45 (m:s). Duas partes são minuto e
+     segundo, não hora e minuto — é assim que o YouTube mostra a duração. */
+  const relogio = t.match(/^(\d+):([0-5]?\d)(?::([0-5]?\d))?$/);
+  if (relogio) {
+    const [, a, b, c] = relogio;
+    const segundos =
+      c === undefined
+        ? Number(a) * 60 + Number(b)
+        : Number(a) * 3600 + Number(b) * 60 + Number(c);
+    return segundosEmMinutos(segundos);
+  }
+
+  /*
+   * Com letra: 1h23m45s, 1h23, 90min, 45s, 83.
+   *
+   * Lido como uma sequência de "número + unidade", e não como um único padrão
+   * com grupos opcionais. Com grupos opcionais o motor de expressão regular
+   * reparte o número para fazer o resto casar: "45s" saía como 4 minutos e 5
+   * segundos, porque assim sobrava um dígito para o "s". Aqui cada número
+   * carrega a sua unidade, e número sem unidade é minuto — que é o que "83"
+   * quer dizer.
+   */
+  const pedacos = [...t.matchAll(/(\d+)(h|min|m|s)?/g)];
+  const sobra = t.replace(/(\d+)(h|min|m|s)?/g, "");
+  if (!pedacos.length || sobra) return null;
+
+  let segundos = 0;
+  for (const [, numero, unidade] of pedacos) {
+    const n = Number(numero);
+    if (unidade === "h") segundos += n * 3600;
+    else if (unidade === "s") segundos += n;
+    else segundos += n * 60;
+  }
+  return segundosEmMinutos(segundos);
+}
+
+const segundosEmMinutos = (s: number) =>
+  s > 0 ? Math.max(1, Math.round(s / 60)) : null;
+
+/**
+ * Segundos → o texto que vai no campo, no formato que ele mesmo entende.
+ *
+ * Devolve "1h23" ou "42min", que é o que `minutosDoTexto` lê de volta sem
+ * perder nada — o campo pode ser preenchido pelo link e editado à mão sem
+ * mudar de linguagem no meio.
+ */
+export const textoDaDuracao = (minutos: number | null) =>
+  duracaoCurta(minutos) ?? "";

@@ -334,6 +334,25 @@ export type Lesson = {
 };
 
 /**
+ * Canal para estudar.
+ *
+ * É fonte, não item de lista: não termina como um curso nem sai da tela como
+ * uma aula assistida. Fica guardado como o lugar onde procurar quando der
+ * vontade de estudar um assunto — e `notes` guarda justamente o motivo pelo
+ * qual ele foi salvo, senão em três meses a lista de fotos não diz mais nada.
+ */
+export type Channel = {
+  id: string;
+  user_id: string;
+  name: string;
+  url: string;
+  avatar_url: string | null;
+  subject_id: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+/**
  * Etiqueta de assunto.
  *
  * Sem cor: a etiqueta segue a cor do tema, como os hábitos.
