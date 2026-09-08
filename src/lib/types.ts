@@ -325,7 +325,9 @@ export type Lesson = {
   fonte: FonteAula;
   canal: string | null;
   thumb_url: string | null;
-  assunto: string | null;
+  /* Aponta para a etiqueta, não guarda o nome. Renomear o assunto é uma
+     linha em `subjects`, e não uma varredura em todas as aulas. */
+  subject_id: string | null;
   /** Duração total, quando conhecida. */
   minutos: number | null;
   /** Onde parou. Nulo é diferente de zero: "não anotei" não é "no começo". */
@@ -333,5 +335,35 @@ export type Lesson = {
   feita: boolean;
   /** Quando foi marcada — é por esta data que a limpeza dos 7 dias conta. */
   feita_em: string | null;
+  created_at: string;
+};
+
+/**
+ * Etiqueta de assunto.
+ *
+ * Sem cor: a etiqueta segue a cor do tema, como os hábitos.
+ */
+export type Subject = {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+};
+
+/**
+ * Curso, com os dois números que você digita.
+ *
+ * Não guarda a lista de aulas: cadastrar 40 linhas para acompanhar um curso
+ * seria mais trabalho que assistir a ele. O que interessa é "vou na 12 de 40".
+ */
+export type Course = {
+  id: string;
+  user_id: string;
+  title: string;
+  plataforma: string | null;
+  url: string | null;
+  subject_id: string | null;
+  total_aulas: number;
+  aulas_feitas: number;
   created_at: string;
 };

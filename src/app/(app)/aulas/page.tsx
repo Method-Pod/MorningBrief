@@ -5,15 +5,25 @@ import {
   Check,
   ExternalLink,
   GraduationCap,
+  Layers,
   Loader2,
+  Minus,
+  Pencil,
   Plus,
   Send,
+  Tag,
   Trash2,
   Youtube,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { FONTE_AULA_LABEL, type FonteAula, type Lesson } from "@/lib/types";
+import {
+  FONTE_AULA_LABEL,
+  type Course,
+  type FonteAula,
+  type Lesson,
+  type Subject,
+} from "@/lib/types";
 import { dataCurta } from "@/lib/format";
 import { DIAS_RETENCAO_AULAS } from "@/lib/limpeza";
 import {
@@ -25,6 +35,11 @@ import {
 } from "@/lib/aulas";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import {
+  CampoAssunto,
+  Etiqueta,
+  GerenciarAssuntos,
+} from "@/components/Assuntos";
+import {
   Badge,
   Button,
   Card,
@@ -33,7 +48,6 @@ import {
   Input,
   Modal,
   Segmented,
-  Textarea,
   cx,
   useConfirm,
   useNotice,
@@ -56,60 +70,83 @@ const ICONE: Record<FonteAula, typeof Youtube> = {
   outro: ExternalLink,
 };
 
-const vazio = () => ({
+const aulaVazia = () => ({
   url: "",
   title: "",
   canal: "",
-  assunto: "",
+  subject_id: "",
   minutos: "",
   thumb_url: "",
-  fonte: "outro" as FonteAula,
+});
+
+const cursoVazio = () => ({
+  title: "",
+  plataforma: "",
+  url: "",
+  subject_id: "",
+  total_aulas: "",
+  aulas_feitas: "",
 });
 
 export default function AulasPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = useEstadoCacheado<Lesson[]>("lessons", []);
-  const [loading, setLoading] = React.useState(() => !temCache("lessons"));
+  const [cursos, setCursos] = useEstadoCacheado<Course[]>("courses", []);
+  const [assuntos, setAssuntos] = useEstadoCacheado<Subject[]>("subjects", []);
+  const [loading, setLoading] = React.useState(
+    () => !temCache("lessons", "courses", "subjects")
+  );
   const [falta, setFalta] = React.useState("");
   const [aba, setAba] = React.useState<Aba>("fila");
-  const [assunto, setAssunto] = React.useState<"all" | string>("all");
+  const [filtro, setFiltro] = React.useState<"all" | string>("all");
   const [marcando, setMarcando] = React.useState<string | null>(null);
   const [minutoEmEdicao, setMinutoEmEdicao] = React.useState<
     Record<string, string>
   >({});
 
-  /* adicionar */
-  const [add, setAdd] = React.useState(false);
-  const [form, setForm] = React.useState(vazio());
+  /* modais */
+  const [addAula, setAddAula] = React.useState(false);
+  const [form, setForm] = React.useState(aulaVazia());
   const [buscando, setBuscando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
   const [erro, setErro] = React.useState("");
+
+  const [addCurso, setAddCurso] = React.useState(false);
+  const [editando, setEditando] = React.useState<Course | null>(null);
+  const [formCurso, setFormCurso] = React.useState(cursoVazio());
+  const [erroCurso, setErroCurso] = React.useState("");
+
+  const [gerindo, setGerindo] = React.useState(false);
 
   const confirm = useConfirm();
   const notice = useNotice();
 
   const load = React.useCallback(async () => {
-    const { data, error } = await supabase
-      .from("lessons")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const [l, c, a] = await Promise.all([
+      supabase.from("lessons").select("*").order("created_at", { ascending: false }),
+      supabase.from("courses").select("*").order("created_at", { ascending: false }),
+      supabase.from("subjects").select("*").order("name"),
+    ]);
 
-    /* Tabela que falta é recado que fica na tela, não aviso que passa — e usar
-       `notice` aqui obrigaria a entrar nas dependências e refazer a consulta a
-       cada render. */
-    if (error) {
+    /* Tabela que falta é recado que fica na tela, não aviso que passa. */
+    const problema = l.error ?? c.error ?? a.error;
+    if (problema) {
       setFalta(
-        /lessons/.test(error.message)
+        /lessons/.test(problema.message)
           ? "As aulas precisam de supabase/AULAS.sql no banco. Rode o arquivo e recarregue."
-          : error.message
+          : /courses|subjects/.test(problema.message)
+            ? "Cursos e etiquetas precisam de supabase/CURSOS-E-ASSUNTOS.sql no banco. Rode o arquivo e recarregue."
+            : problema.message
       );
       setLoading(false);
       return;
     }
     setFalta("");
-    setRows((data as Lesson[]) ?? []);
+    setRows((l.data as Lesson[]) ?? []);
+    setCursos((c.data as Course[]) ?? []);
+    setAssuntos((a.data as Subject[]) ?? []);
     setLoading(false);
-  }, [supabase, setRows]);
+  }, [supabase, setRows, setCursos, setAssuntos]);
 
   React.useEffect(() => {
     load();
@@ -121,15 +158,21 @@ export default function AulasPage() {
     [setRows]
   );
 
-  /* ------------------------------ adicionar ------------------------------ */
+  /** Nome da etiqueta por id, para a tela não procurar em lista a cada linha. */
+  const nomeDoAssunto = React.useMemo(() => {
+    const m = new Map<string, string>();
+    assuntos.forEach((a) => m.set(a.id, a.name));
+    return m;
+  }, [assuntos]);
+
+  /* ------------------------------ aulas ------------------------------ */
 
   /**
    * Ao colar o link, tenta preencher sozinho.
    *
    * Só o YouTube responde: ele tem oEmbed público, sem chave, e o navegador
    * chama direto. Telegram não tem equivalente — canal privado não expõe
-   * metadado — então lá o título fica para você digitar, e o campo já vem
-   * aberto em vez de esperar uma busca que nunca viria.
+   * metadado — então lá o título fica para você digitar.
    */
   const lerLink = async (url: string) => {
     const limpo = normalizarUrl(url);
@@ -139,7 +182,6 @@ export default function AulasPage() {
     setBuscando(false);
     setForm((f) => ({
       ...f,
-      fonte: d.fonte,
       /* Não sobrescreve o que você já digitou: se o título está preenchido, foi
          escolha sua, e a API não tem por que vencer. */
       title: f.title.trim() || d.title || "",
@@ -148,13 +190,13 @@ export default function AulasPage() {
     }));
   };
 
-  const fecharAdd = () => {
-    setAdd(false);
-    setForm(vazio());
+  const fecharAula = () => {
+    setAddAula(false);
+    setForm(aulaVazia());
     setErro("");
   };
 
-  const adicionar = async () => {
+  const adicionarAula = async () => {
     const title = form.title.trim();
     if (!title) return setErro("Dê um nome à aula.");
 
@@ -177,11 +219,11 @@ export default function AulasPage() {
       .insert({
         user_id: uid,
         title,
-        url: ou(form.url) && normalizarUrl(form.url),
+        url: form.url.trim() ? normalizarUrl(form.url) : null,
         fonte: form.url.trim() ? fonteDoLink(form.url) : "outro",
         canal: ou(form.canal),
         thumb_url: ou(form.thumb_url),
-        assunto: ou(form.assunto),
+        subject_id: form.subject_id || null,
         minutos,
         feita: false,
       })
@@ -190,34 +232,26 @@ export default function AulasPage() {
     setSalvando(false);
 
     if (error) {
-      if (/lessons/.test(error.message))
+      if (/subject_id/.test(error.message))
         return setErro(
-          "As aulas precisam de supabase/AULAS.sql no banco. Rode o arquivo."
+          "Etiquetas precisam de supabase/CURSOS-E-ASSUNTOS.sql no banco. Rode o arquivo."
         );
       return setErro(error.message);
     }
     if (data) setRows((v) => [data as Lesson, ...v]);
     setAba("fila");
-    fecharAdd();
+    fecharAula();
   };
-
-  /* ------------------------------ progresso ------------------------------ */
 
   /** Marca ou desmarca. Desmarcar limpa a data, senão a limpeza contaria dela. */
   const alternar = async (l: Lesson) => {
     const feita = !l.feita;
-    const mudanca = {
-      feita,
-      feita_em: feita ? new Date().toISOString() : null,
-    };
+    const mudanca = { feita, feita_em: feita ? new Date().toISOString() : null };
     setMarcando(l.id);
     /* Otimista: marcar aula é o gesto do dia, e esperar a ida de rede a cada
        clique tornaria a lista mais lenta que o hábito que ela acompanha. */
     patch(l.id, mudanca);
-    const { error } = await supabase
-      .from("lessons")
-      .update(mudanca)
-      .eq("id", l.id);
+    const { error } = await supabase.from("lessons").update(mudanca).eq("id", l.id);
     setMarcando(null);
     if (notice.check(error, "marcar a aula")) load();
   };
@@ -238,11 +272,127 @@ export default function AulasPage() {
       patch(l.id, { em_minuto: Math.round(n) });
   };
 
-  const remover = (l: Lesson) =>
+  const removerAula = (l: Lesson) =>
     confirm.ask(`Tirar "${l.title}" da lista?`, async () => {
       const { error } = await supabase.from("lessons").delete().eq("id", l.id);
       if (notice.check(error, "tirar a aula")) return;
       setRows((v) => v.filter((x) => x.id !== l.id));
+    });
+
+  /* ------------------------------ cursos ------------------------------ */
+
+  const abrirCurso = (c?: Course) => {
+    setEditando(c ?? null);
+    setFormCurso(
+      c
+        ? {
+            title: c.title,
+            plataforma: c.plataforma ?? "",
+            url: c.url ?? "",
+            subject_id: c.subject_id ?? "",
+            total_aulas: String(c.total_aulas),
+            aulas_feitas: String(c.aulas_feitas),
+          }
+        : cursoVazio()
+    );
+    setErroCurso("");
+    setAddCurso(true);
+  };
+
+  const salvarCurso = async () => {
+    const title = formCurso.title.trim();
+    if (!title) return setErroCurso("Dê um nome ao curso.");
+
+    const total = Number(formCurso.total_aulas.trim());
+    if (!Number.isFinite(total) || total <= 0)
+      return setErroCurso("Quantas aulas o curso tem? Precisa ser um número maior que zero.");
+
+    const feitasCru = formCurso.aulas_feitas.trim();
+    const feitas = feitasCru ? Number(feitasCru) : 0;
+    if (!Number.isFinite(feitas) || feitas < 0)
+      return setErroCurso("Aulas concluídas não pode ser negativo.");
+    /* O banco recusaria pelo check, mas o erro chegaria em inglês e sem dizer
+       o que fazer. Aqui a mensagem já traz os dois números. */
+    if (feitas > total)
+      return setErroCurso(
+        `Você marcou ${feitas} concluídas num curso de ${total} aulas.`
+      );
+
+    setErroCurso("");
+    setSalvando(true);
+    const ou = (v: string) => v.trim() || null;
+    const dados = {
+      title,
+      plataforma: ou(formCurso.plataforma),
+      url: formCurso.url.trim() ? normalizarUrl(formCurso.url) : null,
+      subject_id: formCurso.subject_id || null,
+      total_aulas: Math.round(total),
+      aulas_feitas: Math.round(feitas),
+    };
+
+    if (editando) {
+      const { data, error } = await supabase
+        .from("courses")
+        .update(dados)
+        .eq("id", editando.id)
+        .select("*")
+        .single();
+      setSalvando(false);
+      if (error) return setErroCurso(error.message);
+      if (data)
+        setCursos((v) =>
+          v.map((c) => (c.id === editando.id ? (data as Course) : c))
+        );
+    } else {
+      const uid = await currentUserId(supabase);
+      if (!uid) {
+        setSalvando(false);
+        return notice.show(SESSION_EXPIRED);
+      }
+      const { data, error } = await supabase
+        .from("courses")
+        .insert({ ...dados, user_id: uid })
+        .select("*")
+        .single();
+      setSalvando(false);
+      if (error) {
+        if (/courses/.test(error.message))
+          return setErroCurso(
+            "Cursos precisam de supabase/CURSOS-E-ASSUNTOS.sql no banco. Rode o arquivo."
+          );
+        return setErroCurso(error.message);
+      }
+      if (data) setCursos((v) => [data as Course, ...v]);
+    }
+    setAddCurso(false);
+    setEditando(null);
+  };
+
+  /**
+   * Uma aula a mais ou a menos no curso.
+   *
+   * O passo é o gesto diário — terminou uma aula, aperta o mais. Trava nos
+   * limites em vez de deixar o banco recusar: o check do banco devolveria um
+   * erro por um clique que só precisava não acontecer.
+   */
+  const passo = async (c: Course, delta: number) => {
+    const feitas = Math.min(c.total_aulas, Math.max(0, c.aulas_feitas + delta));
+    if (feitas === c.aulas_feitas) return;
+    setCursos((v) =>
+      v.map((x) => (x.id === c.id ? { ...x, aulas_feitas: feitas } : x))
+    );
+    const { error } = await supabase
+      .from("courses")
+      .update({ aulas_feitas: feitas })
+      .eq("id", c.id);
+    if (notice.check(error, "atualizar o curso")) load();
+  };
+
+  const removerCurso = (c: Course) =>
+    confirm.ask(`Tirar o curso "${c.title}"?`, async () => {
+      const { error } = await supabase.from("courses").delete().eq("id", c.id);
+      if (notice.check(error, "tirar o curso")) return;
+      setCursos((v) => v.filter((x) => x.id !== c.id));
     });
 
   /* ------------------------------ derivados ------------------------------ */
@@ -252,38 +402,48 @@ export default function AulasPage() {
       ? rows.length
       : rows.filter((l) => (a === "feitas" ? l.feita : !l.feita)).length;
 
-  /** Os assuntos que existem, com quanto cada um tem na fila. */
-  const assuntos = React.useMemo(() => {
-    const m = new Map<string, { nome: string; naFila: number }>();
-    rows.forEach((l) => {
-      const chave = l.assunto || SEM_ASSUNTO;
-      const g = m.get(chave) ?? {
-        nome: l.assunto || "Sem assunto",
-        naFila: 0,
-      };
-      if (!l.feita) g.naFila++;
-      m.set(chave, g);
+  /** Quantas aulas e cursos usam cada etiqueta — o gerenciador avisa antes de apagar. */
+  const usosDoAssunto = React.useMemo(() => {
+    const c: Record<string, number> = {};
+    [...rows, ...cursos].forEach((x) => {
+      if (x.subject_id) c[x.subject_id] = (c[x.subject_id] ?? 0) + 1;
     });
-    return [...m.entries()]
-      .map(([chave, g]) => ({ chave, ...g }))
-      .sort((a, b) => {
-        /* "Sem assunto" por último: é o balaio, não um assunto. */
-        if ((a.chave === SEM_ASSUNTO) !== (b.chave === SEM_ASSUNTO))
-          return a.chave === SEM_ASSUNTO ? 1 : -1;
-        if (a.naFila !== b.naFila) return b.naFila - a.naFila;
-        return a.nome.localeCompare(b.nome, "pt-BR");
-      });
-  }, [rows]);
+    return c;
+  }, [rows, cursos]);
+
+  /** Etiquetas que aparecem como filtro: as em uso, mais "sem assunto" se houver. */
+  const filtros = React.useMemo(() => {
+    const usadas = assuntos.filter((a) => usosDoAssunto[a.id]);
+    const temSem = rows.some((l) => !l.subject_id);
+    return [
+      ...usadas.map((a) => ({ chave: a.id, nome: a.name })),
+      ...(temSem ? [{ chave: SEM_ASSUNTO, nome: "Sem assunto" }] : []),
+    ];
+  }, [assuntos, usosDoAssunto, rows]);
 
   const lista = React.useMemo(
     () =>
       rows
-        .filter((l) => (aba === "todas" ? true : aba === "feitas" ? l.feita : !l.feita))
+        .filter((l) =>
+          aba === "todas" ? true : aba === "feitas" ? l.feita : !l.feita
+        )
         .filter(
-          (l) => assunto === "all" || (l.assunto || SEM_ASSUNTO) === assunto
+          (l) =>
+            filtro === "all" || (l.subject_id || SEM_ASSUNTO) === filtro
         ),
-    [rows, aba, assunto]
+    [rows, aba, filtro]
   );
+
+  const emAndamento = cursos.filter((c) => c.aulas_feitas < c.total_aulas);
+  const concluidos = cursos.length - emAndamento.length;
+
+  const pilula = (ativa: boolean) =>
+    cx(
+      "h-8 shrink-0 rounded-full px-3 text-[11.5px] font-medium transition-colors",
+      ativa
+        ? "bg-brand-500 text-on-brand"
+        : "bg-ink-800 text-fg-mute hover:text-fg-dim"
+    );
 
   return (
     <div className="space-y-5 rise">
@@ -293,12 +453,37 @@ export default function AulasPage() {
           <p className="mt-1 text-sm text-fg-mute">
             {contagem("fila")} para assistir · {contagem("feitas")} assistida
             {contagem("feitas") === 1 ? "" : "s"}
+            {cursos.length > 0 && (
+              <>
+                {" "}
+                · {emAndamento.length} curso
+                {emAndamento.length === 1 ? "" : "s"} em andamento
+              </>
+            )}
           </p>
         </div>
-        <Button variant="primary" onClick={() => setAdd(true)}>
-          <Plus size={15} />
-          Adicionar aula
-        </Button>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Button
+            onClick={() => setGerindo(true)}
+            className="shrink-0"
+            title="Gerenciar etiquetas"
+          >
+            <Tag size={15} />
+            <span className="hidden sm:inline">Etiquetas</span>
+          </Button>
+          <Button onClick={() => abrirCurso()} className="min-w-0 flex-1 sm:flex-none">
+            <Layers size={15} className="shrink-0" />
+            <span className="truncate">Curso</span>
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => setAddAula(true)}
+            className="min-w-0 flex-1 sm:flex-none"
+          >
+            <Plus size={15} className="shrink-0" />
+            <span className="truncate">Aula</span>
+          </Button>
+        </div>
       </div>
 
       {falta && (
@@ -307,246 +492,352 @@ export default function AulasPage() {
         </Card>
       )}
 
-      <p className="flex items-center gap-1.5 text-[11px] text-fg-mute sm:text-[12px]">
-        <Check size={12} className="shrink-0" />
-        Assistidas saem da lista {DIAS_RETENCAO_AULAS} dias depois.
-      </p>
-
-      <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-        <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-0.5">
-          <Segmented
-            value={aba}
-            onChange={setAba}
-            options={ABAS.map((a) => ({
-              value: a.valor,
-              label: a.rotulo,
-              count: contagem(a.valor),
-            }))}
-          />
-        </div>
-
-        {/* Etiquetas de assunto. Só aparecem com mais de um: com um assunto só,
-            o filtro seria um botão que não filtra nada. */}
-        {assuntos.length > 1 && (
-          <div className="-mx-1 flex max-w-full gap-1.5 overflow-x-auto px-1 pb-0.5">
-            <button
-              type="button"
-              onClick={() => setAssunto("all")}
-              className={cx(
-                "h-8 shrink-0 rounded-full px-3 text-[11.5px] font-medium transition-colors",
-                assunto === "all"
-                  ? "bg-brand-500 text-on-brand"
-                  : "bg-ink-800 text-fg-mute hover:text-fg-dim"
-              )}
-            >
-              Todos
-            </button>
-            {assuntos.map((a) => (
-              <button
-                key={a.chave}
-                type="button"
-                onClick={() => setAssunto(a.chave)}
-                className={cx(
-                  "h-8 shrink-0 rounded-full px-3 text-[11.5px] font-medium transition-colors",
-                  assunto === a.chave
-                    ? "bg-brand-500 text-on-brand"
-                    : "bg-ink-800 text-fg-mute hover:text-fg-dim"
-                )}
-              >
-                {a.nome}
-                {a.naFila > 0 && (
-                  <span className="ml-1.5 opacity-60 tnum">{a.naFila}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {loading ? null : lista.length === 0 ? (
-        <Card>
-          <Empty
-            icon={<GraduationCap size={18} />}
-            title={rows.length ? "Nada aqui" : "Nenhuma aula ainda"}
-            sub="Cole o link do YouTube e o título, o canal e a capa vêm junto. Do Telegram, é só dar um nome."
-            action={
-              <Button variant="primary" size="sm" onClick={() => setAdd(true)}>
-                <Plus size={14} />
-                Adicionar aula
-              </Button>
-            }
-          />
-        </Card>
-      ) : (
-        <Card className="overflow-hidden">
-          <ul className="divide-y divide-line-soft">
-            {lista.map((l, i) => {
-              const Icone = ICONE[l.fonte];
-              const pct = pctAssistido(l);
+      {/* ------------------------------ cursos ------------------------------ */}
+      {/*
+        Curso é recipiente, não item de lista: fica numa faixa própria acima,
+        como o "continuar lendo" da estante. A aula solta embaixo é o que se
+        consome no dia; o curso é o que se acompanha ao longo de semanas.
+      */}
+      {cursos.length > 0 && (
+        <div className="space-y-2.5">
+          <h2 className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
+            Cursos
+            {concluidos > 0 && (
+              <span className="ml-1.5 normal-case text-fg-mute/70">
+                · {concluidos} concluído{concluidos === 1 ? "" : "s"}
+              </span>
+            )}
+          </h2>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {cursos.map((c, i) => {
+              const pct = Math.round((c.aulas_feitas / c.total_aulas) * 100);
+              const pronto = c.aulas_feitas >= c.total_aulas;
               return (
-                <li
-                  key={l.id}
-                  className="entra group flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-ink-800/40 sm:px-5"
+                <Card
+                  key={c.id}
+                  className="entra group p-3.5"
                   style={{ "--i": i } as React.CSSProperties}
                 >
-                  {/* A caixinha é o gesto principal, então vem primeiro e é
-                      grande o suficiente para o dedo. */}
-                  <button
-                    type="button"
-                    onClick={() => alternar(l)}
-                    disabled={marcando === l.id}
-                    aria-label={`${l.feita ? "Desmarcar" : "Marcar"} ${l.title}`}
-                    aria-pressed={l.feita}
-                    className={cx(
-                      "mt-0.5 grid h-[19px] w-[19px] shrink-0 place-items-center rounded-[6px] border transition-[background-color,border-color] duration-[180ms] disabled:opacity-50",
-                      l.feita
-                        ? "border-pos bg-pos text-white"
-                        : "border-line bg-white hover:border-brand-400"
-                    )}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p
+                        className={cx(
+                          "text-[13px] font-semibold leading-snug",
+                          pronto && "text-fg-mute"
+                        )}
+                      >
+                        {c.title}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {c.plataforma && (
+                          <span className="text-[10.5px] text-fg-mute">
+                            {c.plataforma}
+                          </span>
+                        )}
+                        <Etiqueta nome={nomeDoAssunto.get(c.subject_id ?? "")} />
+                        {pronto && <Badge tone="pos">concluído</Badge>}
+                        {c.url && (
+                          <a
+                            href={c.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10.5px] text-brand-400 hover:underline"
+                          >
+                            <ExternalLink size={10} />
+                            abrir
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                      <button
+                        type="button"
+                        onClick={() => abrirCurso(c)}
+                        aria-label={`Editar ${c.title}`}
+                        className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-ink-750 hover:text-fg"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removerCurso(c)}
+                        aria-label={`Tirar ${c.title}`}
+                        className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 flex items-center gap-2.5">
+                    <span className="text-[11px] font-bold text-brand-400 tnum">
+                      {pct}%
+                    </span>
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-ink-800">
+                      <span
+                        className={cx(
+                          "block h-full w-full origin-left rounded-full transition-transform duration-[300ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]",
+                          pronto ? "bg-pos" : "bg-brand-500"
+                        )}
+                        style={{ transform: `scaleX(${pct / 100})` }}
+                      />
+                    </span>
+                    <span className="shrink-0 text-[10.5px] text-fg-mute tnum">
+                      {c.aulas_feitas}/{c.total_aulas} aulas
+                    </span>
+                    {/* O passo é o gesto diário: terminou uma aula, aperta o
+                        mais. Trava nos limites em vez de deixar o banco
+                        recusar um clique que só precisava não acontecer. */}
+                    <span className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => passo(c, -1)}
+                        disabled={c.aulas_feitas === 0}
+                        aria-label={`Uma aula a menos em ${c.title}`}
+                        className="grid h-7 w-7 place-items-center rounded-lg bg-ink-800 text-fg-dim transition-colors hover:bg-ink-750 disabled:opacity-35"
+                      >
+                        <Minus size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => passo(c, 1)}
+                        disabled={pronto}
+                        aria-label={`Uma aula a mais em ${c.title}`}
+                        className="grid h-7 w-7 place-items-center rounded-lg bg-brand-500 text-on-brand transition-colors hover:bg-brand-600 disabled:opacity-35"
+                      >
+                        <Plus size={13} />
+                      </button>
+                    </span>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------ aulas ------------------------------ */}
+      <div className="space-y-3">
+        <p className="flex items-center gap-1.5 text-[11px] text-fg-mute sm:text-[12px]">
+          <Check size={12} className="shrink-0" />
+          Aulas assistidas saem da lista {DIAS_RETENCAO_AULAS} dias depois.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-0.5">
+            <Segmented
+              value={aba}
+              onChange={setAba}
+              options={ABAS.map((a) => ({
+                value: a.valor,
+                label: a.rotulo,
+                count: contagem(a.valor),
+              }))}
+            />
+          </div>
+
+          {/* Filtro só com mais de uma etiqueta em uso: com uma só, seria um
+              botão que não filtra nada. */}
+          {filtros.length > 1 && (
+            <div className="-mx-1 flex max-w-full gap-1.5 overflow-x-auto px-1 pb-0.5">
+              <button
+                type="button"
+                onClick={() => setFiltro("all")}
+                className={pilula(filtro === "all")}
+              >
+                Todos
+              </button>
+              {filtros.map((f) => (
+                <button
+                  key={f.chave}
+                  type="button"
+                  onClick={() => setFiltro(f.chave)}
+                  className={pilula(filtro === f.chave)}
+                >
+                  {f.nome}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {loading ? null : lista.length === 0 ? (
+          <Card>
+            <Empty
+              icon={<GraduationCap size={18} />}
+              title={rows.length ? "Nada aqui" : "Nenhuma aula ainda"}
+              sub="Cole o link do YouTube e o título, o canal e a capa vêm junto. Do Telegram, é só dar um nome."
+              action={
+                <Button variant="primary" size="sm" onClick={() => setAddAula(true)}>
+                  <Plus size={14} />
+                  Adicionar aula
+                </Button>
+              }
+            />
+          </Card>
+        ) : (
+          <Card className="overflow-hidden">
+            <ul className="divide-y divide-line-soft">
+              {lista.map((l, i) => {
+                const Icone = ICONE[l.fonte];
+                const pct = pctAssistido(l);
+                return (
+                  <li
+                    key={l.id}
+                    className="entra group flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-ink-800/40 sm:px-5"
+                    style={{ "--i": i } as React.CSSProperties}
                   >
-                    <Check
-                      size={12}
-                      strokeWidth={3.5}
+                    <button
+                      type="button"
+                      onClick={() => alternar(l)}
+                      disabled={marcando === l.id}
+                      aria-label={`${l.feita ? "Desmarcar" : "Marcar"} ${l.title}`}
+                      aria-pressed={l.feita}
                       className={cx(
-                        "transition-[transform,opacity] duration-[180ms] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
-                        l.feita ? "scale-100 opacity-100" : "scale-50 opacity-0"
-                      )}
-                    />
-                  </button>
-
-                  {/* Miniatura do YouTube em 16:9, que é a proporção dela. */}
-                  {l.thumb_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={l.thumb_url}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="hidden aspect-video w-[88px] shrink-0 rounded-lg bg-ink-800 object-cover sm:block"
-                    />
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className={cx(
-                        "text-[13px] font-semibold leading-snug",
-                        l.feita && "text-fg-mute line-through"
+                        "mt-0.5 grid h-[19px] w-[19px] shrink-0 place-items-center rounded-[6px] border transition-[background-color,border-color] duration-[180ms] disabled:opacity-50",
+                        l.feita
+                          ? "border-pos bg-pos text-white"
+                          : "border-line bg-white hover:border-brand-400"
                       )}
                     >
-                      {l.title}
-                    </p>
+                      <Check
+                        size={12}
+                        strokeWidth={3.5}
+                        className={cx(
+                          "transition-[transform,opacity] duration-[180ms] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
+                          l.feita ? "scale-100 opacity-100" : "scale-50 opacity-0"
+                        )}
+                      />
+                    </button>
 
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="inline-flex items-center gap-1 text-[10.5px] text-fg-mute">
-                        <Icone size={11} className="shrink-0" />
-                        {l.canal || FONTE_AULA_LABEL[l.fonte]}
-                      </span>
-                      {l.assunto && (
-                        <Badge tone="brand">{l.assunto}</Badge>
-                      )}
-                      {duracaoCurta(l.minutos) && (
-                        <span className="text-[10.5px] text-fg-mute tnum">
-                          {duracaoCurta(l.minutos)}
+                    {l.thumb_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={l.thumb_url}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="hidden aspect-video w-[88px] shrink-0 rounded-lg bg-ink-800 object-cover sm:block"
+                      />
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={cx(
+                          "text-[13px] font-semibold leading-snug",
+                          l.feita && "text-fg-mute line-through"
+                        )}
+                      >
+                        {l.title}
+                      </p>
+
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="inline-flex items-center gap-1 text-[10.5px] text-fg-mute">
+                          <Icone size={11} className="shrink-0" />
+                          {l.canal || FONTE_AULA_LABEL[l.fonte]}
                         </span>
-                      )}
-                      {l.url && (
-                        <a
-                          href={l.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[10.5px] text-brand-400 hover:underline"
-                        >
-                          <ExternalLink size={10} />
-                          abrir
-                        </a>
-                      )}
-                      {l.feita && l.feita_em && (
-                        <span className="text-[10.5px] text-pos">
-                          visto {dataCurta(l.feita_em.slice(0, 10))}
-                        </span>
+                        <Etiqueta nome={nomeDoAssunto.get(l.subject_id ?? "")} />
+                        {duracaoCurta(l.minutos) && (
+                          <span className="text-[10.5px] text-fg-mute tnum">
+                            {duracaoCurta(l.minutos)}
+                          </span>
+                        )}
+                        {l.url && (
+                          <a
+                            href={l.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10.5px] text-brand-400 hover:underline"
+                          >
+                            <ExternalLink size={10} />
+                            abrir
+                          </a>
+                        )}
+                        {l.feita && l.feita_em && (
+                          <span className="text-[10.5px] text-pos">
+                            visto {dataCurta(l.feita_em.slice(0, 10))}
+                          </span>
+                        )}
+                      </div>
+
+                      {!l.feita && l.minutos && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          {pct !== null && (
+                            <>
+                              <span className="h-1 min-w-[48px] flex-1 overflow-hidden rounded-full bg-ink-800">
+                                <span
+                                  className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
+                                  style={{ transform: `scaleX(${pct / 100})` }}
+                                />
+                              </span>
+                              <span className="text-[10px] font-bold text-fg-mute tnum">
+                                {l.em_minuto}/{l.minutos}min
+                              </span>
+                            </>
+                          )}
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-[62px]">
+                              <Input
+                                type="number"
+                                min={0}
+                                max={l.minutos}
+                                value={minutoEmEdicao[l.id] ?? ""}
+                                onChange={(e) =>
+                                  setMinutoEmEdicao((r) => ({
+                                    ...r,
+                                    [l.id]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    gravarMinuto(l);
+                                  }
+                                }}
+                                placeholder="min"
+                                aria-label={`Minuto atual de ${l.title}`}
+                                className="h-7 text-center text-[11px]"
+                              />
+                            </span>
+                            <Button
+                              size="sm"
+                              onClick={() => gravarMinuto(l)}
+                              disabled={!(minutoEmEdicao[l.id] ?? "").trim()}
+                            >
+                              Parei aqui
+                            </Button>
+                          </span>
+                        </div>
                       )}
                     </div>
 
-                    {/* Onde parou: só para aula não assistida e com duração. Numa
-                        aula já vista o número não muda nada, e sem duração não
-                        há barra que faça sentido. */}
-                    {!l.feita && l.minutos && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        {pct !== null && (
-                          <>
-                            <span className="h-1 min-w-[48px] flex-1 overflow-hidden rounded-full bg-ink-800">
-                              <span
-                                className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
-                                style={{ transform: `scaleX(${pct / 100})` }}
-                              />
-                            </span>
-                            <span className="text-[10px] font-bold text-fg-mute tnum">
-                              {l.em_minuto}/{l.minutos}min
-                            </span>
-                          </>
-                        )}
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-[62px]">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={l.minutos}
-                              value={minutoEmEdicao[l.id] ?? ""}
-                              onChange={(e) =>
-                                setMinutoEmEdicao((r) => ({
-                                  ...r,
-                                  [l.id]: e.target.value,
-                                }))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  gravarMinuto(l);
-                                }
-                              }}
-                              placeholder="min"
-                              aria-label={`Minuto atual de ${l.title}`}
-                              className="h-7 text-center text-[11px]"
-                            />
-                          </span>
-                          <Button
-                            size="sm"
-                            onClick={() => gravarMinuto(l)}
-                            disabled={!(minutoEmEdicao[l.id] ?? "").trim()}
-                          >
-                            Parei aqui
-                          </Button>
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                    <button
+                      type="button"
+                      onClick={() => removerAula(l)}
+                      aria-label={`Tirar ${l.title} da lista`}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+        )}
+      </div>
 
-                  <button
-                    type="button"
-                    onClick={() => remover(l)}
-                    aria-label={`Tirar ${l.title} da lista`}
-                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
-      )}
-
-      {/* ------------------------------ adicionar ------------------------------ */}
+      {/* ------------------------------ nova aula ------------------------------ */}
       <Modal
-        open={add}
-        onClose={fecharAdd}
+        open={addAula}
+        onClose={fecharAula}
         title="Adicionar aula"
         sub="Cole o link. Do YouTube vem título, canal e capa."
         size="lg"
         footer={
           <>
-            <Button onClick={fecharAdd}>Cancelar</Button>
-            <Button variant="primary" onClick={adicionar} disabled={salvando}>
+            <Button onClick={fecharAula}>Cancelar</Button>
+            <Button variant="primary" onClick={adicionarAula} disabled={salvando}>
               {salvando ? "Salvando..." : "Adicionar"}
             </Button>
           </>
@@ -609,30 +900,13 @@ export default function AulasPage() {
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_110px]">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_110px]">
             <Field label="Canal / autor">
               <Input
                 value={form.canal}
                 onChange={(e) => setForm({ ...form, canal: e.target.value })}
                 placeholder="Opcional"
               />
-            </Field>
-            <Field label="Assunto" hint="Vira etiqueta de filtro.">
-              <Input
-                value={form.assunto}
-                onChange={(e) => setForm({ ...form, assunto: e.target.value })}
-                placeholder="edição, marketing..."
-                list="assuntos-usados"
-              />
-              {/* Sugere o que você já usou, para não virar "edicao", "Edição" e
-                  "edição" como três etiquetas diferentes. */}
-              <datalist id="assuntos-usados">
-                {assuntos
-                  .filter((a) => a.chave !== SEM_ASSUNTO)
-                  .map((a) => (
-                    <option key={a.chave} value={a.nome} />
-                  ))}
-              </datalist>
             </Field>
             <Field label="Duração" hint="min">
               <Input
@@ -644,8 +918,129 @@ export default function AulasPage() {
               />
             </Field>
           </div>
+
+          <Field label="Assunto" hint="Escolha uma etiqueta, ou crie no botão ao lado.">
+            <CampoAssunto
+              valor={form.subject_id}
+              onValor={(v) => setForm({ ...form, subject_id: v })}
+              assuntos={assuntos}
+              onGerenciar={() => setGerindo(true)}
+            />
+          </Field>
         </div>
       </Modal>
+
+      {/* ------------------------------ curso ------------------------------ */}
+      <Modal
+        open={addCurso}
+        onClose={() => {
+          setAddCurso(false);
+          setEditando(null);
+        }}
+        title={editando ? "Editar curso" : "Adicionar curso"}
+        sub="Quantas aulas tem, e quantas você já fez."
+        size="lg"
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                setAddCurso(false);
+                setEditando(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button variant="primary" onClick={salvarCurso} disabled={salvando}>
+              {salvando ? "Salvando..." : "Salvar"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {erroCurso && (
+            <p className="rounded-[14px] bg-neg/10 px-3.5 py-3 text-xs text-neg">
+              {erroCurso}
+            </p>
+          )}
+
+          <Field label="Nome do curso">
+            <Input
+              autoFocus
+              value={formCurso.title}
+              onChange={(e) =>
+                setFormCurso({ ...formCurso, title: e.target.value })
+              }
+              placeholder="Edição avançada no Premiere"
+            />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Plataforma">
+              <Input
+                value={formCurso.plataforma}
+                onChange={(e) =>
+                  setFormCurso({ ...formCurso, plataforma: e.target.value })
+                }
+                placeholder="Udemy, Hotmart, YouTube..."
+              />
+            </Field>
+            <Field label="Link">
+              <Input
+                type="url"
+                inputMode="url"
+                value={formCurso.url}
+                onChange={(e) =>
+                  setFormCurso({ ...formCurso, url: e.target.value })
+                }
+                placeholder="Opcional"
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Total de aulas">
+              <Input
+                type="number"
+                min={1}
+                value={formCurso.total_aulas}
+                onChange={(e) =>
+                  setFormCurso({ ...formCurso, total_aulas: e.target.value })
+                }
+                placeholder="40"
+              />
+            </Field>
+            <Field label="Aulas concluídas" hint="Deixe vazio para começar em zero.">
+              <Input
+                type="number"
+                min={0}
+                value={formCurso.aulas_feitas}
+                onChange={(e) =>
+                  setFormCurso({ ...formCurso, aulas_feitas: e.target.value })
+                }
+                placeholder="0"
+              />
+            </Field>
+          </div>
+
+          <Field label="Assunto">
+            <CampoAssunto
+              valor={formCurso.subject_id}
+              onValor={(v) => setFormCurso({ ...formCurso, subject_id: v })}
+              assuntos={assuntos}
+              onGerenciar={() => setGerindo(true)}
+            />
+          </Field>
+        </div>
+      </Modal>
+
+      <GerenciarAssuntos
+        aberto={gerindo}
+        onFechar={() => setGerindo(false)}
+        supabase={supabase}
+        assuntos={assuntos}
+        usos={usosDoAssunto}
+        onMudou={load}
+      />
 
       {confirm.node}
       {notice.node}
