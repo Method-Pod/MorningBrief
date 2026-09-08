@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Pencil, Pin, PinOff, Plus, Search, StickyNote, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NOTE_COLORS, type Note } from "@/lib/types";
 import { dateTimeBR } from "@/lib/format";
@@ -32,8 +33,11 @@ const blank = () => ({ title: "", content: "", color: "blue", pinned: false });
 
 export default function AnotacoesPage() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [rows, setRows] = React.useState<Note[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = useEstadoCacheado<Note[]>("notes", []);
+  /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
+  const [loading, setLoading] = React.useState(
+    () => !temCache("notes")
+  );
   const [q, setQ] = React.useState("");
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Note | null>(null);

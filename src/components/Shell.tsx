@@ -17,6 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { limparCache } from "@/lib/cachePagina";
 import { ACCENTS, useAccent } from "./accent";
 import { Iniciais, useAvatar } from "./Avatar";
 import { IdentityProvider } from "./identity";
@@ -170,6 +171,10 @@ export function Shell({
 
   const signOut = async () => {
     await createClient().auth.signOut();
+    /* A memória que acelera a troca de aba é por aba do navegador e não sabe de
+       quem é. Sem limpar, os dados de quem saiu apareceriam por um instante
+       para quem entrasse depois na mesma aba. */
+    limparCache();
     router.replace("/login");
     router.refresh();
   };

@@ -19,6 +19,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import {
   limparPagasDeMesesAnteriores,
   MESES_RETENCAO_PAGAS,
@@ -119,8 +120,11 @@ const vazio = () => ({
 
 export default function ContasPage() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [rows, setRows] = React.useState<Bill[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = useEstadoCacheado<Bill[]>("bills", []);
+  /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
+  const [loading, setLoading] = React.useState(
+    () => !temCache("bills")
+  );
   const [filtro, setFiltro] = React.useState<Filtro>("todas");
   const [ordem, setOrdem] = React.useState<Ordem>("vencimento");
   const [q, setQ] = React.useState("");

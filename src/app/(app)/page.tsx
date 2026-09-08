@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Clima } from "@/components/Clima";
 import { createClient } from "@/lib/supabase/client";
+import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import type { Bill, CalendarEvent, Note, RecurringTask, Task } from "@/lib/types";
 import { STATUS_LABEL, type TaskStatus } from "@/lib/types";
@@ -62,12 +63,21 @@ const NOTE_HEX: Record<string, string> = {
 
 export default function HomePage() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [loading, setLoading] = React.useState(true);
-  const [bills, setBills] = React.useState<Bill[]>([]);
-  const [tasks, setTasks] = React.useState<Task[]>([]);
-  const [recurring, setRecurring] = React.useState<RecurringTask[]>([]);
-  const [events, setEvents] = React.useState<CalendarEvent[]>([]);
-  const [notes, setNotes] = React.useState<Note[]>([]);
+  /*
+   * Já visitou nesta sessão? Abre com o brief de antes e atualiza atrás.
+   *
+   * Aqui pesa mais que nas outras: é a aba de abertura e a que se volta entre
+   * uma coisa e outra, e era a que ficava mais tempo em branco — são cinco
+   * consultas antes de a primeira linha aparecer.
+   */
+  const [loading, setLoading] = React.useState(
+    () => !temCache("bills", "tasks", "recurring_tasks", "events", "notes")
+  );
+  const [bills, setBills] = useEstadoCacheado<Bill[]>("bills", []);
+  const [tasks, setTasks] = useEstadoCacheado<Task[]>("tasks", []);
+  const [recurring, setRecurring] = useEstadoCacheado<RecurringTask[]>("recurring_tasks", []);
+  const [events, setEvents] = useEstadoCacheado<CalendarEvent[]>("events", []);
+  const [notes, setNotes] = useEstadoCacheado<Note[]>("notes", []);
   const [generated, setGenerated] = React.useState(0);
   const [limpas, setLimpas] = React.useState(0);
   const [draft, setDraft] = React.useState("");

@@ -22,6 +22,7 @@ import {
 } from "@/lib/types";
 import { dataCurta, todayISO, ultimosDias } from "@/lib/format";
 import { type LivroAchado } from "@/lib/livros";
+import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import {
   Badge,
   Button,
@@ -124,16 +125,22 @@ const manualVazio = () => ({
 
 export default function LeituraPage() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [livros, setLivros] = React.useState<BookLista[]>([]);
-  const [sessoes, setSessoes] = React.useState<ReadingSession[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [livros, setLivros] = useEstadoCacheado<BookLista[]>("books", []);
+  const [sessoes, setSessoes] = useEstadoCacheado<ReadingSession[]>(
+    "reading_sessions",
+    []
+  );
+  /* Já visitou nesta sessão? Então abre com a estante e atualiza atrás. */
+  const [loading, setLoading] = React.useState(
+    () => !temCache("books", "reading_sessions")
+  );
   const [falta, setFalta] = React.useState("");
   const [prateleira, setPrateleira] = React.useState<Filtro>("reading");
   const [busca, setBusca] = React.useState("");
   const [ordem, setOrdem] = React.useState<Ordem>("recentes");
 
   /* meta do ano */
-  const [meta, setMeta] = React.useState<number | null>(null);
+  const [meta, setMeta] = useEstadoCacheado<number | null>("meta_leitura", null);
   const [metaEmEdicao, setMetaEmEdicao] = React.useState("");
   const [editandoMeta, setEditandoMeta] = React.useState(false);
 

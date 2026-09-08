@@ -14,6 +14,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { limparEventosPassados } from "@/lib/limpeza";
 import {
@@ -90,10 +91,13 @@ export default function CalendarioPage() {
     const d = new Date(today + "T00:00:00");
     return { y: d.getFullYear(), m: d.getMonth() };
   });
-  const [events, setEvents] = React.useState<CalendarEvent[]>([]);
-  const [bills, setBills] = React.useState<Bill[]>([]);
-  const [tasks, setTasks] = React.useState<Task[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [events, setEvents] = useEstadoCacheado<CalendarEvent[]>("events", []);
+  const [bills, setBills] = useEstadoCacheado<Bill[]>("bills", []);
+  const [tasks, setTasks] = useEstadoCacheado<Task[]>("tasks", []);
+  /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
+  const [loading, setLoading] = React.useState(
+    () => !temCache("events", "bills", "tasks")
+  );
   const [selected, setSelected] = React.useState(today);
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<CalendarEvent | null>(null);

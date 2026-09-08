@@ -50,6 +50,7 @@ import {
 } from "@/components/ui";
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
 import { useArrastarCartao } from "@/components/arrastarCartao";
+import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import {
   EditorChecklist,
   ListaDeItens,
@@ -105,8 +106,11 @@ const blank = () => ({
 
 export default function DemandasPage() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [rows, setRows] = React.useState<Task[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = useEstadoCacheado<Task[]>("tasks", []);
+  /* Já visitou nesta sessão? Então abre com conteúdo e atualiza atrás. */
+  const [loading, setLoading] = React.useState(
+    () => !temCache("tasks", "task_items")
+  );
   const [view, setView] = React.useState<"board" | "list" | "cliente">("board");
   const [q, setQ] = React.useState("");
   const [prio, setPrio] = React.useState<"all" | Priority>("all");
@@ -118,7 +122,10 @@ export default function DemandasPage() {
   const [err, setErr] = React.useState("");
 
   /* Itens de checklist agrupados por demanda. */
-  const [itens, setItens] = React.useState<Record<string, TaskItem[]>>({});
+  const [itens, setItens] = useEstadoCacheado<Record<string, TaskItem[]>>(
+    "task_items",
+    {}
+  );
   const [marcando, setMarcando] = React.useState<string | null>(null);
   /* Checklist em edição: da demanda, ou o modelo da regra. */
   const [checklist, setChecklist] = React.useState<ItemEmEdicao[]>([]);

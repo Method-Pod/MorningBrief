@@ -13,6 +13,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { type Habit, type HabitLog } from "@/lib/types";
 import { dataCurta, semanaDe, todayISO, ultimosDias } from "@/lib/format";
@@ -35,9 +36,12 @@ const vazio = () => ({ name: "", target_per_week: 7, active: true });
 
 export default function HabitosPage() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [habits, setHabits] = React.useState<Habit[]>([]);
-  const [logs, setLogs] = React.useState<HabitLog[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [habits, setHabits] = useEstadoCacheado<Habit[]>("habits", []);
+  const [logs, setLogs] = useEstadoCacheado<HabitLog[]>("habit_logs", []);
+  /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
+  const [loading, setLoading] = React.useState(
+    () => !temCache("habits", "habit_logs")
+  );
   const [semanas, setSemanas] = React.useState(0);
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Habit | null>(null);
