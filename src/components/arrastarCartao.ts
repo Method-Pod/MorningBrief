@@ -60,6 +60,7 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
     e.clone?.remove();
     delete e.origem.dataset.arrastando;
     if (e.alvo) delete e.alvo.dataset.alvo;
+    delete document.body.dataset.arrastandoCartao;
     document.body.style.removeProperty("cursor");
     estado.current = null;
   }, []);
@@ -89,7 +90,12 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
         if (Math.hypot(e.dx, e.dy) < LIMIAR_PX) return;
         e.ativo = true;
         e.origem.dataset.arrastando = "1";
+        document.body.dataset.arrastandoCartao = "1";
         document.body.style.cursor = "grabbing";
+        /* Descarta o que já estivesse selecionado: `user-select:none` impede
+           selecionar dali para frente, mas não apaga uma seleção anterior, e
+           ela ficaria grifada durante todo o gesto. */
+        window.getSelection()?.removeAllRanges();
 
         const clone = e.origem.cloneNode(true) as HTMLElement;
         delete clone.dataset.arrastando;
