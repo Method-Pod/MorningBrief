@@ -6,12 +6,14 @@ import {
   ExternalLink,
   GraduationCap,
   Layers,
+  ListVideo,
   Loader2,
   Minus,
   Pencil,
   Plus,
   Send,
   Tag,
+  Target,
   Trash2,
   Youtube,
 } from "lucide-react";
@@ -24,14 +26,16 @@ import {
   type Lesson,
   type Subject,
 } from "@/lib/types";
-import { dataCurta } from "@/lib/format";
+import { dataCurta, semanaDe, todayISO } from "@/lib/format";
 import { DIAS_RETENCAO_AULAS } from "@/lib/limpeza";
 import {
   dadosDoLink,
   duracaoCurta,
   fonteDoLink,
+  idDaPlaylist,
   normalizarUrl,
   pctAssistido,
+  type AulaDaPlaylist,
 } from "@/lib/aulas";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import {
@@ -118,14 +122,30 @@ export default function AulasPage() {
 
   const [gerindo, setGerindo] = React.useState(false);
 
+  /* meta semanal */
+  const [meta, setMeta] = useEstadoCacheado<number | null>("meta_aulas", null);
+  const [metaEmEdicao, setMetaEmEdicao] = React.useState("");
+  const [editandoMeta, setEditandoMeta] = React.useState(false);
+
+  /* importar playlist */
+  const [importando, setImportando] = React.useState(false);
+  const [linkPlaylist, setLinkPlaylist] = React.useState("");
+  const [achados, setAchados] = React.useState<AulaDaPlaylist[] | null>(null);
+  const [assuntoImport, setAssuntoImport] = React.useState("");
+  const [buscandoPlaylist, setBuscandoPlaylist] = React.useState(false);
+  const [erroImport, setErroImport] = React.useState("");
+
   const confirm = useConfirm();
   const notice = useNotice();
 
   const load = React.useCallback(async () => {
-    const [l, c, a] = await Promise.all([
+    const [l, c, a, m] = await Promise.all([
       supabase.from("lessons").select("*").order("created_at", { ascending: false }),
       supabase.from("courses").select("*").order("created_at", { ascending: false }),
       supabase.from("subjects").select("*").order("name"),
+      /* A meta tolera falha: sem AULAS-EXTRAS.sql a tira não aparece e o resto
+         da aba continua funcionando. */
+      supabase.from("lesson_goals").select("per_week").maybeSingle(),
     ]);
 
     /* Tabela que falta é recado que fica na tela, não aviso que passa. */
@@ -145,8 +165,9 @@ export default function AulasPage() {
     setRows((l.data as Lesson[]) ?? []);
     setCursos((c.data as Course[]) ?? []);
     setAssuntos((a.data as Subject[]) ?? []);
+    setMeta((m.data as { per_week: number } | null)?.per_week ?? null);
     setLoading(false);
-  }, [supabase, setRows, setCursos, setAssuntos]);
+  }, [supabase, setRows, setCursos, setAssuntos, setMeta]);
 
   React.useEffect(() => {
     load();
@@ -388,6 +409,119 @@ export default function AulasPage() {
     if (notice.check(error, "atualizar o curso")) load();
   };
 
+  /* ------------------------------ meta ------------------------------ */
+
+  const salvarMeta = async () => {
+    const n = Number(metaEmEdicao.trim());
+    if (!Number.isFinite(n) || n < 1 || n > 99)
+      return notice.show("A meta precisa ser um número de 1 a 99.");
+    const uid = await currentUserId(supabase);
+    if (!uid) return notice.show(SESSION_EXPIRED);
+
+    /* upsert na chave do usuário: trocar a meta é sobrescrever, não criar uma
+       segunda linha. */
+    const { error } = await supabase
+      .from("lesson_goals")
+      .upsert({ user_id: uid, per_week: Math.round(n) }, { onConflict: "user_id" });
+    if (error && /lesson_goals/.test(error.message))
+      return notice.show(
+        "A meta precisa de supabase/AULAS-EXTRAS.sql no banco. Rode o arquivo."
+      );
+    if (!notice.check(error, "salvar a meta")) {
+      setMeta(Math.round(n));
+      setEditandoMeta(false);
+      setMetaEmEdicao("");
+    }
+  };
+
+  /* --------------------------- playlist --------------------------- */
+
+  const buscarPlaylist = async () => {
+    const id = idDaPlaylist(linkPlaylist);
+    if (!id)
+      return setErroImport(
+        "Não achei a playlist nesse link. Cole o endereço da playlist, ou de um vídeo tocando dentro dela. Listas privadas como “Assistir mais tarde” não podem ser lidas."
+      );
+    setErroImport("");
+    setAchados(null);
+    setBuscandoPlaylist(true);
+    try {
+      const r = await fetch(`/api/playlist?id=${encodeURIComponent(id)}`);
+      const d = await r.json();
+      if (!r.ok) {
+        setErroImport(d?.recado ?? "Não consegui ler a playlist.");
+        return;
+      }
+      setAchados(d.itens ?? []);
+      if (!d.itens?.length)
+        setErroImport("A playlist respondeu, mas sem nenhum vídeo utilizável.");
+    } catch {
+      setErroImport("Não consegui ler a playlist agora.");
+    } finally {
+      setBuscandoPlaylist(false);
+    }
+  };
+
+  /**
+   * Grava a playlist inteira numa inserção só.
+   *
+   * Uma chamada com o lote, e não uma por aula: são dezenas de linhas, e
+   * dezenas de idas ao banco deixariam a importação lenta e parcialmente
+   * aplicada se alguma falhasse no meio.
+   */
+  const importar = async () => {
+    if (!achados?.length) return;
+    setSalvando(true);
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      setSalvando(false);
+      return notice.show(SESSION_EXPIRED);
+    }
+
+    /* O que já está na lista não entra de novo: reimportar uma playlist que
+       ganhou aulas novas deve trazer só as novas. */
+    const jaTenho = new Set(rows.map((l) => l.url).filter(Boolean));
+    const novas = achados.filter((a) => !jaTenho.has(a.url));
+
+    if (!novas.length) {
+      setSalvando(false);
+      setErroImport("Todas as aulas dessa playlist já estão na sua lista.");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("lessons")
+      .insert(
+        novas.map((a) => ({
+          user_id: uid,
+          title: a.title,
+          url: a.url,
+          fonte: "youtube" as const,
+          canal: a.canal,
+          thumb_url: a.thumb_url,
+          subject_id: assuntoImport || null,
+          minutos: a.minutos,
+          feita: false,
+        }))
+      )
+      .select("*");
+    setSalvando(false);
+
+    if (notice.check(error, "importar a playlist")) return;
+    if (data) setRows((v) => [...(data as Lesson[]), ...v]);
+    const pulou = achados.length - novas.length;
+    notice.show(
+      `${novas.length} aula${novas.length === 1 ? "" : "s"} importada${
+        novas.length === 1 ? "" : "s"
+      }${pulou ? ` · ${pulou} já estava${pulou === 1 ? "" : "m"} na lista` : ""}.`
+    );
+    setImportando(false);
+    setLinkPlaylist("");
+    setAchados(null);
+    setAssuntoImport("");
+    setAba("fila");
+  };
+
   const removerCurso = (c: Course) =>
     confirm.ask(`Tirar o curso "${c.title}"?`, async () => {
       const { error } = await supabase.from("courses").delete().eq("id", c.id);
@@ -434,6 +568,20 @@ export default function AulasPage() {
     [rows, aba, filtro]
   );
 
+  /**
+   * Aulas assistidas na semana corrente, de segunda a domingo.
+   *
+   * Usa a mesma semana fixa dos hábitos, e não "últimos 7 dias": com janela
+   * móvel a meta nunca fecha — sempre há uma aula saindo pela borda de trás, e
+   * o número balança sem você ter feito nada.
+   */
+  const naSemana = React.useMemo(() => {
+    const dias = new Set(semanaDe(todayISO()));
+    return rows.filter(
+      (l) => l.feita && l.feita_em && dias.has(l.feita_em.slice(0, 10))
+    ).length;
+  }, [rows]);
+
   const emAndamento = cursos.filter((c) => c.aulas_feitas < c.total_aulas);
   const concluidos = cursos.length - emAndamento.length;
 
@@ -470,6 +618,14 @@ export default function AulasPage() {
           >
             <Tag size={15} />
             <span className="hidden sm:inline">Etiquetas</span>
+          </Button>
+          <Button
+            onClick={() => setImportando(true)}
+            className="shrink-0"
+            title="Importar playlist do YouTube"
+          >
+            <ListVideo size={15} />
+            <span className="hidden sm:inline">Playlist</span>
           </Button>
           <Button onClick={() => abrirCurso()} className="min-w-0 flex-1 sm:flex-none">
             <Layers size={15} className="shrink-0" />
@@ -618,10 +774,87 @@ export default function AulasPage() {
 
       {/* ------------------------------ aulas ------------------------------ */}
       <div className="space-y-3">
-        <p className="flex items-center gap-1.5 text-[11px] text-fg-mute sm:text-[12px]">
-          <Check size={12} className="shrink-0" />
-          Aulas assistidas saem da lista {DIAS_RETENCAO_AULAS} dias depois.
-        </p>
+        {/*
+          Meta e aviso de retenção na mesma linha fina, como na estante: são
+          referência de canto de olho, não a razão de abrir a tela.
+        */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-fg-mute sm:text-[12px]">
+          <span className="flex items-center gap-2">
+            <Target size={13} className="shrink-0" />
+            {meta ? (
+              <>
+                <span className="font-semibold text-fg-dim tnum">
+                  {naSemana}/{meta}
+                </span>
+                <span>aulas esta semana</span>
+                <span className="h-1 w-[52px] overflow-hidden rounded-full bg-ink-800">
+                  <span
+                    className={cx(
+                      "block h-full w-full origin-left rounded-full transition-transform duration-[320ms]",
+                      naSemana >= meta ? "bg-pos" : "bg-brand-500"
+                    )}
+                    style={{
+                      transform: `scaleX(${Math.min(1, naSemana / meta)})`,
+                    }}
+                  />
+                </span>
+              </>
+            ) : (
+              <span>
+                {naSemana} assistida{naSemana === 1 ? "" : "s"} esta semana
+              </span>
+            )}
+
+            {editandoMeta ? (
+              <span className="flex items-center gap-1">
+                <span className="w-[58px]">
+                  <Input
+                    autoFocus
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={metaEmEdicao}
+                    onChange={(e) => setMetaEmEdicao(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        salvarMeta();
+                      }
+                      if (e.key === "Escape") setEditandoMeta(false);
+                    }}
+                    placeholder="3"
+                    aria-label="Aulas por semana"
+                    className="h-7 text-center text-[11.5px]"
+                  />
+                </span>
+                <button
+                  type="button"
+                  onClick={salvarMeta}
+                  className="font-semibold text-brand-400 hover:underline"
+                >
+                  ok
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMetaEmEdicao(meta ? String(meta) : "");
+                  setEditandoMeta(true);
+                }}
+                className="text-fg-mute underline decoration-line underline-offset-2 transition-colors hover:text-brand-400"
+              >
+                {meta ? "mudar" : "definir meta"}
+              </button>
+            )}
+          </span>
+
+          <span className="flex items-center gap-1.5">
+            <span className="text-fg-mute">·</span>
+            <Check size={12} className="shrink-0" />
+            Assistidas saem em {DIAS_RETENCAO_AULAS} dias
+          </span>
+        </div>
 
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-0.5">
@@ -1030,6 +1263,126 @@ export default function AulasPage() {
               onGerenciar={() => setGerindo(true)}
             />
           </Field>
+        </div>
+      </Modal>
+
+      {/* --------------------------- playlist --------------------------- */}
+      <Modal
+        open={importando}
+        onClose={() => {
+          setImportando(false);
+          setAchados(null);
+          setErroImport("");
+        }}
+        title="Importar playlist"
+        sub="Cole o link da playlist do YouTube. As aulas entram com título, canal, capa e duração."
+        size="lg"
+        footer={
+          <>
+            <Button
+              onClick={() => {
+                setImportando(false);
+                setAchados(null);
+                setErroImport("");
+              }}
+            >
+              Cancelar
+            </Button>
+            {achados && achados.length > 0 && (
+              <Button variant="primary" onClick={importar} disabled={salvando}>
+                {salvando
+                  ? "Importando..."
+                  : `Importar ${achados.length} aula${achados.length === 1 ? "" : "s"}`}
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {erroImport && (
+            <p className="rounded-[14px] bg-warn/10 px-3.5 py-3 text-xs text-fg-dim">
+              {erroImport}
+            </p>
+          )}
+
+          <Field label="Link da playlist">
+            <div className="flex gap-2">
+              <Input
+                autoFocus
+                type="url"
+                inputMode="url"
+                value={linkPlaylist}
+                onChange={(e) => {
+                  setLinkPlaylist(e.target.value);
+                  setErroImport("");
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    buscarPlaylist();
+                  }
+                }}
+                placeholder="youtube.com/playlist?list=..."
+                className="flex-1"
+              />
+              <Button
+                onClick={buscarPlaylist}
+                disabled={buscandoPlaylist || !linkPlaylist.trim()}
+              >
+                {buscandoPlaylist ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <ListVideo size={15} />
+                )}
+                Ler
+              </Button>
+            </div>
+          </Field>
+
+          {achados && achados.length > 0 && (
+            <>
+              <Field
+                label="Assunto para todas"
+                hint="Aplicado às aulas desta importação. Dá para mudar depois, uma por uma."
+              >
+                <CampoAssunto
+                  valor={assuntoImport}
+                  onValor={setAssuntoImport}
+                  assuntos={assuntos}
+                  onGerenciar={() => setGerindo(true)}
+                />
+              </Field>
+
+              <ul className="max-h-[38vh] divide-y divide-line-soft overflow-y-auto">
+                {achados.map((a, i) => (
+                  <li key={a.url} className="flex items-center gap-3 py-2">
+                    <span className="w-5 shrink-0 text-right text-[10.5px] text-fg-mute tnum">
+                      {i + 1}
+                    </span>
+                    {a.thumb_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={a.thumb_url}
+                        alt=""
+                        loading="lazy"
+                        className="aspect-video w-[64px] shrink-0 rounded bg-ink-800 object-cover"
+                      />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] font-medium">
+                        {a.title}
+                      </span>
+                      <span className="block text-[10.5px] text-fg-mute">
+                        {[a.canal, duracaoCurta(a.minutos)]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       </Modal>
 
