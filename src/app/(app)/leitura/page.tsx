@@ -965,10 +965,14 @@ export default function LeituraPage() {
             Continuar lendo
           </h2>
           <div className="grid gap-3 lg:grid-cols-2">
-            {lendo.map((l) => {
+            {lendo.map((l, i) => {
               const pct = pctDe(l);
               return (
-                <Card key={l.id} className="flex gap-3.5 p-3.5">
+                <Card
+                  key={l.id}
+                  className="entra flex gap-3.5 p-3.5"
+                  style={{ "--i": i } as React.CSSProperties}
+                >
                   <button
                     type="button"
                     onClick={() => setVerId(l.id)}
@@ -1221,10 +1225,14 @@ export default function LeituraPage() {
             legível. Todo o detalhe mudou para o modal.
           */
           <ul className="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
-            {daPrateleira.map((l) => {
+            {daPrateleira.map((l, i) => {
               const pct = pctDe(l);
               return (
-                <li key={l.id}>
+                <li
+                  key={l.id}
+                  className="entra"
+                  style={{ "--i": i } as React.CSSProperties}
+                >
                   <button
                     type="button"
                     onClick={() => setVerId(l.id)}

@@ -882,9 +882,10 @@ export default function DemandasPage() {
                       Arraste aqui
                     </div>
                   ) : (
-                    items.map((t) => (
+                    items.map((t, i) => (
                       <TaskCard
                         key={t.id}
+                        indice={i}
                         t={t}
                         itens={itens[t.id] ?? []}
                         onAlternarItem={alternarItem}
@@ -1473,6 +1474,7 @@ function TaskCard({
   onDelete,
   onAdvance,
   onClient,
+  indice,
 }: {
   t: Task;
   itens: TaskItem[];
@@ -1483,6 +1485,8 @@ function TaskCard({
   onDelete: () => void;
   onAdvance: () => void;
   onClient: (c: string) => void;
+  /** Posição na coluna, para a entrada em cascata. */
+  indice: number;
 }) {
   const feitos = itens.filter((i) => i.done).length;
   const late = t.status !== "done" && t.due_date && daysUntil(t.due_date) < 0;
@@ -1492,7 +1496,11 @@ function TaskCard({
     <div
       draggable
       onDragStart={onDragStart}
-      className="group cursor-grab rounded-xl border border-line bg-ink-850 p-3 transition-colors hover:border-ink-600 active:cursor-grabbing"
+      /* `--i` alimenta o atraso da cascata; `levanta` troca o realce de borda
+         por um deslocamento de 2px, que o compositor resolve e que não empurra
+         o conteúdo como mudar espessura de borda fazia. */
+      style={{ "--i": indice } as React.CSSProperties}
+      className="group entra levanta cursor-grab rounded-xl border border-line bg-ink-850 p-3 active:cursor-grabbing"
     >
       <div className="flex items-start justify-between gap-2">
         <p

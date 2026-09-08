@@ -226,6 +226,42 @@ export function Modal({
   React.useEffect(() => setMounted(true), []);
 
   /*
+   * Fica montado durante a saída.
+   *
+   * Sem isto, fechar era instantâneo: `open` virava falso e o diálogo deixava
+   * de existir no mesmo quadro, sem nada para animar. `saindo` mantém o portal
+   * vivo pelos 130ms da animação e então desmonta de verdade.
+   *
+   * O tempo está aqui e no CSS, e é o tipo de duplicação que se paga: o valor
+   * precisa ser conhecido pelo JavaScript para desmontar na hora certa.
+   */
+  const SAIDA_MS = 130;
+  const [saindo, setSaindo] = React.useState(false);
+  const eraAberto = React.useRef(open);
+
+  /*
+   * O último conteúdo aberto, para desenhar durante a saída.
+   *
+   * O pai costuma limpar o estado no mesmo gesto que fecha — `setVerId(null)`
+   * junto do `onClose` — então `children` já vem vazio quando a animação
+   * começa. Sem guardar, a saída animava uma caixa branca vazia, que é pior
+   * que não animar nada.
+   */
+  const ultimo = React.useRef({ title, sub, children, footer });
+  if (open) ultimo.current = { title, sub, children, footer };
+  const mostrado = open ? { title, sub, children, footer } : ultimo.current;
+
+  React.useEffect(() => {
+    if (eraAberto.current && !open) {
+      setSaindo(true);
+      const id = setTimeout(() => setSaindo(false), SAIDA_MS);
+      eraAberto.current = open;
+      return () => clearTimeout(id);
+    }
+    eraAberto.current = open;
+  }, [open]);
+
+  /*
    * Foco e trava de rolagem: dependem de `open` e de `mounted`.
    *
    * Estavam no mesmo efeito do teclado, que depende de `onClose`. Como o pai
@@ -307,16 +343,27 @@ export function Modal({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open || !mounted) return null;
+  if ((!open && !saindo) || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:p-6">
-      <div className="fixed inset-0 bg-fg/35 fade" onClick={onClose} />
+    <div
+      className={cx(
+        "fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:p-6",
+        /* Durante a saída o diálogo não recebe mais clique: o conteúdo ainda
+           está na tela por 130ms, e um clique aí agiria sobre algo que a pessoa
+           já mandou fechar. */
+        saindo && "pointer-events-none"
+      )}
+    >
+      <div
+        className={cx("fixed inset-0 bg-fg/35", saindo ? "fade-sai" : "fade")}
+        onClick={onClose}
+      />
       <div
         ref={caixa}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-label={mostrado.title}
         /* -1: focável por script, fora da ordem natural do Tab */
         tabIndex={-1}
         className={cx(
@@ -328,14 +375,19 @@ export function Modal({
            * e tinha que rolar procurando o Salvar. Assim cabeçalho e rodapé
            * ficam sempre à vista e só o miolo rola.
            */
-          "relative z-10 my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-[20px] bg-white shadow-[0_24px_60px_-20px_rgb(20_24_26/0.3)] pop sm:max-h-[calc(100dvh-3rem)]",
+          "relative z-10 my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-[20px] bg-white shadow-[0_24px_60px_-20px_rgb(20_24_26/0.3)] sm:max-h-[calc(100dvh-3rem)]",
+          saindo ? "pop-sai" : "pop",
           size === "xl" ? "max-w-3xl" : size === "lg" ? "max-w-2xl" : "max-w-lg"
         )}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line-soft px-5 py-4 sm:px-6 sm:py-5">
           <div>
-            <h3 className="text-base font-semibold tracking-tight">{title}</h3>
-            {sub && <p className="mt-0.5 text-xs text-fg-mute">{sub}</p>}
+            <h3 className="text-base font-semibold tracking-tight">
+              {mostrado.title}
+            </h3>
+            {mostrado.sub && (
+              <p className="mt-0.5 text-xs text-fg-mute">{mostrado.sub}</p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -346,11 +398,11 @@ export function Modal({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
-          {children}
+          {mostrado.children}
         </div>
-        {footer && (
+        {mostrado.footer && (
           <div className="flex shrink-0 items-center justify-end gap-2 border-t border-line-soft px-5 py-4 sm:px-6">
-            {footer}
+            {mostrado.footer}
           </div>
         )}
       </div>
