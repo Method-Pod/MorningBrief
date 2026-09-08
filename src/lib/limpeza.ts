@@ -231,3 +231,44 @@ export async function limparEventosPassados(
   if (erroDelete) return null;
   return saiu?.length ?? 0;
 }
+
+/** Dias que uma aula assistida fica guardada antes de sair. */
+export const DIAS_RETENCAO_AULAS = 7;
+
+/**
+ * Apaga aulas assistidas há mais de sete dias.
+ *
+ * Mesmo desenho da limpeza das demandas, com prazo maior: aula assistida vale
+ * como referência por alguns dias — "onde é que eu vi aquilo" — e depois disso
+ * só ocupa a lista.
+ *
+ * O corte é por `feita_em`, não por `created_at`: a data de cadastro diria
+ * quando a aula foi anotada, e uma aula que ficou meses na fila sairia no dia
+ * seguinte ao ser assistida.
+ *
+ * `feita_em` não nulo é salvaguarda, não enfeite: sem ele, `lt` sobre coluna
+ * nula deixaria de fora as linhas certas ou incluiria as erradas dependendo do
+ * planejador, e o delete não é reversível.
+ */
+export async function limparAulasAssistidas(
+  supabase: SupabaseClient,
+  opcoes: { userId?: string } = {}
+): Promise<number | null> {
+  const limite = new Date(
+    Date.now() - DIAS_RETENCAO_AULAS * 24 * 60 * 60 * 1000
+  ).toISOString();
+
+  /* `userId` é obrigatório para quem chama com a chave de serviço, que passa
+     por cima do RLS — sem o filtro, o delete alcançaria todo mundo. */
+  let consulta = supabase
+    .from("lessons")
+    .delete()
+    .eq("feita", true)
+    .not("feita_em", "is", null)
+    .lt("feita_em", limite);
+  if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
+
+  const { data, error } = await consulta.select("id");
+  if (error) return null;
+  return data?.length ?? 0;
+}

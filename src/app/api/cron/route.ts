@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
+  limparAulasAssistidas,
   limparConcluidas,
   limparEventosPassados,
   limparPagasDeMesesAnteriores,
@@ -157,6 +158,7 @@ export async function GET(req: Request) {
       limparConcluidas(supabase, { userId: u.id }),
       limparPagasDeMesesAnteriores(supabase, opcoes),
       limparEventosPassados(supabase, opcoes),
+      limparAulasAssistidas(supabase, { userId: u.id }),
     ]);
 
     relatorio.push({

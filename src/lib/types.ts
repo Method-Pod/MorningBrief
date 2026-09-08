@@ -306,3 +306,32 @@ export type ReadingSession = {
   end_page: number;
   created_at: string;
 };
+
+/* ------------------------------ aulas ------------------------------ */
+
+export type FonteAula = "youtube" | "telegram" | "outro";
+
+export const FONTE_AULA_LABEL: Record<FonteAula, string> = {
+  youtube: "YouTube",
+  telegram: "Telegram",
+  outro: "Outro",
+};
+
+export type Lesson = {
+  id: string;
+  user_id: string;
+  title: string;
+  url: string | null;
+  fonte: FonteAula;
+  canal: string | null;
+  thumb_url: string | null;
+  assunto: string | null;
+  /** Duração total, quando conhecida. */
+  minutos: number | null;
+  /** Onde parou. Nulo é diferente de zero: "não anotei" não é "no começo". */
+  em_minuto: number | null;
+  feita: boolean;
+  /** Quando foi marcada — é por esta data que a limpeza dos 7 dias conta. */
+  feita_em: string | null;
+  created_at: string;
+};

@@ -30,7 +30,11 @@ import {
   todayISO,
 } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
-import { HORAS_RETENCAO, limparConcluidas } from "@/lib/limpeza";
+import {
+  HORAS_RETENCAO,
+  limparAulasAssistidas,
+  limparConcluidas,
+} from "@/lib/limpeza";
 import {
   estenderEventosRecorrentes,
   lancarProximoMesDasFixas,
@@ -150,6 +154,9 @@ export default function HomePage() {
         reporRecorrentesPerdidas(supabase),
         lancarProximoMesDasFixas(supabase),
         estenderEventosRecorrentes(supabase),
+        /* Vai no fim porque a desestruturação acima é por posição, e o
+           resultado desta não é mostrado — as aulas saem em silêncio. */
+        limparAulasAssistidas(supabase),
       ]);
       if (!alive) return;
       if (apagadas && apagadas > 0) setLimpas(apagadas);
