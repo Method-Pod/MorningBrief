@@ -253,16 +253,25 @@ export default function DemandasPage() {
        * a coluna ainda não existe, a segunda tentativa salva o resto — editar
        * uma demanda não pode depender de uma migração pendente.
        */
-      let { error } = await supabase
+      /*
+       * `select("id")` não é enfeite: sem ele, um update que não atinge linha
+       * nenhuma volta 204 sem erro, e a tela comemora um salvamento que não
+       * aconteceu — foi mudar o prazo, ver a demanda seguir atrasada e não ter
+       * o que investigar. Com a linha de volta, zero atingidas é uma falha
+       * visível.
+       */
+      let { data: salvo, error } = await supabase
         .from("tasks")
         .update({ ...mudanca, links: links.length ? links : null })
-        .eq("id", editing.id);
+        .eq("id", editing.id)
+        .select("id");
 
       if (error && /links/.test(error.message)) {
-        ({ error } = await supabase
+        ({ data: salvo, error } = await supabase
           .from("tasks")
           .update(mudanca)
-          .eq("id", editing.id));
+          .eq("id", editing.id)
+          .select("id"));
         if (!error && links.length)
           notice.show(
             "Demanda salva, mas os links não: rode supabase/LINK-NA-DEMANDA.sql no banco."
@@ -272,6 +281,12 @@ export default function DemandasPage() {
       if (error) {
         setBusy(false);
         return setErr(error.message);
+      }
+      if (!salvo?.length) {
+        setBusy(false);
+        return setErr(
+          "Nada foi gravado: a demanda não foi encontrada. Recarregue a página e tente de novo."
+        );
       }
 
       const uidEdit = await currentUserId(supabase);
