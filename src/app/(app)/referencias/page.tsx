@@ -61,14 +61,29 @@ const normalizarUrl = (v: string) => {
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(t) ? t : `https://${t}`;
 };
 
-/** "dribbble.com" — o domínio serve de rótulo e de nome de reserva. */
-const dominioDe = (url: string) => {
+/**
+ * "dribbble.com" — o domínio serve de rótulo e de nome de reserva.
+ *
+ * Devolve vazio quando não há endereço: referência que é só imagem não tem
+ * domínio, e escrever "null" embaixo do nome seria pior que não escrever nada.
+ */
+const dominioDe = (url: string | null | undefined) => {
+  if (!url) return "";
   try {
     return new URL(normalizarUrl(url)).hostname.replace(/^www\./, "");
   } catch {
     return url;
   }
 };
+
+/**
+ * O que o clique abre.
+ *
+ * O endereço quando existe; a própria imagem quando a referência é só uma
+ * imagem — ver um print em tamanho cheio é justamente o que se quer dele. Sem
+ * isto, um cartão sem link viraria um cartão que não faz nada ao ser clicado.
+ */
+const aberturaDe = (r: Referencia) => r.url ?? r.image_url ?? undefined;
 
 const vazio = () => ({
   url: "",
@@ -186,6 +201,7 @@ export default function ReferenciasPage() {
     const faltando = rows.filter(
       (r) =>
         r.busca &&
+        !!r.url &&
         !r.icon_url &&
         /* Quem já tem logo seu não precisa: ele vence o automático na tela, e
            buscar um que nunca vai aparecer é ida de rede por nada. */
@@ -201,7 +217,7 @@ export default function ReferenciasPage() {
         tentados.current.add(r.id);
         try {
           const resp = await fetch(
-            `/api/link?url=${encodeURIComponent(r.url)}`
+            `/api/link?url=${encodeURIComponent(r.url!)}`
           );
           const d = await resp.json();
           if (!vivo) return;
@@ -305,7 +321,7 @@ export default function ReferenciasPage() {
     setForm(
       r
         ? {
-            url: r.url,
+            url: r.url ?? "",
             name: r.name,
             description: r.description ?? "",
             image_url: r.image_url ?? "",
@@ -390,6 +406,36 @@ export default function ReferenciasPage() {
     setPrevia(URL.createObjectURL(f));
   };
 
+  /*
+   * Colar a imagem direto no formulário.
+   *
+   * É o gesto de "gostei dessa imagem": copiar de um site, de uma conversa, ou
+   * um print recém-tirado, e colar. Sem isso, o caminho seria salvar em
+   * arquivo, achar a pasta e escolher — três passos para o que o Ctrl+V
+   * resolve.
+   *
+   * Escuta no modal inteiro, e não só num campo, porque não há onde clicar
+   * antes de colar: a intenção é colar na janela.
+   */
+  const aoColar = React.useCallback((e: ClipboardEvent) => {
+    const itens = e.clipboardData?.items;
+    if (!itens) return;
+    for (const it of itens) {
+      if (it.kind !== "file" || !it.type.startsWith("image/")) continue;
+      const f = it.getAsFile();
+      if (!f) continue;
+      e.preventDefault();
+      escolherArquivo(f);
+      return;
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!aberto) return;
+    document.addEventListener("paste", aoColar);
+    return () => document.removeEventListener("paste", aoColar);
+  }, [aberto, aoColar]);
+
   const alternarColecao = (id: string) =>
     setForm((f) => ({
       ...f,
@@ -407,9 +453,24 @@ export default function ReferenciasPage() {
    */
   const salvar = async () => {
     const url = normalizarUrl(form.url);
-    const name = form.name.trim() || (url ? dominioDe(url) : "");
-    if (!url) return setErro("Cole o endereço do site.");
-    if (!name) return setErro("Dê um nome à referência.");
+    const temImagem = !!arquivo || !!form.image_url;
+    const name = form.name.trim() || dominioDe(url);
+
+    /*
+     * Um dos dois basta, e um dos dois é obrigatório.
+     *
+     * Referência é ou uma página que se volta a olhar, ou uma imagem que se
+     * gostou. Sem nenhuma das duas não há o que guardar; exigir as duas
+     * obrigaria a inventar um endereço para um print.
+     */
+    if (!url && !temImagem)
+      return setErro(
+        "Cole o endereço do site, ou suba uma imagem — uma das duas."
+      );
+    if (!name)
+      return setErro(
+        url ? "Dê um nome à referência." : "Dê um nome a essa imagem."
+      );
 
     setSalvando(true);
     setErro("");
@@ -421,7 +482,10 @@ export default function ReferenciasPage() {
     }
 
     const dados = {
-      url,
+      /* Vazio vira nulo, e não string vazia: o índice único trata dois NULL
+         como distintos, então várias referências sem link convivem — duas
+         strings vazias colidiriam. */
+      url: url || null,
       name,
       description: form.description.trim() || null,
       notes: form.notes.trim() || null,
@@ -701,7 +765,7 @@ export default function ReferenciasPage() {
                   </span>
 
                   <a
-                    href={r.url}
+                    href={aberturaDe(r)}
                     target="_blank"
                     rel="noopener noreferrer"
                     title={[r.name, r.url, r.notes].filter(Boolean).join("\n")}
@@ -717,7 +781,7 @@ export default function ReferenciasPage() {
 
                   <span className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
                     <a
-                      href={r.url}
+                      href={aberturaDe(r)}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`Abrir ${r.name}`}
@@ -819,10 +883,10 @@ export default function ReferenciasPage() {
                 encolhe e não desalinha o vizinho.
               */}
               <a
-                href={r.url}
+                href={aberturaDe(r)}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={r.url}
+                title={r.url ?? undefined}
                 className="relative block aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-ink-800"
               >
                 {r.image_url && !quebradas[r.id] ? (
@@ -864,7 +928,7 @@ export default function ReferenciasPage() {
               >
                 <div className="flex items-center justify-between gap-1">
                   <a
-                    href={r.url}
+                    href={aberturaDe(r)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="min-w-0 flex-1 truncate text-[12px] font-semibold leading-tight hover:text-brand-400"
@@ -879,7 +943,7 @@ export default function ReferenciasPage() {
                   */}
                   <span className="flex shrink-0 items-center gap-0.5 overflow-hidden transition-[max-width,opacity] duration-150 lg:max-w-0 lg:opacity-0 lg:group-hover:max-w-[76px] lg:group-hover:opacity-100 lg:group-focus-within:max-w-[76px] lg:group-focus-within:opacity-100">
                     <a
-                      href={r.url}
+                      href={aberturaDe(r)}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`Abrir ${r.name}`}
@@ -939,7 +1003,7 @@ export default function ReferenciasPage() {
         open={aberto}
         onClose={fechar}
         title={editando ? "Editar referência" : "Salvar referência"}
-        sub="Cole o link. Nome, descrição e imagem vêm do próprio site."
+        sub="Cole um link e o resto vem do site — ou cole uma imagem que você gostou."
         size="lg"
         footer={
           <>
@@ -957,7 +1021,10 @@ export default function ReferenciasPage() {
             </p>
           )}
 
-          <Field label="Link" hint="dribbble.com, ou o endereço daquela página específica">
+          <Field
+            label="Link"
+            hint="Opcional. Sem link, a imagem abaixo é a referência."
+          >
             <div className="relative">
               <Input
                 autoFocus
@@ -1064,11 +1131,11 @@ export default function ReferenciasPage() {
           )}
 
           <Field
-            label={form.busca ? "Logo próprio" : "Imagem própria"}
+            label={form.busca ? "Logo próprio" : "Imagem"}
             hint={
               form.busca
                 ? "Aparece na lista Onde buscar, no lugar do logo do site. JPG, PNG ou WebP, até 3 MB."
-                : "Para os sites que bloqueiam a leitura, como o Dribbble. JPG, PNG ou WebP, até 3 MB."
+                : "Pode colar com Ctrl+V. JPG, PNG ou WebP, até 3 MB."
             }
           >
             <label className="flex h-10 cursor-pointer items-center gap-2 rounded-[14px] border border-line bg-white px-3.5 text-[12.5px] text-fg-mute transition-colors hover:border-brand-400 hover:text-fg-dim">
@@ -1180,11 +1247,15 @@ export default function ReferenciasPage() {
  * Devolver null é a bússola.
  */
 function iconeDaLista(r: Referencia, falhas = 0): string | null {
+  /* Sem endereço não há domínio de onde tirar favicon: referência que é só
+     imagem cai direto na imagem dela, que já é o primeiro degrau. */
   let doDominio: string | null = null;
-  try {
-    doDominio = `https://${new URL(r.url).hostname}/favicon.ico`;
-  } catch {
-    doDominio = null;
+  if (r.url) {
+    try {
+      doDominio = `https://${new URL(r.url).hostname}/favicon.ico`;
+    } catch {
+      doDominio = null;
+    }
   }
 
   const fontes = [

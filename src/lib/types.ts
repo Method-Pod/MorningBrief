@@ -426,7 +426,15 @@ export type Colecao = {
 export type Referencia = {
   id: string;
   user_id: string;
-  url: string;
+  /**
+   * O endereço, quando existe.
+   *
+   * Nulo quando a referência é só uma imagem — um print de layout, um recorte
+   * que apareceu numa conversa. Nem toda referência tem página, e exigir um
+   * endereço obrigava a inventar um ou a não guardar. Ver
+   * REFERENCIA-SO-IMAGEM.sql.
+   */
+  url: string | null;
   name: string;
   description: string | null;
   image_url: string | null;
