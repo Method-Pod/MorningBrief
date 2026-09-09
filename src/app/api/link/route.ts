@@ -79,6 +79,43 @@ const imagemAbsoluta = (valor: string | null, pagina: URL) => {
   }
 };
 
+/**
+ * O ícone que o site declara no `<head>`.
+ *
+ * Prefere `apple-touch-icon`: ele existe para virar atalho na tela inicial de
+ * um telefone, então é quadrado, tem fundo e costuma ter 180px — é o logo do
+ * site, que é o que a lista quer mostrar. Depois vem o `icon` de maior tamanho
+ * declarado, e por último qualquer um.
+ *
+ * Medido em sete sites: cinco declaram, e três desses trazem 180×180. Quando
+ * ninguém declara nada — ou quando a página não pode ser lida, como atrás do
+ * Cloudflare —, a tela cai em `/favicon.ico` do próprio domínio.
+ */
+function iconeDeclarado(html: string, pagina: URL): string | null {
+  const tags = [...html.matchAll(/<link[^>]*>/gi)].map((m) => m[0]);
+  const candidatos = tags
+    .filter((t) => /rel="[^"]*icon[^"]*"/i.test(t))
+    .map((t) => ({
+      rel: (t.match(/rel="([^"]*)"/i)?.[1] ?? "").toLowerCase(),
+      href: t.match(/href="([^"]*)"/i)?.[1] ?? "",
+      /* "180x180" → 180. `any` (de SVG) ganha de tudo: escala sem perder. */
+      lado: (() => {
+        const s = t.match(/sizes="([^"]*)"/i)?.[1] ?? "";
+        if (/any/i.test(s)) return 9999;
+        return Number(s.match(/(\d+)\s*x/i)?.[1] ?? 0);
+      })(),
+    }))
+    .filter((c) => c.href && !c.href.startsWith("data:"));
+
+  if (!candidatos.length) return null;
+
+  const nota = (c: { rel: string; lado: number }) =>
+    (c.rel.includes("apple-touch-icon") ? 100000 : 0) + c.lado;
+
+  const melhor = candidatos.sort((a, b) => nota(b) - nota(a))[0];
+  return imagemAbsoluta(melhor.href, pagina);
+}
+
 /** Sem descrição quilométrica no cartão: duas linhas bastam. */
 const encurtar = (v: string | null, max = 220) => {
   if (!v) return null;
@@ -117,6 +154,7 @@ export async function GET(req: Request) {
       nome: null,
       descricao: null,
       image_url: null,
+      icon_url: null,
       site: alvo.hostname.replace(/^www\./, ""),
       leu: false,
     });
@@ -143,6 +181,7 @@ export async function GET(req: Request) {
     nome: nome ?? null,
     descricao: encurtar(descricao),
     image_url: imagemAbsoluta(imagem, alvo),
+    icon_url: iconeDeclarado(html, alvo),
     /* O domínio sempre volta: serve de nome de reserva e de rótulo no cartão,
        e não depende de o site publicar tag nenhuma. */
     site: (metatag(html, "og:site_name") ?? alvo.hostname.replace(/^www\./, "")),

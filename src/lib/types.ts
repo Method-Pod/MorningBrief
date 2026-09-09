@@ -430,6 +430,15 @@ export type Referencia = {
   name: string;
   description: string | null;
   image_url: string | null;
+  /**
+   * O logo do site, para a linha da lista "Onde buscar".
+   *
+   * Separado de `image_url` porque as duas imagens têm trabalhos diferentes: o
+   * banner mostra como a página é e serve ao quadro; o ícone mostra de quem é
+   * o site e serve à linha. Recortar o banner num quadradinho de 32px entrega
+   * um pedaço do meio de um print. Ver ICONE-DO-SITE.sql.
+   */
+  icon_url: string | null;
   image_own: boolean;
   /**
    * É um site onde se procura referência, e não um exemplo guardado?

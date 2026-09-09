@@ -75,6 +75,7 @@ const vazio = () => ({
   name: "",
   description: "",
   image_url: "",
+  icon_url: "",
   image_own: false,
   busca: false,
   notes: "",
@@ -106,7 +107,15 @@ export default function ReferenciasPage() {
    * isto o navegador desenha o próprio ícone de imagem quebrada — que foi
    * exatamente o que apareceu na tela.
    */
-  const [quebradas, setQuebradas] = React.useState<Record<string, true>>({});
+  /*
+   * Quantas imagens já falharam em cada link.
+   *
+   * Contador e não sim/não porque a lista tenta em degraus: primeiro o ícone
+   * que o site declara, depois o `/favicon.ico` do domínio, e só então a
+   * bússola. Com um booleano, a primeira falha derrubaria os dois degraus
+   * seguintes de uma vez. Ver `iconeDaLista`.
+   */
+  const [quebradas, setQuebradas] = React.useState<Record<string, number>>({});
   const [gerindo, setGerindo] = React.useState(false);
 
   /* modal de cadastro */
@@ -235,6 +244,7 @@ export default function ReferenciasPage() {
             name: r.name,
             description: r.description ?? "",
             image_url: r.image_url ?? "",
+            icon_url: r.icon_url ?? "",
             image_own: r.image_own,
             busca: r.busca,
             notes: r.notes ?? "",
@@ -289,6 +299,9 @@ export default function ReferenciasPage() {
         description: f.description.trim() || d?.descricao || "",
         /* Imagem que você subiu vence a do site: foi escolha sua. */
         image_url: f.image_own ? f.image_url : (d?.image_url ?? f.image_url),
+        /* O ícone sempre vem do site: não há como subir um à mão, e nem
+           precisa — quando ele falta, o domínio serve de reserva. */
+        icon_url: d?.icon_url ?? f.icon_url,
       }));
       if (!d?.leu)
         setErro(
@@ -354,7 +367,12 @@ export default function ReferenciasPage() {
     if (editando) {
       const { data, error } = await supabase
         .from("referencias")
-        .update({ ...dados, image_url: form.image_url || null, image_own: form.image_own })
+        .update({
+          ...dados,
+          image_url: form.image_url || null,
+          icon_url: form.icon_url || null,
+          image_own: form.image_own,
+        })
         .eq("id", editando.id)
         .select("id")
         .maybeSingle();
@@ -373,6 +391,7 @@ export default function ReferenciasPage() {
           ...dados,
           user_id: uid,
           image_url: form.image_url || null,
+          icon_url: form.icon_url || null,
           image_own: form.image_own,
         })
         .select("id")
@@ -569,19 +588,30 @@ export default function ReferenciasPage() {
                   className="entra group flex items-center gap-2.5 py-2"
                   style={{ "--i": i } as React.CSSProperties}
                 >
-                  {/* Miniatura pequena e quadrada: aqui ela é reconhecimento,
-                      não conteúdo. */}
-                  <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-[9px] bg-ink-800">
-                    {r.image_url && !quebradas[r.id] ? (
+                  {/*
+                    O logo do site, não o banner.
+                    
+                    O banner recortado em 32px entrega um pedaço do meio de um
+                    print, que não identifica nada. `contain` e não `cover`
+                    porque logo cortado deixa de ser logo.
+                    
+                    Três degraus: o ícone que o site declara, o /favicon.ico do
+                    domínio, e a bússola. Ver `iconeDaLista`.
+                  */}
+                  <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-[9px] bg-white ring-1 ring-line-soft">
+                    {iconeDaLista(r, quebradas[r.id]) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        src={r.image_url}
+                        src={iconeDaLista(r, quebradas[r.id])!}
                         alt=""
                         loading="lazy"
                         onError={() =>
-                          setQuebradas((q) => ({ ...q, [r.id]: true }))
+                          setQuebradas((q) => ({
+                            ...q,
+                            [r.id]: (q[r.id] ?? 0) + 1,
+                          }))
                         }
-                        className="h-full w-full object-cover"
+                        className="h-[22px] w-[22px] object-contain"
                       />
                     ) : (
                       <Compass size={14} className="text-brand-400/60" />
@@ -722,7 +752,7 @@ export default function ReferenciasPage() {
                     decoding="async"
                     /* Falhou? Cai no ícone, como um cartão sem imagem. */
                     onError={() =>
-                      setQuebradas((q) => ({ ...q, [r.id]: true }))
+                      setQuebradas((q) => ({ ...q, [r.id]: (q[r.id] ?? 0) + 1 }))
                     }
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                   />
@@ -1007,6 +1037,28 @@ export default function ReferenciasPage() {
 }
 
 /**
+ * O ícone da linha, no degrau em que estamos.
+ *
+ * Três fontes, tentadas em ordem, porque nenhuma cobre todos os sites —
+ * medido em sete: cinco declaram ícone no HTML, cinco servem `/favicon.ico`,
+ * e as duas listas não são a mesma. O Behance declara e não serve; o
+ * land-book serve e não deixa ler a página.
+ *
+ * `falhas` é quantas já quebraram neste link. Devolver null é a bússola.
+ */
+function iconeDaLista(r: Referencia, falhas = 0): string | null {
+  if (falhas === 0 && r.icon_url) return r.icon_url;
+  if (falhas <= 1) {
+    try {
+      return `https://${new URL(r.url).hostname}/favicon.ico`;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Recado de erro do banco.
  *
  * Dois casos merecem texto próprio: a tabela que ainda não existe (é um arquivo
@@ -1016,6 +1068,8 @@ export default function ReferenciasPage() {
 const recadoDoBanco = (e: { code?: string; message: string }) => {
   /* PGRST204 nesta coluna é a migração do site de busca ainda pendente — um
      arquivo para rodar, não um defeito. */
+  if (/icon_url/.test(e.message))
+    return "O ícone do site precisa de supabase/ICONE-DO-SITE.sql no banco. Rode o arquivo e recarregue.";
   if (/busca/.test(e.message))
     return "A lista de sites de busca precisa de supabase/SITE-DE-BUSCA.sql no banco. Rode o arquivo e recarregue.";
   if (e.code === "PGRST205" || semTabela(e.message))
