@@ -184,7 +184,13 @@ export default function ReferenciasPage() {
 
   React.useEffect(() => {
     const faltando = rows.filter(
-      (r) => r.busca && !r.icon_url && !tentados.current.has(r.id)
+      (r) =>
+        r.busca &&
+        !r.icon_url &&
+        /* Quem já tem logo seu não precisa: ele vence o automático na tela, e
+           buscar um que nunca vai aparecer é ida de rede por nada. */
+        !(r.image_own && r.image_url) &&
+        !tentados.current.has(r.id)
     );
     if (!faltando.length) return;
 
@@ -981,29 +987,67 @@ export default function ReferenciasPage() {
 
           {(previa || form.image_url) && (
             <div className="overflow-hidden rounded-[14px] bg-ink-800">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={previa ?? form.image_url}
-                alt=""
-                className="aspect-video w-full object-cover"
-              />
-              <p className="px-3 py-2 text-[11px] text-fg-mute">
-                {previa
-                  ? "Imagem sua — entra no lugar da do site."
-                  : form.image_own
-                    ? "Imagem sua, já salva."
-                    : "Imagem do site, veio do link."}
-              </p>
+              {/*
+                A prévia imita onde a imagem vai aparecer.
+                
+                Site de busca usa a imagem como logo numa caixinha quadrada, com
+                `contain`; exemplo usa como banner 16:9, com `cover`. Mostrar
+                sempre o banner fazia a prévia prometer um enquadramento e a
+                lista entregar outro.
+              */}
+              {form.busca ? (
+                <div className="flex items-center gap-3 p-3">
+                  <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[11px] bg-white ring-1 ring-line-soft">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={previa ?? form.image_url}
+                      alt=""
+                      className="h-9 w-9 object-contain"
+                    />
+                  </span>
+                  <span className="text-[11px] text-fg-mute">
+                    {previa
+                      ? "Logo seu — é o que a lista vai mostrar."
+                      : form.image_own
+                        ? "Logo seu, já salvo."
+                        : "Imagem do site. Suba um logo se preferir."}
+                  </span>
+                </div>
+              ) : (
+                <>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previa ?? form.image_url}
+                    alt=""
+                    className="aspect-video w-full object-cover"
+                  />
+                  <p className="px-3 py-2 text-[11px] text-fg-mute">
+                    {previa
+                      ? "Imagem sua — entra no lugar da do site."
+                      : form.image_own
+                        ? "Imagem sua, já salva."
+                        : "Imagem do site, veio do link."}
+                  </p>
+                </>
+              )}
             </div>
           )}
 
           <Field
-            label="Imagem própria"
-            hint="Para os sites que bloqueiam a leitura, como o Dribbble. JPG, PNG ou WebP, até 3 MB."
+            label={form.busca ? "Logo próprio" : "Imagem própria"}
+            hint={
+              form.busca
+                ? "Aparece na lista Onde buscar, no lugar do logo do site. JPG, PNG ou WebP, até 3 MB."
+                : "Para os sites que bloqueiam a leitura, como o Dribbble. JPG, PNG ou WebP, até 3 MB."
+            }
           >
             <label className="flex h-10 cursor-pointer items-center gap-2 rounded-[14px] border border-line bg-white px-3.5 text-[12.5px] text-fg-mute transition-colors hover:border-brand-400 hover:text-fg-dim">
               <ImagePlus size={15} />
-              {arquivo ? arquivo.name : "Escolher arquivo"}
+              {arquivo
+                ? arquivo.name
+                : form.busca
+                  ? "Escolher logo"
+                  : "Escolher arquivo"}
               <input
                 type="file"
                 accept={TIPOS_IMAGEM.join(",")}
@@ -1135,7 +1179,21 @@ function iconeDaLista(r: Referencia, falhas = 0): string | null {
   } catch {
     doDominio = null;
   }
-  const fontes = [r.icon_url, doDominio].filter(Boolean) as string[];
+
+  const fontes = [
+    /*
+     * A imagem que você subiu vem primeiro.
+     *
+     * Ela mora em `image_url` com `image_own`, e a lista só olhava `icon_url` —
+     * então subir um logo para um site de busca não mudava nada na tela. Uma
+     * escolha explícita tem que vencer qualquer coisa automática; era o
+     * contrário, e por isso a imagem enviada não aparecia.
+     */
+    r.image_own ? r.image_url : null,
+    r.icon_url,
+    doDominio,
+  ].filter(Boolean) as string[];
+
   return fontes[falhas] ?? null;
 }
 
