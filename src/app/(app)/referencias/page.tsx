@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import {
+  Compass,
   ExternalLink,
   FolderOpen,
   ImagePlus,
@@ -75,6 +76,7 @@ const vazio = () => ({
   description: "",
   image_url: "",
   image_own: false,
+  busca: false,
   notes: "",
   colecoes: [] as string[],
 });
@@ -173,7 +175,25 @@ export default function ReferenciasPage() {
     return m;
   }, [colecoes]);
 
+  /*
+   * Contagem por coleção — contando só o que a parede mostra.
+   *
+   * Um site de busca que também esteja numa coleção faria a pastilha dizer
+   * "3" e a parede mostrar dois, porque ele não está lá.
+   */
   const usos = React.useMemo(() => {
+    const naParede = new Set(rows.filter((r) => !r.busca).map((r) => r.id));
+    const m: Record<string, number> = {};
+    ligacoes.forEach((x) => {
+      if (naParede.has(x.referencia_id))
+        m[x.colecao_id] = (m[x.colecao_id] ?? 0) + 1;
+    });
+    return m;
+  }, [ligacoes, rows]);
+
+  /* O gerenciador de coleções conta tudo, inclusive site de busca: lá a
+     pergunta é "quantos links perdem esta coleção se eu apagar". */
+  const usosTotais = React.useMemo(() => {
     const m: Record<string, number> = {};
     ligacoes.forEach((x) => {
       m[x.colecao_id] = (m[x.colecao_id] ?? 0) + 1;
@@ -181,12 +201,27 @@ export default function ReferenciasPage() {
     return m;
   }, [ligacoes]);
 
+  /*
+   * Os sites de busca saem da parede e ganham faixa própria.
+   *
+   * São de natureza diferente do resto: o site de busca se abre para procurar,
+   * e o exemplo guardado se abre para comparar. Um quadro grande com a capa do
+   * Dribbble não ajuda a garimpar — o que se quer dele é o nome e o clique.
+   * Por isso lista em cima, e quadros embaixo.
+   */
+  const sitesDeBusca = React.useMemo(
+    () => rows.filter((r) => r.busca),
+    [rows]
+  );
+
+  const exemplos = React.useMemo(() => rows.filter((r) => !r.busca), [rows]);
+
   const lista = React.useMemo(
     () =>
       filtro === "all"
-        ? rows
-        : rows.filter((r) => (doLink.get(r.id) ?? []).includes(filtro)),
-    [rows, filtro, doLink]
+        ? exemplos
+        : exemplos.filter((r) => (doLink.get(r.id) ?? []).includes(filtro)),
+    [exemplos, filtro, doLink]
   );
 
   /* ------------------------------ formulário ------------------------------ */
@@ -201,6 +236,7 @@ export default function ReferenciasPage() {
             description: r.description ?? "",
             image_url: r.image_url ?? "",
             image_own: r.image_own,
+            busca: r.busca,
             notes: r.notes ?? "",
             colecoes: doLink.get(r.id) ?? [],
           }
@@ -311,6 +347,7 @@ export default function ReferenciasPage() {
       name,
       description: form.description.trim() || null,
       notes: form.notes.trim() || null,
+      busca: form.busca,
     };
 
     let id = editando?.id ?? "";
@@ -505,7 +542,102 @@ export default function ReferenciasPage() {
         </Card>
       )}
 
-      {colecoes.length > 0 && (
+      {/* ------------------------- sites de busca ------------------------- */}
+      {/*
+        Fixa e em lista, acima de tudo.
+        
+        Não é filtro nem coleção: é o lugar onde se começa. Uma coleção
+        chamada "Sites de busca" teria que ser escolhida antes de aparecer, e
+        o gesto aqui é o contrário — abrir o app e clicar no site para
+        garimpar. Em lista porque de um site de busca se quer o nome e o
+        clique, não a capa: uma parede de quadros grandes atrasa o mesmo
+        gesto.
+      */}
+      {sitesDeBusca.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
+            Onde buscar
+            <span className="ml-1.5 normal-case text-fg-mute/70">
+              · {sitesDeBusca.length}
+            </span>
+          </h2>
+          <Card className="px-3 sm:px-4">
+            <ul className="divide-y divide-line-soft">
+              {sitesDeBusca.map((r, i) => (
+                <li
+                  key={r.id}
+                  className="entra group flex items-center gap-2.5 py-2"
+                  style={{ "--i": i } as React.CSSProperties}
+                >
+                  {/* Miniatura pequena e quadrada: aqui ela é reconhecimento,
+                      não conteúdo. */}
+                  <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-[9px] bg-ink-800">
+                    {r.image_url && !quebradas[r.id] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.image_url}
+                        alt=""
+                        loading="lazy"
+                        onError={() =>
+                          setQuebradas((q) => ({ ...q, [r.id]: true }))
+                        }
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <Compass size={14} className="text-brand-400/60" />
+                    )}
+                  </span>
+
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={[r.name, r.url, r.notes].filter(Boolean).join("\n")}
+                    className="min-w-0 flex-1"
+                  >
+                    <span className="block truncate text-[12.5px] font-semibold leading-tight hover:text-brand-400">
+                      {r.name}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[10px] text-fg-mute">
+                      {r.notes || dominioDe(r.url)}
+                    </span>
+                  </a>
+
+                  <span className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Abrir ${r.name}`}
+                      className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-brand-500/15 hover:text-brand-400"
+                    >
+                      <ExternalLink size={13} />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => abrir(r)}
+                      aria-label={`Editar ${r.name}`}
+                      className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-ink-750 hover:text-fg"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remover(r)}
+                      aria-label={`Tirar ${r.name}`}
+                      className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
+      )}
+
+      {colecoes.length > 0 && exemplos.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -513,7 +645,7 @@ export default function ReferenciasPage() {
             className={pilula(filtro === "all")}
           >
             Todas
-            <span className="ml-1.5 opacity-60 tnum">{rows.length}</span>
+            <span className="ml-1.5 opacity-60 tnum">{exemplos.length}</span>
           </button>
           {colecoes.map((c) => (
             <button
@@ -783,6 +915,30 @@ export default function ReferenciasPage() {
             />
           </Field>
 
+          {/*
+            Logo abaixo do nome, e antes das coleções, porque a resposta muda
+            o que vem depois: site de busca vai para a lista fixa do topo e
+            não entra em coleção nenhuma.
+          */}
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-[14px] bg-ink-800 p-3">
+            <input
+              type="checkbox"
+              checked={form.busca}
+              onChange={(e) => setForm({ ...form, busca: e.target.checked })}
+              className="mt-[2px] h-4 w-4 shrink-0 accent-[var(--color-brand-500)]"
+            />
+            <span className="min-w-0">
+              <span className="block text-[12.5px] font-semibold">
+                É um site para buscar referência
+              </span>
+              <span className="mt-0.5 block text-[11px] text-fg-mute">
+                Dribbble, Mobbin, Awwwards — lugar onde você garimpa. Vai para a
+                lista <b>Onde buscar</b>, no topo, em vez da parede de quadros.
+              </span>
+            </span>
+          </label>
+
+          {!form.busca && (
           <Field label="Coleções" hint="Pode marcar mais de uma. Crie novas no botão Coleções.">
             {colecoes.length === 0 ? (
               <p className="text-[11.5px] text-fg-mute">
@@ -813,15 +969,23 @@ export default function ReferenciasPage() {
               </div>
             )}
           </Field>
+          )}
 
           {/* O motivo de estar salvo. É isto que faz a parede continuar
               dizendo alguma coisa daqui a três meses. */}
-          <Field label="Por que salvei" hint="Opcional">
+          <Field
+            label={form.busca ? "O que se acha aqui" : "Por que salvei"}
+            hint="Opcional"
+          >
             <Textarea
               rows={2}
               value={form.notes}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="O hero com vídeo de fundo e o preço em três colunas"
+              placeholder={
+                form.busca
+                  ? "Padrões de app mobile, telas reais de produto"
+                  : "O hero com vídeo de fundo e o preço em três colunas"
+              }
             />
           </Field>
         </div>
@@ -833,7 +997,7 @@ export default function ReferenciasPage() {
         supabase={supabase}
         colecoes={colecoes}
         onMudou={load}
-        usos={usos}
+        usos={usosTotais}
       />
 
       {confirm.node}
@@ -850,6 +1014,10 @@ export default function ReferenciasPage() {
  * sem tradução chegaria como "duplicate key value".
  */
 const recadoDoBanco = (e: { code?: string; message: string }) => {
+  /* PGRST204 nesta coluna é a migração do site de busca ainda pendente — um
+     arquivo para rodar, não um defeito. */
+  if (/busca/.test(e.message))
+    return "A lista de sites de busca precisa de supabase/SITE-DE-BUSCA.sql no banco. Rode o arquivo e recarregue.";
   if (e.code === "PGRST205" || semTabela(e.message))
     return "As referências precisam de supabase/REFERENCIAS.sql no banco. Rode o arquivo e recarregue.";
   if (e.code === "23505" || /duplicate|unique/i.test(e.message))

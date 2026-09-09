@@ -431,6 +431,15 @@ export type Referencia = {
   description: string | null;
   image_url: string | null;
   image_own: boolean;
+  /**
+   * É um site onde se procura referência, e não um exemplo guardado?
+   *
+   * Coluna, e não coleção, porque o app mostra os dois de formas diferentes —
+   * lista fixa no topo contra parede de quadros. Se dependesse de uma coleção
+   * chamada "Sites de busca", renomeá-la faria a seção sumir sem explicação.
+   * Ver SITE-DE-BUSCA.sql.
+   */
+  busca: boolean;
   /** Por que você salvou. Sem isso, uma parede de prints não diz mais nada. */
   notes: string | null;
   created_at: string;
