@@ -47,10 +47,12 @@ create unique index if not exists colecoes_nome_unico
 -- ----------------------------- referências -----------------------------
 --
 -- `name`, `description` e `image_url` vêm das metatags do site quando ele
--- responde, e podem ser trocados à mão quando não responde — Dribbble,
--- Behance e Pinterest costumam bloquear a leitura. `image_own` marca a
--- imagem que você subiu, para uma releitura do link não sobrescrever a
--- escolha que você fez.
+-- responde, e podem ser trocados à mão quando não responde. Medido numa
+-- rodada de dez sites: Behance, Pinterest, Mobbin, Awwwards, Stripe,
+-- Linear, Vercel e Tailwind respondem; o Dribbble devolve 202 sem tag
+-- nenhuma, e o land-book responde 403 com o desafio do Cloudflare.
+-- `image_own` marca a imagem que você subiu, para uma releitura do link
+-- não sobrescrever a escolha que você fez.
 create table if not exists public.referencias (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
