@@ -11,6 +11,7 @@ import {
   ListChecks,
   Repeat2,
   LayoutDashboard,
+  Library,
   LogOut,
   Menu,
   StickyNote,
@@ -37,6 +38,7 @@ const NAV = [
   { href: "/leitura", label: "Leitura", icon: BookOpen },
   { href: "/aulas", label: "Aulas", icon: GraduationCap },
   { href: "/contas", label: "Contas a pagar", icon: Wallet },
+  { href: "/referencias", label: "Referências", icon: Library },
   { href: "/anotacoes", label: "Anotações", icon: StickyNote },
   { href: "/calendario", label: "Calendário", icon: CalendarDays },
 ];

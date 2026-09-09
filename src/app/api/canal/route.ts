@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { idDoVideo, normalizarUrl } from "@/lib/aulas";
-import { htmlAte, metatag } from "@/lib/paginaYoutube";
+import { htmlAte, metatag } from "@/lib/paginaRemota";
 
 /**
  * Nome e foto de um canal do YouTube, a partir do link.

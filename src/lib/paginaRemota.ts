@@ -1,34 +1,40 @@
 /**
- * Leitura da própria página do YouTube, do lado do servidor.
+ * Leitura de uma página de outro site, do lado do servidor.
  *
- * Existe porque o oEmbed público entrega título, canal e capa mas **não
- * entrega a duração** — e a duração é o único jeito de a barra de "onde parei"
- * ter um fim. A YouTube Data API entrega, mas exige chave, e ficar sem o
- * recurso enquanto não há chave configurada seria deixar de fazer o que dá
- * para fazer.
+ * Serve três coisas hoje: a duração de um vídeo do YouTube, o nome e a foto de
+ * um canal, e o nome, a descrição e a imagem de qualquer site salvo como
+ * referência. Nos três casos o dado está no HTML que o navegador receberia —
+ * `"lengthSeconds"` no vídeo, metatags `og:` no resto —, e em nenhum deles
+ * existe API pública que responda sem chave.
  *
- * A página do vídeo traz o número em `"lengthSeconds"`, e a do canal traz nome
- * e foto nas metatags `og:`. Nada disso é API publicada: é a página que o
- * navegador recebe. Se o YouTube mudar o formato, quem chama trata como "não
- * consegui" e a pessoa digita — nenhum cadastro depende disto para acontecer.
+ * Nada disso é contrato publicado. Se um site mudar o formato, quem chama
+ * trata como "não consegui" e a pessoa digita: nenhum cadastro depende desta
+ * leitura para acontecer.
  *
  * Só roda no servidor: o navegador não consegue ler outro domínio (CORS), e
  * mesmo que conseguisse, baixar a página inteira no aparelho de alguém para
  * pegar um número seria pior que perguntar.
  */
 
-/* Chrome de Android: a página móvel do YouTube tem o mesmo dado em pouco mais
-   da metade dos bytes da página de desktop (medido: 736 kB contra 1,29 MB). */
-const UA =
+/**
+ * Chrome de Android.
+ *
+ * Escolhido pelo YouTube, onde a página móvel traz o mesmo dado em pouco mais
+ * da metade dos bytes da de desktop (medido: 736 kB contra 1,29 MB). Serve de
+ * padrão para o resto: site que trata visitante de celular diferente costuma
+ * mandar a versão mais leve, e as metatags `og:` são as mesmas nas duas.
+ */
+const UA_PADRAO =
   "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) " +
   "Chrome/125.0.0.0 Mobile Safari/537.36";
 
 /**
  * Teto de leitura.
  *
- * O que interessa aparece por volta dos 600–700 kB, e a página toda tem cerca
- * de 740 kB. O teto está aí para um endereço que responda um fluxo sem fim não
- * virar uma leitura sem fim.
+ * No YouTube o que interessa aparece por volta dos 600–700 kB, e a página toda
+ * tem cerca de 740 kB. Em site comum as metatags estão nos primeiros kB. O teto
+ * está aí para um endereço que responda um fluxo sem fim não virar uma leitura
+ * sem fim.
  */
 const TETO_BYTES = 1_600_000;
 
@@ -47,16 +53,18 @@ const TEMPO_LIMITE_MS = 8_000;
  */
 export async function htmlAte(
   url: string,
-  pronto: (html: string) => boolean
+  pronto: (html: string) => boolean,
+  opcoes: { teto?: number } = {}
 ): Promise<string | null> {
   const corte = new AbortController();
   const relogio = setTimeout(() => corte.abort(), TEMPO_LIMITE_MS);
+  const teto = opcoes.teto ?? TETO_BYTES;
 
   try {
     const r = await fetch(url, {
       signal: corte.signal,
       headers: {
-        "user-agent": UA,
+        "user-agent": UA_PADRAO,
         "accept-language": "pt-BR,pt;q=0.9,en;q=0.8",
       },
       /* A duração de um vídeo não muda, e o nome de um canal quase nunca. Um
@@ -78,7 +86,7 @@ export async function htmlAte(
         bytes += value.byteLength;
         html += decodificador.decode(value, { stream: true });
         if (pronto(html)) break;
-        if (bytes > TETO_BYTES) break;
+        if (bytes > teto) break;
       }
     } finally {
       /* Cancela o resto do fluxo. Sem isto a conexão ficaria aberta baixando

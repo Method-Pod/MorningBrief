@@ -373,6 +373,53 @@ export type Channel = {
   created_at: string;
 };
 
+/* ------------------------------ referências ------------------------------ */
+
+/**
+ * Coleção de referências.
+ *
+ * Separada de [Subject] de propósito: assunto responde "sobre o que é"
+ * (Design, IA) e serve às aulas e aos canais; coleção responde "para que
+ * serve" (Landing page, Dashboard, Sites de busca). Misturar as duas faria
+ * "landing page" aparecer no filtro das Aulas, onde não diz nada.
+ */
+export type Colecao = {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+};
+
+/**
+ * Um link salvo.
+ *
+ * `name`, `description` e `image_url` vêm das metatags do site quando ele
+ * responde. `image_own` marca a imagem que você subiu à mão — é o que impede
+ * uma releitura do link de sobrescrever a escolha que você fez, no caso dos
+ * sites que bloqueiam a leitura.
+ */
+export type Referencia = {
+  id: string;
+  user_id: string;
+  url: string;
+  name: string;
+  description: string | null;
+  image_url: string | null;
+  image_own: boolean;
+  /** Por que você salvou. Sem isso, uma parede de prints não diz mais nada. */
+  notes: string | null;
+  created_at: string;
+};
+
+/** A ligação. Um link pode estar em várias coleções ao mesmo tempo. */
+export type ReferenciaColecao = {
+  referencia_id: string;
+  colecao_id: string;
+  user_id: string;
+};
+
+export const BUCKET_REFERENCIAS = "referencias";
+
 /**
  * Etiqueta de assunto.
  *

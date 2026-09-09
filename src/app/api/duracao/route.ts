@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { idDoVideo, segundosDaDuracao } from "@/lib/aulas";
-import { htmlAte, metatag } from "@/lib/paginaYoutube";
+import { htmlAte, metatag } from "@/lib/paginaRemota";
 
 /**
  * Duração de um vídeo do YouTube, a partir do link.

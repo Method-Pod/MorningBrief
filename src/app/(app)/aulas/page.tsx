@@ -97,19 +97,24 @@ function MiniaturaAula({
   url,
   fonte,
   feita,
+  className,
 }: {
   url: string | null;
   fonte: FonteAula;
   feita: boolean;
+  /* O tamanho e a posição vêm de fora: no telefone a capa é a faixa de cima
+     do cartão, no desktop é a miniatura ao lado do texto. */
+  className?: string;
 }) {
   const Icone = ICONE[fonte];
   return (
     <span
       className={cx(
-        "relative block aspect-video w-[76px] shrink-0 overflow-hidden rounded-[10px] bg-ink-800 sm:w-[104px]",
+        "relative block shrink-0 overflow-hidden bg-ink-800",
         /* Aula vista fica apagada, como o título riscado: a linha inteira
            precisa dizer "já foi", não só o texto. */
-        feita && "opacity-55"
+        feita && "opacity-55",
+        className
       )}
     >
       {url ? (
@@ -1395,9 +1400,19 @@ export default function AulasPage() {
                 const Icone = ICONE[l.fonte];
                 const pct = pctAssistido(l);
                 return (
+                  /*
+                    No telefone a capa sobe para o topo; no desktop nada muda.
+                    
+                    Feito com `flex-wrap` e `order`, e não com duas árvores de
+                    JSX: duplicar a linha para "versão telefone" e "versão
+                    desktop" dobraria cada conserto futuro, e o React montaria
+                    as duas para esconder uma. Aqui a capa é `w-full` e quebra
+                    a linha sozinha; a caixa de marcar e o texto dividem a
+                    segunda. No `sm` o `nowrap` desfaz tudo.
+                  */
                   <li
                     key={l.id}
-                    className="entra group flex items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800/40 sm:gap-3.5 sm:px-5"
+                    className="entra group flex flex-wrap items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800/40 sm:flex-nowrap sm:gap-3.5 sm:px-5"
                     style={{ "--i": i } as React.CSSProperties}
                   >
                     <button
@@ -1407,7 +1422,7 @@ export default function AulasPage() {
                       aria-label={`${l.feita ? "Desmarcar" : "Marcar"} ${l.title}`}
                       aria-pressed={l.feita}
                       className={cx(
-                        "mt-[3px] grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-[180ms] disabled:opacity-50",
+                        "order-2 mt-[3px] grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-[180ms] disabled:opacity-50 sm:order-none",
                         l.feita
                           ? "border-pos bg-pos text-white"
                           : "border-line bg-white hover:border-brand-400"
@@ -1427,9 +1442,12 @@ export default function AulasPage() {
                       url={l.thumb_url}
                       fonte={l.fonte}
                       feita={l.feita}
+                      /* 3:2 e largura cheia no telefone; a miniatura 16:9 de
+                         sempre a partir do `sm`. */
+                      className="order-1 aspect-[3/2] w-full rounded-xl sm:order-none sm:aspect-video sm:w-[104px] sm:rounded-[10px]"
                     />
 
-                    <div className="min-w-0 flex-1 py-0.5">
+                    <div className="order-3 min-w-0 flex-1 py-0.5 sm:order-none">
                       <p
                         className={cx(
                           "text-[13.5px] font-semibold leading-snug",
@@ -1541,7 +1559,7 @@ export default function AulasPage() {
                       type="button"
                       onClick={() => removerAula(l)}
                       aria-label={`Tirar ${l.title} da lista`}
-                      className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+                      className="order-4 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg sm:order-none lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
                     >
                       <Trash2 size={14} />
                     </button>
