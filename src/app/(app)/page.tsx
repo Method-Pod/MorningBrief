@@ -6,7 +6,6 @@ import {
   AlertCircle,
   BookOpen,
   Library,
-  CalendarClock,
   CalendarDays,
   CheckCircle2,
   ListChecks,
@@ -22,7 +21,6 @@ import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import type { Bill, CalendarEvent, Note, RecurringTask, Task } from "@/lib/types";
-import { STATUS_LABEL, type TaskStatus } from "@/lib/types";
 import {
   brl,
   dateBR,
@@ -82,12 +80,6 @@ const PRIO_DOT: Record<string, string> = {
   low: "bg-ink-600",
 };
 const PRIO_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
-const STATUS_DOT: Record<TaskStatus, string> = {
-  todo: "bg-ink-600",
-  doing: "bg-brand-500",
-  review: "bg-warn",
-  done: "bg-pos",
-};
 const NOTE_HEX: Record<string, string> = {
   blue: "#2563a8",
   violet: "#6d5bd0",
@@ -338,26 +330,6 @@ export default function HomePage() {
             PRIO_RANK[a.priority] - PRIO_RANK[b.priority]
         ),
 
-      /*
-       * O que "O que vem" mostra: todas as demandas abertas.
-       *
-       * Cheguei a filtrar só o que vence depois de hoje, para cada demanda
-       * aparecer num lugar só — mas ele pediu a lista inteira aqui, e é ele
-       * que olha isso toda manhã. "Hoje" continua sendo o recorte do dia;
-       * este cartão é o quadro completo.
-       *
-       * Sem corte de quantidade, e por isso a ordem importa: atrasado
-       * primeiro, depois por prioridade, e o prazo mais próximo à frente.
-       */
-      todas: open.slice().sort((a, b) => {
-        const atrasoA = a.due_date && daysUntil(a.due_date) < 0 ? 0 : 1;
-        const atrasoB = b.due_date && daysUntil(b.due_date) < 0 ? 0 : 1;
-        return (
-          atrasoA - atrasoB ||
-          PRIO_RANK[a.priority] - PRIO_RANK[b.priority] ||
-          (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999")
-        );
-      }),
     };
   }, [tasks, bills, recurring, events, notes, today]);
 
@@ -556,71 +528,13 @@ export default function HomePage() {
       </div>
 
       {/* ------------------------ demandas + notas ------------------------ */}
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
-        <Card>
-          <Head icon={<CalendarClock size={14} />} title="O que vem" href="/demandas" link="ver quadro" />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <div className="mb-3 flex flex-wrap gap-2">
-              {(["todo", "doing", "review"] as TaskStatus[]).map((s) => (
-                <span
-                  key={s}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-ink-800 px-2 py-0.5 text-[11px] font-semibold text-fg-dim"
-                >
-                  <i className={cx("h-[7px] w-[7px] rounded-full", STATUS_DOT[s])} />
-                  {STATUS_LABEL[s]}
-                  <b className="tnum">{tasks.filter((t) => t.status === s).length}</b>
-                </span>
-              ))}
-              {/* A contagem de atrasadas saiu: ela vive na faixa do topo, e
-                  repetida aqui era a terceira aparição do mesmo número. */}
-            </div>
-            <div className="flex flex-col">
-              {m.todas.length === 0 ? (
-                <Ghost>Nenhuma demanda aberta.</Ghost>
-              ) : (
-                m.todas.map((t) => (
-                    <Row key={t.id}>
-                      <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", PRIO_DOT[t.priority])} />
-                      <span className="min-w-0 flex-1 text-sm font-medium">
-                        <span className="block truncate">{t.title}</span>
-                        <span className="mt-0.5 block text-[11.5px] font-normal text-fg-mute">
-                          {STATUS_LABEL[t.status]}
-                          {t.client && ` · ${t.client}`}
-                        </span>
-                      </span>
-                      {/*
-                        Prazo à direita, e "sem prazo" escrito.
-                        
-                        Sem prazo é informação, não ausência dela: a demanda
-                        sem data é justamente a que some de vista. Vermelho no
-                        que passou, porque a lista inteira cabe aqui e o olho
-                        precisa de onde parar.
-                      */}
-                      <span
-                        className={cx(
-                          "shrink-0 text-[11.5px] font-semibold tnum",
-                          !t.due_date
-                            ? "text-fg-mute/60"
-                            : daysUntil(t.due_date) < 0
-                              ? "text-neg"
-                              : t.due_date.slice(0, 10) === today
-                                ? "text-fg-dim"
-                                : "text-fg-mute"
-                        )}
-                      >
-                        {!t.due_date
-                          ? "sem prazo"
-                          : t.due_date.slice(0, 10) === today
-                            ? "hoje"
-                            : dateBR(t.due_date).slice(0, 5)}
-                      </span>
-                    </Row>
-                  ))
-              )}
-            </div>
-          </div>
-        </Card>
-
+      {/*
+        Anotações sozinha na faixa, largura cheia.
+        
+        Ela dividia esta linha com "O que vem", que saiu. Deixá-la na grade de
+        duas colunas faria o cartão ocupar 60% da linha e o resto ficar vazio.
+      */}
+      <div className="mt-4">
         <Card>
           <Head icon={<StickyIcon />} title="Anotações" href="/anotacoes" link="escrever" />
           <div className="px-[18px] pb-[18px] pt-3">
