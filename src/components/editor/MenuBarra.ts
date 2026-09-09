@@ -99,26 +99,27 @@ export const MenuBarra = Extension.create<OpcoesMenuBarra>({
         command: ({ editor: ed, range, props }) => props.rodar(ed, range),
 
         render: () => {
-          const guardar = (
-            lista: ItemMenu[],
-            r: Range,
-            rect: DOMRect | null | undefined
-          ) => {
+          const guardar = (lista: ItemMenu[], r: Range) => {
             itens = lista;
             faixa = r;
             /* O índice volta ao começo quando a lista muda: manter o terceiro
                selecionado depois de filtrar apontaria para outro item. */
             indice = 0;
-            if (rect) pos = { x: rect.left, y: rect.bottom };
+            /*
+             * A âncora vem do `coordsAtPos` do próprio editor, e não do
+             * `clientRect` do plugin: aquele devolve o retângulo de todo o
+             * trecho casado ("/dest"), então o menu nascia deslocado para a
+             * direita à medida que se digitava. Aqui é o "/" exato.
+             */
+            const c = editor.view.coordsAtPos(r.from);
+            pos = { x: c.left, y: c.bottom };
             avisar();
           };
 
           return {
-            onStart: (props) =>
-              guardar(props.items, props.range, props.clientRect?.()),
+            onStart: (props) => guardar(props.items, props.range),
 
-            onUpdate: (props) =>
-              guardar(props.items, props.range, props.clientRect?.()),
+            onUpdate: (props) => guardar(props.items, props.range),
 
             onKeyDown: ({ event }) => {
               if (!itens.length) return false;

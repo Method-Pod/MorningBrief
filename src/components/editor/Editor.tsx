@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { EditorContent, useEditor, type Editor as TEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
@@ -178,6 +179,10 @@ export function Editor({
   onGravando?: (pendente: boolean) => void;
 }) {
   const [menu, setMenu] = React.useState<EstadoMenu>(null);
+  /* Portal só depois de montar: `document` não existe na renderização do
+     servidor. Mesmo cuidado do Modal e do aviso em ui.tsx. */
+  const [montado, setMontado] = React.useState(false);
+  React.useEffect(() => setMontado(true), []);
   const relogio = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /*
@@ -484,10 +489,18 @@ export function Editor({
       <EditorContent editor={editor} />
 
       {/* ------------------------------ menu do "/" ------------------------------ */}
-      {menu && (
+      {/*
+        Num portal no fim do `body`, pelo mesmo motivo do Modal e do aviso: a
+        animação `rise` da página aplica um `transform`, e um ancestral com
+        transform vira o bloco de referência de `position: fixed`. Medido antes
+        do portal: pedi `top: 253px` e o navegador pôs em 343px.
+      */}
+      {menu &&
+        montado &&
+        createPortal(
         <div
-          /* `fixed` porque a coordenada vem do `clientRect` do "/", que é
-             relativa à janela — e a caixa do editor rola. */
+          /* `fixed` porque a coordenada vem do `coordsAtPos`, que é relativa à
+             janela — e a caixa do editor rola. */
           className="fixed z-50 max-h-[300px] w-[248px] overflow-y-auto rounded-[16px] border border-line bg-white p-1.5 shadow-[0_12px_32px_-8px_rgb(20_24_26/0.25)]"
           style={{ left: menu.x, top: menu.y + 6 }}
         >
@@ -529,8 +542,9 @@ export function Editor({
               </button>
             );
           })}
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </div>
   );
 }
