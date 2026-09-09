@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { RegistroApp } from "@/components/RegistroApp";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -30,6 +31,41 @@ export const metadata: Metadata = {
   },
   description: DESC,
   applicationName: "Morning Brief",
+  /*
+   * O manifest é o arquivo que faz o navegador oferecer "Instalar" em vez de
+   * "adicionar atalho". O Next já injeta o <link> por existir o
+   * src/app/manifest.ts; declarar aqui é para o caminho ficar visível a quem
+   * lê este arquivo, e não uma segunda etiqueta.
+   */
+  manifest: "/manifest.webmanifest",
+  /*
+   * O recado para o iPhone. A Apple ignora o `display: standalone` do
+   * manifest e exige a instrução em etiqueta própria — sem isto o app
+   * instalado abre dentro do Safari, com barra de endereço, que é o sintoma
+   * de "instalei e continua parecendo site".
+   *
+   * `title` é o rótulo debaixo do ícone no iOS, que não vem do manifest.
+   * `statusBarStyle: default` deixa o iOS pintar a barra de status com a cor
+   * do tema e escrever a hora em tinta escura; "black-translucent" jogaria o
+   * conteúdo para debaixo do relógio, e aí a primeira linha de cada tela
+   * ficaria escondida.
+   */
+  appleWebApp: {
+    capable: true,
+    title: "Brief",
+    statusBarStyle: "default",
+  },
+  /*
+   * A mesma instrução, no nome antigo. Medido: `capable: true` acima faz o
+   * Next escrever `mobile-web-app-capable`, que é o nome novo e padronizado —
+   * e é o único que ele escreve. O Safari do iPhone só passou a ler o
+   * `display: standalone` do manifest no iOS 17.4; antes disso, quem manda o
+   * app abrir em tela cheia é esta etiqueta com o nome antigo, e sem ela um
+   * iPhone que não atualizou abre o app dentro do Safari.
+   *
+   * As duas juntas não conflitam: cada navegador lê a que conhece.
+   */
+  other: { "apple-mobile-web-app-capable": "yes" },
   alternates: { canonical: "/" },
   robots: {
     index: false,
@@ -93,7 +129,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: ACCENT_BOOT }} />
       </head>
-      <body className="min-h-dvh font-sans antialiased">{children}</body>
+      <body className="min-h-dvh font-sans antialiased">
+        {children}
+        <RegistroApp />
+      </body>
     </html>
   );
 }

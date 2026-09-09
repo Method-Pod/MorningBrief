@@ -30,7 +30,28 @@ const cabecalhos = [
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   async headers() {
-    return [{ source: "/:path*", headers: cabecalhos }];
+    return [
+      { source: "/:path*", headers: cabecalhos },
+      /*
+       * O service worker nunca vem do cache.
+       *
+       * Ele é o arquivo que decide o que os outros podem guardar, então uma
+       * cópia velha dele é o pior tipo de cópia velha: o navegador seguiria
+       * uma regra que já foi corrigida, e não haveria como publicar a
+       * correção. O padrão de arquivo em /public é cacheável, e é justamente
+       * o que não serve aqui.
+       *
+       * A tela de sem-sinal sai pela mesma porta: quem a guarda é o service
+       * worker, no `install`, e um intermediário guardando por conta própria
+       * atrapalharia a troca dela numa publicação nova.
+       */
+      {
+        source: "/:arquivo(sw.js|offline.html)",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+        ],
+      },
+    ];
   },
 };
 
