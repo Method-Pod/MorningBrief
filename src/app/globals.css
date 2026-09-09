@@ -474,3 +474,244 @@ textarea::placeholder {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================ editor de anotações ============================ */
+
+/*
+ * O corpo da nota.
+ *
+ * Estilo escrito aqui, e não com classes utilitárias, porque o conteúdo é HTML
+ * que o editor gera: não há onde pendurar `className` num `<h2>` que nasce de
+ * um "/título 2". A largura de leitura fica em 68ch — passando disso o olho
+ * perde a linha na volta.
+ */
+.nota-corpo {
+  max-width: 68ch;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--color-fg-dim);
+  outline: none;
+}
+
+.nota-corpo > * + * {
+  margin-top: 0.7em;
+}
+
+.nota-corpo h1,
+.nota-corpo h2,
+.nota-corpo h3 {
+  color: var(--color-fg);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+.nota-corpo h1 {
+  font-size: 25px;
+  margin-top: 1.5em;
+}
+.nota-corpo h2 {
+  font-size: 20px;
+  margin-top: 1.4em;
+}
+.nota-corpo h3 {
+  font-size: 16.5px;
+  margin-top: 1.2em;
+}
+
+/* O primeiro bloco não empurra: a margem de topo serve para separar seções
+   dentro do texto, não para afastar o texto do título da página. */
+.nota-corpo > :first-child {
+  margin-top: 0;
+}
+
+.nota-corpo strong {
+  color: var(--color-fg);
+  font-weight: 650;
+}
+
+.nota-corpo a {
+  color: var(--color-brand-400);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.nota-corpo ul,
+.nota-corpo ol {
+  padding-left: 1.35em;
+}
+.nota-corpo ul {
+  list-style: disc;
+}
+.nota-corpo ol {
+  list-style: decimal;
+}
+.nota-corpo li::marker {
+  color: var(--color-fg-mute);
+}
+.nota-corpo li + li {
+  margin-top: 0.25em;
+}
+/* Lista dentro de lista não herda o disco do pai. */
+.nota-corpo ul ul {
+  list-style: circle;
+}
+
+.nota-corpo blockquote {
+  border-left: 2.5px solid var(--color-line);
+  padding-left: 0.9em;
+  color: var(--color-fg-mute);
+  font-style: italic;
+}
+
+.nota-corpo code {
+  background: var(--color-ink-800);
+  border: 1px solid var(--color-line-soft);
+  border-radius: 5px;
+  padding: 0.1em 0.35em;
+  font-size: 0.88em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.nota-corpo pre {
+  background: var(--color-ink-800);
+  border: 1px solid var(--color-line-soft);
+  border-radius: 12px;
+  padding: 0.85em 1em;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+}
+/* Dentro do bloco, o `code` não repete moldura nem fundo. */
+.nota-corpo pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+}
+
+.nota-corpo hr {
+  border: 0;
+  border-top: 1px solid var(--color-line);
+  margin: 1.6em 0;
+}
+
+/* ---------- lista de tarefas ---------- */
+
+.nota-corpo ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.nota-corpo ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55em;
+}
+
+.nota-corpo ul[data-type="taskList"] li > label {
+  /* Não encolhe e não estica: a caixa fica alinhada com a primeira linha do
+     texto mesmo quando o item tem três linhas. */
+  flex: 0 0 auto;
+  margin-top: 0.28em;
+  cursor: pointer;
+}
+
+.nota-corpo ul[data-type="taskList"] li > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.nota-corpo ul[data-type="taskList"] input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--color-line);
+  border-radius: 5px;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.nota-corpo ul[data-type="taskList"] input[type="checkbox"]:hover {
+  border-color: var(--color-brand-400);
+}
+
+.nota-corpo ul[data-type="taskList"] input[type="checkbox"]:checked {
+  background: var(--color-pos);
+  border-color: var(--color-pos);
+}
+
+/* O tique é desenhado com borda girada: sem SVG e sem fonte de ícone. */
+.nota-corpo ul[data-type="taskList"] input[type="checkbox"]:checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+/* Tarefa feita fica apagada e riscada, como a demanda concluída. */
+.nota-corpo ul[data-type="taskList"] li[data-checked="true"] > div {
+  color: var(--color-fg-mute);
+  text-decoration: line-through;
+}
+
+/* ---------- caixa de destaque ---------- */
+
+.nota-corpo [data-destaque] {
+  border-radius: 14px;
+  padding: 0.85em 1em;
+  border: 1px solid;
+  /* A cor vem do tom; estes são os valores de reserva, para uma caixa colada
+     de fora sem `data-tom` não ficar transparente. */
+  background: var(--color-ink-800);
+  border-color: var(--color-line);
+}
+
+.nota-corpo [data-destaque] > :first-child {
+  margin-top: 0;
+}
+
+.nota-corpo [data-destaque][data-tom="nota"] {
+  background: color-mix(in srgb, var(--color-brand-500) 8%, #fff);
+  border-color: color-mix(in srgb, var(--color-brand-500) 25%, #fff);
+}
+
+.nota-corpo [data-destaque][data-tom="atencao"] {
+  background: color-mix(in srgb, var(--color-warn) 9%, #fff);
+  border-color: color-mix(in srgb, var(--color-warn) 28%, #fff);
+}
+
+.nota-corpo [data-destaque][data-tom="bom"] {
+  background: color-mix(in srgb, var(--color-pos) 8%, #fff);
+  border-color: color-mix(in srgb, var(--color-pos) 25%, #fff);
+}
+
+/* ---------- dica na linha vazia ---------- */
+
+/*
+ * `is-empty` é a classe que o Placeholder do Tiptap põe no nó vazio.
+ * `::before` com `float` para a dica não empurrar o cursor para a direita.
+ */
+.nota-corpo .is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-fg-mute);
+  opacity: 0.65;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ---------- nó selecionado para arrastar ---------- */
+
+.nota-corpo .ProseMirror-selectednode {
+  outline: 2px solid color-mix(in srgb, var(--color-brand-500) 45%, #fff);
+  outline-offset: 3px;
+  border-radius: 6px;
+}

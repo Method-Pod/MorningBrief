@@ -1,136 +1,111 @@
 "use client";
 
 import * as React from "react";
-import { Pencil, Pin, PinOff, Plus, Search, StickyNote, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  FileText,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  StickyNote,
+  Trash2,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
-import { NOTE_COLORS, type Note } from "@/lib/types";
+import type { Note } from "@/lib/types";
 import { dateTimeBR } from "@/lib/format";
+import { textoDaNota } from "@/lib/notas";
 import {
   Button,
   Card,
   Empty,
-  Field,
   Input,
-  Modal,
-  Textarea,
   useConfirm,
   useNotice,
   cx,
 } from "@/components/ui";
 
-const SWATCH: Record<string, { dot: string; edge: string; glow: string }> = {
-  blue: { dot: "bg-brand-500", edge: "border-l-brand-500", glow: "from-brand-500/8" },
-  violet: { dot: "bg-violet-500", edge: "border-l-violet-500", glow: "from-violet-500/8" },
-  emerald: { dot: "bg-pos", edge: "border-l-pos", glow: "from-pos/8" },
-  amber: { dot: "bg-warn", edge: "border-l-warn", glow: "from-warn/8" },
-  rose: { dot: "bg-neg", edge: "border-l-neg", glow: "from-neg/8" },
-  slate: { dot: "bg-ink-600", edge: "border-l-ink-600", glow: "from-white/5" },
-};
+/**
+ * A lista de anotações: nomes, e nada mais.
+ *
+ * Era uma grade de cartões coloridos com o texto dentro, e o texto era editado
+ * num modal. Com o editor de blocos, o texto tem título, lista, caixa de
+ * destaque e mais de uma página de conteúdo — não cabe num cartão de prévia, e
+ * um modal aperta demais para escrever. Então a lista virou índice, como no
+ * Notion, e cada nota abre na sua própria página.
+ *
+ * A cor continua no banco e continua aparecendo, mas encolhida ao ícone: é o
+ * que deixa reconhecer a nota de longe sem transformar a lista numa parede de
+ * quadrados.
+ */
 
-const blank = () => ({ title: "", content: "", color: "blue", pinned: false });
+const COR_DO_ICONE: Record<string, string> = {
+  blue: "text-brand-400 bg-brand-500/10",
+  violet: "text-violet-500 bg-violet-500/10",
+  emerald: "text-pos bg-pos/10",
+  amber: "text-warn bg-warn/10",
+  rose: "text-neg bg-neg/10",
+  slate: "text-fg-mute bg-ink-800",
+};
 
 export default function AnotacoesPage() {
   const supabase = React.useMemo(() => createClient(), []);
+  const router = useRouter();
+
   const [rows, setRows] = useEstadoCacheado<Note[]>("notes", []);
   /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
-  const [loading, setLoading] = React.useState(
-    () => !temCache("notes")
-  );
+  const [loading, setLoading] = React.useState(() => !temCache("notes"));
   const [q, setQ] = React.useState("");
-  const [open, setOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<Note | null>(null);
-  const [form, setForm] = React.useState(blank());
-  const [busy, setBusy] = React.useState(false);
-  const [err, setErr] = React.useState("");
+  const [criando, setCriando] = React.useState(false);
+
   const confirm = useConfirm();
   const notice = useNotice();
 
   const load = React.useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("notes")
       .select("*")
       .order("pinned", { ascending: false })
       .order("updated_at", { ascending: false });
-    setRows((data as Note[]) ?? []);
+    if (!error) setRows((data as Note[]) ?? []);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, setRows]);
 
   React.useEffect(() => {
     load();
   }, [load]);
 
-  const startNew = () => {
-    setEditing(null);
-    setForm(blank());
-    setErr("");
-    setOpen(true);
-  };
-
-  const startEdit = (n: Note) => {
-    setEditing(n);
-    setForm({
-      title: n.title,
-      content: n.content,
-      color: n.color,
-      pinned: n.pinned,
-    });
-    setErr("");
-    setOpen(true);
-  };
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr("");
-    if (!form.title.trim() && !form.content.trim())
-      return setErr("Escreva um título ou algum conteúdo.");
-    setBusy(true);
-
-    const payload = {
-      title: form.title.trim(),
-      content: form.content,
-      color: form.color,
-      pinned: form.pinned,
-    };
-
-    let error;
-    if (editing) {
-      /*
-       * `select("id")` para saber se gravou de verdade.
-       *
-       * Sem ele, um update que não atinge linha nenhuma volta 204 sem erro: o
-       * formulário fecha, a lista recarrega e o valor antigo continua ali sem
-       * explicação. Ver NADA_GRAVADO.
-       */
-      const { data: salvo, error: falha } = await supabase
-        .from("notes")
-        .update(payload)
-        .eq("id", editing.id)
-        .select("id");
-      error = falha;
-      if (!falha && !salvo?.length) {
-        setBusy(false);
-        return setErr(NADA_GRAVADO);
-      }
-    } else {
-      const uid = await currentUserId(supabase);
-      if (!uid) {
-        setBusy(false);
-        return setErr(SESSION_EXPIRED);
-      }
-      ({ error } = await supabase
-        .from("notes")
-        .insert({ ...payload, user_id: uid }));
+  /**
+   * Cria a nota vazia e vai direto para ela.
+   *
+   * Sem modal pedindo o título antes: no Notion a página nasce em branco e o
+   * título é a primeira coisa que se digita nela. Pedir o nome de algo que
+   * ainda não existe é um passo a mais para escrever a mesma palavra.
+   */
+  const nova = async () => {
+    if (criando) return;
+    setCriando(true);
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      setCriando(false);
+      return notice.show(SESSION_EXPIRED);
     }
-    setBusy(false);
-    if (error) return setErr(error.message);
-    setOpen(false);
-    load();
+    const { data, error } = await supabase
+      .from("notes")
+      .insert({ user_id: uid, title: "", content: "", color: "blue" })
+      .select("id")
+      .maybeSingle();
+    setCriando(false);
+    if (notice.check(error, "criar a anotação")) return;
+    if (!data) return notice.show(NADA_GRAVADO);
+    router.push(`/anotacoes/${data.id}`);
   };
 
-  const togglePin = async (n: Note) => {
+  const fixar = async (n: Note) => {
     setRows((r) =>
       r.map((x) => (x.id === n.id ? { ...x, pinned: !x.pinned } : x))
     );
@@ -138,11 +113,14 @@ export default function AnotacoesPage() {
       .from("notes")
       .update({ pinned: !n.pinned })
       .eq("id", n.id);
+    /* Recarrega só quando falhou, para desfazer — e também porque fixar muda a
+       ordem, que a troca local não reordena. */
     if (notice.check(error, n.pinned ? "desafixar a nota" : "fixar a nota"))
       load();
+    else setRows((r) => ordenar(r));
   };
 
-  const remove = (n: Note) =>
+  const remover = (n: Note) =>
     confirm.ask(`Excluir "${n.title || "esta anotação"}"?`, async () => {
       const { data: saiu, error } = await supabase
         .from("notes")
@@ -151,21 +129,75 @@ export default function AnotacoesPage() {
         .select("id");
       if (notice.check(error, "excluir a anotação")) return;
       if (!saiu?.length) return notice.show(NADA_GRAVADO);
-      setRows((v) => v.filter((x) => x.id !== n.id));
+      setRows((r) => r.filter((x) => x.id !== n.id));
     });
 
-  const view = React.useMemo(() => {
+  /* A busca olha o texto por trás do HTML: procurar "div" achava toda nota que
+     tivesse uma, agora que o conteúdo é marcado. */
+  const vista = React.useMemo(() => {
     const term = q.trim().toLowerCase();
     if (!term) return rows;
     return rows.filter(
       (n) =>
         n.title.toLowerCase().includes(term) ||
-        n.content.toLowerCase().includes(term)
+        textoDaNota(n.content).toLowerCase().includes(term)
     );
   }, [rows, q]);
 
-  const pinned = view.filter((n) => n.pinned);
-  const rest = view.filter((n) => !n.pinned);
+  const fixadas = vista.filter((n) => n.pinned).length;
+
+  if (loading) return null;
+
+  const linha = (n: Note) => (
+    <li key={n.id} className="group flex items-center gap-2.5">
+      <Link
+        href={`/anotacoes/${n.id}`}
+        className="flex min-w-0 flex-1 items-center gap-2.5 py-2.5"
+      >
+        <span
+          className={cx(
+            "grid h-8 w-8 shrink-0 place-items-center rounded-[10px]",
+            COR_DO_ICONE[n.color] ?? COR_DO_ICONE.blue
+          )}
+        >
+          <FileText size={15} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] font-semibold">
+            {n.title || "Sem título"}
+          </span>
+          <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-fg-mute">
+            {n.pinned && (
+              <>
+                <Pin size={9} />
+                fixada ·
+              </>
+            )}
+            {dateTimeBR(n.updated_at)}
+          </span>
+        </span>
+      </Link>
+
+      <span className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+        <button
+          type="button"
+          onClick={() => fixar(n)}
+          aria-label={n.pinned ? `Desafixar ${n.title}` : `Fixar ${n.title}`}
+          className="grid h-8 w-8 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-brand-400"
+        >
+          {n.pinned ? <PinOff size={14} /> : <Pin size={14} />}
+        </button>
+        <button
+          type="button"
+          onClick={() => remover(n)}
+          aria-label={`Excluir ${n.title}`}
+          className="grid h-8 w-8 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
+        >
+          <Trash2 size={14} />
+        </button>
+      </span>
+    </li>
+  );
 
   return (
     <div className="space-y-5 rise">
@@ -173,174 +205,64 @@ export default function AnotacoesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Anotações</h1>
           <p className="mt-1 text-sm text-fg-mute">
-            {rows.length} nota{rows.length === 1 ? "" : "s"}
-            {pinned.length > 0 && ` · ${pinned.length} fixada${pinned.length === 1 ? "" : "s"}`}
+            {rows.length === 0
+              ? "Nenhuma anotação ainda"
+              : `${rows.length} nota${rows.length === 1 ? "" : "s"}${
+                  fixadas ? ` · ${fixadas} fixada${fixadas === 1 ? "" : "s"}` : ""
+                }`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative w-48 sm:w-64">
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
-            />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar..."
-              className="pl-9"
-            />
-          </div>
-          <Button variant="primary" onClick={startNew}>
-            <Plus size={15} />
-            Nova
-          </Button>
-        </div>
+        <Button
+          variant="primary"
+          onClick={nova}
+          disabled={criando}
+          className="w-full sm:w-auto"
+        >
+          <Plus size={15} />
+          {criando ? "Criando..." : "Nova"}
+        </Button>
       </div>
 
-      {loading ? (
-        null
-      ) : view.length === 0 ? (
+      {rows.length > 4 && (
+        <div className="relative">
+          <Search
+            size={14}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
+          />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar no título e no texto..."
+            className="pl-9"
+          />
+        </div>
+      )}
+
+      {vista.length === 0 ? (
         <Card>
           <Empty
             icon={<StickyNote size={18} />}
             title={q ? "Nada encontrado" : "Nenhuma anotação"}
             sub={
               q
-                ? "Tente outro termo."
-                : "Ideias, senhas de ambiente, roteiros, recados — o que precisar ficar à mão."
+                ? "Nenhum título ou texto com esse termo."
+                : "Cada nota abre numa página. Dentro dela, digite / para inserir título, lista, tarefa ou caixa de destaque."
             }
             action={
-              !q ? (
-                <Button variant="primary" size="sm" onClick={startNew}>
+              !q && (
+                <Button variant="primary" size="sm" onClick={nova}>
                   <Plus size={14} />
                   Nova anotação
                 </Button>
-              ) : undefined
+              )
             }
           />
         </Card>
       ) : (
-        <div className="space-y-6">
-          {pinned.length > 0 && (
-            <section>
-              <p className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-mute">
-                <Pin size={11} />
-                Fixadas
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {pinned.map((n) => (
-                  <NoteCard
-                    key={n.id}
-                    n={n}
-                    onEdit={() => startEdit(n)}
-                    onPin={() => togglePin(n)}
-                    onDelete={() => remove(n)}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {rest.length > 0 && (
-            <section>
-              {pinned.length > 0 && (
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-mute">
-                  Outras
-                </p>
-              )}
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {rest.map((n) => (
-                  <NoteCard
-                    key={n.id}
-                    n={n}
-                    onEdit={() => startEdit(n)}
-                    onPin={() => togglePin(n)}
-                    onDelete={() => remove(n)}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
+        <Card className="px-4 sm:px-5">
+          <ul className="divide-y divide-line-soft">{vista.map(linha)}</ul>
+        </Card>
       )}
-
-      {/* ------------------------------ modal ------------------------------ */}
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? "Editar anotação" : "Nova anotação"}
-        size="xl"
-        footer={
-          <>
-            <Button onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button variant="primary" onClick={save} disabled={busy}>
-              {busy ? "Salvando..." : "Salvar"}
-            </Button>
-          </>
-        }
-      >
-        <form onSubmit={save} className="space-y-4">
-          <Field label="Título">
-            <Input
-              autoFocus
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Ideias para a campanha de setembro"
-            />
-          </Field>
-
-          <Field label="Conteúdo">
-            <Textarea
-              rows={10}
-              value={form.content}
-              onChange={(e) => setForm({ ...form, content: e.target.value })}
-              placeholder="Escreva livremente. Quebras de linha são preservadas."
-              className="resize-y font-normal"
-            />
-          </Field>
-
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <span className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-fg-mute">
-                Cor
-              </span>
-              <div className="flex items-center gap-2">
-                {NOTE_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setForm({ ...form, color: c })}
-                    aria-label={`Cor ${c}`}
-                    className={cx(
-                      "h-7 w-7 rounded-full transition-colors",
-                      SWATCH[c].dot,
-                      form.color === c
-                        ? "ring-2 ring-white/70 ring-offset-2 ring-offset-ink-850"
-                        : "opacity-60 hover:opacity-100"
-                    )}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-line-soft bg-ink-900/50 px-3.5 py-3">
-              <input
-                type="checkbox"
-                checked={form.pinned}
-                onChange={(e) => setForm({ ...form, pinned: e.target.checked })}
-                className="h-4 w-4 accent-[#2f7bff]"
-              />
-              <span className="text-sm text-fg-dim">Fixar no topo</span>
-            </label>
-          </div>
-
-          {err && (
-            <p className="rounded-xl border border-neg/30 bg-neg/10 p-3 text-xs text-neg">
-              {err}
-            </p>
-          )}
-        </form>
-      </Modal>
 
       {confirm.node}
       {notice.node}
@@ -348,74 +270,12 @@ export default function AnotacoesPage() {
   );
 }
 
-function NoteCard({
-  n,
-  onEdit,
-  onPin,
-  onDelete,
-}: {
-  n: Note;
-  onEdit: () => void;
-  onPin: () => void;
-  onDelete: () => void;
-}) {
-  const s = SWATCH[n.color] ?? SWATCH.blue;
-  return (
-    <Card
-      className={cx(
-        "group relative flex h-full flex-col overflow-hidden border-l-2 p-4 transition-colors hover:border-ink-600",
-        s.edge
-      )}
-    >
-      <div
-        className={cx(
-          "pointer-events-none absolute inset-0 bg-gradient-to-br to-transparent opacity-70",
-          s.glow
-        )}
-      />
-      <div className="relative flex items-start justify-between gap-2">
-        <p className="min-w-0 flex-1 truncate text-[14px] font-medium">
-          {n.title || <span className="text-fg-mute">Sem título</span>}
-        </p>
-        <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            onClick={onPin}
-            aria-label={n.pinned ? "Desafixar" : "Fixar"}
-            className={cx(
-              "rounded-md p-1.5 transition-colors",
-              n.pinned
-                ? "text-brand-400 hover:bg-ink-750"
-                : "text-fg-mute opacity-0 hover:bg-ink-750 hover:text-fg group-hover:opacity-100"
-            )}
-          >
-            {n.pinned ? <Pin size={13} /> : <PinOff size={13} />}
-          </button>
-          <button
-            onClick={onEdit}
-            aria-label="Editar"
-            className="rounded-md p-1.5 text-fg-mute opacity-0 transition-opacity hover:bg-ink-750 hover:text-fg group-hover:opacity-100"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={onDelete}
-            aria-label="Excluir"
-            className="rounded-md p-1.5 text-fg-mute opacity-0 transition-opacity hover:bg-neg/15 hover:text-neg group-hover:opacity-100"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      </div>
-
-      {n.content && (
-        <p className="relative mt-2 line-clamp-[7] whitespace-pre-wrap text-[12px] leading-relaxed text-fg-dim">
-          {n.content}
-        </p>
-      )}
-
-      <p className="relative mt-auto pt-3 text-[10px] text-fg-mute">
-        {dateTimeBR(n.updated_at)}
-      </p>
-    </Card>
+/** Fixadas em cima, e dentro de cada grupo a mais mexida primeiro. */
+const ordenar = (r: Note[]) =>
+  [...r].sort((a, b) =>
+    a.pinned === b.pinned
+      ? b.updated_at.localeCompare(a.updated_at)
+      : a.pinned
+        ? -1
+        : 1
   );
-}
