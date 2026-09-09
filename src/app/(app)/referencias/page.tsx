@@ -165,6 +165,65 @@ export default function ReferenciasPage() {
     load();
   }, [load]);
 
+  /*
+   * Busca o logo que falta nos sites de busca já salvos.
+   *
+   * Quem foi salvo antes da coluna `icon_url` existir ficou sem logo, e não há
+   * o que fazer na tela além de reabrir e salvar cada um — trabalho manual por
+   * uma coluna que nasceu depois. Esta passada faz isso sozinha, uma vez.
+   *
+   * Só para `busca`, porque só a lista usa logo; só quando está vazio, para
+   * não reler o que já tem; e um por vez, para seis sites não virarem seis
+   * leituras de página ao mesmo tempo.
+   *
+   * `tentados` é por sessão: um site que não devolve logo nenhum não fica
+   * sendo relido a cada render, e também não gasta uma coluna gravando
+   * "tentei e não achei".
+   */
+  const tentados = React.useRef(new Set<string>());
+
+  React.useEffect(() => {
+    const faltando = rows.filter(
+      (r) => r.busca && !r.icon_url && !tentados.current.has(r.id)
+    );
+    if (!faltando.length) return;
+
+    let vivo = true;
+    (async () => {
+      for (const r of faltando) {
+        if (!vivo) return;
+        tentados.current.add(r.id);
+        try {
+          const resp = await fetch(
+            `/api/link?url=${encodeURIComponent(r.url)}`
+          );
+          const d = await resp.json();
+          if (!vivo) return;
+          if (typeof d?.icon_url !== "string" || !d.icon_url) continue;
+
+          const { data } = await supabase
+            .from("referencias")
+            .update({ icon_url: d.icon_url })
+            .eq("id", r.id)
+            .select("id")
+            .maybeSingle();
+          if (!vivo || !data) continue;
+          /* Troca só na memória: o resto da linha não mudou, e uma releitura
+             completa por logo seria a tabela inteira pela rede. */
+          setRows((v) =>
+            v.map((x) => (x.id === r.id ? { ...x, icon_url: d.icon_url } : x))
+          );
+        } catch {
+          /* Sem logo é sem logo: a linha cai no /favicon.ico e depois na
+             bússola. Não é motivo para avisar nada. */
+        }
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [rows, supabase, setRows]);
+
   /* ------------------------------ derivados ------------------------------ */
 
   /** Coleções de cada link, por id, para a tela não varrer a lista por cartão. */
@@ -1056,23 +1115,28 @@ export default function ReferenciasPage() {
 /**
  * O ícone da linha, no degrau em que estamos.
  *
- * Três fontes, tentadas em ordem, porque nenhuma cobre todos os sites —
- * medido em sete: cinco declaram ícone no HTML, cinco servem `/favicon.ico`,
- * e as duas listas não são a mesma. O Behance declara e não serve; o
- * land-book serve e não deixa ler a página.
+ * Duas fontes em ordem, porque nenhuma cobre todos os sites — medido em sete:
+ * cinco declaram ícone no HTML, cinco servem `/favicon.ico`, e as duas listas
+ * não são a mesma. O Behance declara e não serve; o land-book serve e não
+ * deixa ler a página.
  *
- * `falhas` é quantas já quebraram neste link. Devolver null é a bússola.
+ * A lista é montada primeiro e só então indexada por `falhas`. Escrito como
+ * uma sequência de `if`, a versão anterior devolvia o **mesmo** endereço nos
+ * degraus 0 e 1 quando não havia `icon_url` — e endereço repetido não dispara
+ * `onError` de novo, porque o navegador já tem o 404 em cache. O resultado era
+ * a linha travada no ícone de imagem quebrada, que é o que apareceu na tela.
+ *
+ * Devolver null é a bússola.
  */
 function iconeDaLista(r: Referencia, falhas = 0): string | null {
-  if (falhas === 0 && r.icon_url) return r.icon_url;
-  if (falhas <= 1) {
-    try {
-      return `https://${new URL(r.url).hostname}/favicon.ico`;
-    } catch {
-      return null;
-    }
+  let doDominio: string | null = null;
+  try {
+    doDominio = `https://${new URL(r.url).hostname}/favicon.ico`;
+  } catch {
+    doDominio = null;
   }
-  return null;
+  const fontes = [r.icon_url, doDominio].filter(Boolean) as string[];
+  return fontes[falhas] ?? null;
 }
 
 /**
