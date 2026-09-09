@@ -402,6 +402,32 @@ export default function ReferenciasPage() {
         .select("id");
       if (notice.check(error, "tirar a referência")) return;
       if (!saiu?.length) return notice.show(NADA_GRAVADO);
+
+      /*
+       * A imagem própria sai junto.
+       *
+       * A linha do banco morre com o `delete`, mas o arquivo no bucket não —
+       * e sem isto cada referência apagada deixaria a sua imagem lá para
+       * sempre, ocupando espaço que nada mais aponta. Mesmo cuidado que as
+       * capas de livro têm em `apagarCapa`.
+       *
+       * As três extensões possíveis, porque o caminho não guarda com qual foi
+       * enviada. Sem esperar e sem avisar de falha: o que importava — a
+       * referência sair da tela — já aconteceu, e um erro de limpeza não pode
+       * transformar uma exclusão bem-sucedida em recado de erro.
+       */
+      if (r.image_own) {
+        const uid = await currentUserId(supabase);
+        if (uid)
+          void supabase.storage
+            .from(BUCKET_REFERENCIAS)
+            .remove([
+              `${uid}/${r.id}.jpg`,
+              `${uid}/${r.id}.png`,
+              `${uid}/${r.id}.webp`,
+            ]);
+      }
+
       setRows((v) => v.filter((x) => x.id !== r.id));
       setLigacoes((v) => v.filter((x) => x.referencia_id !== r.id));
     });
