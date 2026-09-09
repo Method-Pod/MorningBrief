@@ -27,6 +27,7 @@ import {
 import { dateTimeBR } from "@/lib/format";
 import { textoDaNota } from "@/lib/notas";
 import { GerenciarEtiquetas } from "@/components/GerenciarEtiquetas";
+import { MenuSuspenso } from "@/components/MenuSuspenso";
 import {
   Button,
   Card,
@@ -382,33 +383,35 @@ export default function AnotacoesPage() {
         </span>
       </Link>
 
-      <span className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-        <button
-          type="button"
-          onClick={() => abrirEdicao(n)}
-          aria-label={`Editar ${n.title || "anotação"}`}
-          title="Nome, cor e categorias"
-          className="grid h-8 w-8 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
-        >
-          <Pencil size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => fixar(n)}
-          aria-label={n.pinned ? `Desafixar ${n.title}` : `Fixar ${n.title}`}
-          className="grid h-8 w-8 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-brand-400"
-        >
-          {n.pinned ? <PinOff size={14} /> : <Pin size={14} />}
-        </button>
-        <button
-          type="button"
-          onClick={() => remover(n)}
-          aria-label={`Excluir ${n.title}`}
-          className="grid h-8 w-8 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
-        >
-          <Trash2 size={14} />
-        </button>
-      </span>
+      {/*
+        Um ponto de entrada, com o nome de cada ação escrito.
+        
+        Eram três ícones cinzas de tamanho igual, e três ícones iguais não
+        dizem qual é qual até você passar o mouse e ler o balãozinho. No
+        telefone, sem hover, ficavam visíveis sempre e disputavam a largura com
+        o nome da nota.
+      */}
+      <MenuSuspenso
+        rotulo={`Ações de ${n.title || "anotação"}`}
+        itens={[
+          {
+            rotulo: "Editar",
+            icone: <Pencil size={14} />,
+            aoEscolher: () => abrirEdicao(n),
+          },
+          {
+            rotulo: n.pinned ? "Desafixar" : "Fixar no topo",
+            icone: n.pinned ? <PinOff size={14} /> : <Pin size={14} />,
+            aoEscolher: () => fixar(n),
+          },
+          {
+            rotulo: "Excluir",
+            icone: <Trash2 size={14} />,
+            aoEscolher: () => remover(n),
+            perigo: true,
+          },
+        ]}
+      />
     </li>
   );
 

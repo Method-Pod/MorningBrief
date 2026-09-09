@@ -405,8 +405,6 @@ export default function ReferenciasPage() {
 
     /* A imagem sobe depois de existir o id, porque o caminho no bucket usa ele
        — um arquivo por referência, então trocar substitui em vez de acumular. */
-    let imagem = form.image_url || null;
-    let propria = form.image_own;
     if (arquivo) {
       const caminho = `${uid}/${id}.${extDe(arquivo.type)}`;
       const { error: envio } = await supabase.storage
@@ -417,7 +415,7 @@ export default function ReferenciasPage() {
         return setErro(
           envio.message.toLowerCase().includes("bucket")
             ? "O bucket de referências ainda não existe. Rode supabase/REFERENCIAS.sql no SQL Editor."
-            : envio.message
+            : (recadoDeErro(envio)?.texto ?? envio.message)
         );
       }
       const { data: pub } = supabase.storage
@@ -425,12 +423,30 @@ export default function ReferenciasPage() {
         .getPublicUrl(caminho);
       /* ?v= força o navegador a buscar de novo: o caminho é o mesmo a cada
          troca, e sem isso a imagem antiga ficaria em cache. */
-      imagem = `${pub.publicUrl}?v=${Date.now()}`;
-      propria = true;
-      await supabase
+      const imagem = `${pub.publicUrl}?v=${Date.now()}`;
+
+      /*
+       * O erro deste update era descartado.
+       *
+       * É a linha que faz a referência apontar para o arquivo que acabou de
+       * subir. Falhando em silêncio, o arquivo ficava no bucket e a referência
+       * continuava com a imagem antiga — ou sem nenhuma — e nada dizia por quê.
+       * `select("id")` porque um update que não acha linha volta 204 sem erro.
+       */
+      const { data: apontou, error: erroImagem } = await supabase
         .from("referencias")
         .update({ image_url: imagem, image_own: true })
-        .eq("id", id);
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
+      if (erroImagem || !apontou) {
+        setSalvando(false);
+        return setErro(
+          erroImagem
+            ? `A imagem subiu, mas a referência não passou a usá-la: ${recadoDoBanco(erroImagem)}`
+            : `A imagem subiu, mas ${NADA_GRAVADO.toLowerCase()}`
+        );
+      }
     }
 
     /* Refaz as ligações. */
@@ -445,7 +461,9 @@ export default function ReferenciasPage() {
       );
       if (erroLig) {
         setSalvando(false);
-        return setErro(`A referência foi salva, mas as coleções não: ${erroLig.message}`);
+        return setErro(
+          `A referência foi salva, mas as coleções não: ${recadoDoBanco(erroLig)}`
+        );
       }
     }
 
@@ -454,7 +472,6 @@ export default function ReferenciasPage() {
        ligações, e reconstruir os dois à mão daria mais chance de divergir do
        banco do que a ida de rede economiza. */
     await load();
-    void propria;
     fechar();
   };
 
