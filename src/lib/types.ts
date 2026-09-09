@@ -373,6 +373,31 @@ export type Channel = {
   created_at: string;
 };
 
+/* --------------------------- categorias de nota --------------------------- */
+
+/**
+ * Categoria de anotação.
+ *
+ * O terceiro eixo de organização do app, e de propósito separado dos outros
+ * dois: [Subject] responde "sobre o que é" (Design, IA) e serve às aulas e aos
+ * canais; [Colecao] responde "para que serve" (Landing page, Dashboard) e
+ * serve às referências. Juntar os três faria uma categoria de anotação
+ * aparecer no filtro das Aulas, onde não diz nada.
+ */
+export type NoteCategory = {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+};
+
+/** A ligação. Uma nota pode estar em várias categorias ao mesmo tempo. */
+export type NoteInCategory = {
+  note_id: string;
+  category_id: string;
+  user_id: string;
+};
+
 /* ------------------------------ referências ------------------------------ */
 
 /**

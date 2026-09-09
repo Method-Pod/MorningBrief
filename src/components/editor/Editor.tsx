@@ -225,10 +225,23 @@ export function Editor({
     immediatelyRender: false,
     extensions: [
       StarterKit.configure({
-        /* O `link` do StarterKit fica, mas sem abrir ao clicar dentro do
-           editor: clicar num link enquanto se escreve é para pôr o cursor
-           ali, não para sair da página. */
-        link: { openOnClick: false, autolink: true },
+        /*
+         * Clicar no link abre o link.
+         *
+         * Estava `openOnClick: false`, com o argumento de que dentro de um
+         * editor o clique serve para pôr o cursor. Na prática o link ficava
+         * inerte e o cursor de texto no hover prometia edição que também não
+         * acontecia — o pior dos dois. Abrir é o que se espera de um link.
+         *
+         * Para editar o texto de um link, o jeito é clicar do lado dele e
+         * andar com as setas, ou selecionar por cima com o mouse.
+         */
+        link: {
+          openOnClick: true,
+          autolink: true,
+          defaultProtocol: "https",
+          HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" },
+        },
       }),
       TaskList,
       /* `nested`: tarefa dentro de tarefa, que é o que o Tab faz numa lista. */

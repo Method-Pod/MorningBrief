@@ -725,6 +725,10 @@ textarea::placeholder {
  * largura de leitura no telefone.
  */
 .nota-corpo a[href] {
+  /* Mão, e não cursor de texto: dentro de um `contenteditable` o navegador
+     mostra o cursor de escrita por cima de tudo, e ali ele prometia edição
+     onde o clique abre o link. */
+  cursor: pointer;
   display: inline;
   background: color-mix(in srgb, var(--color-brand-500) 8%, transparent);
   border-radius: 6px;

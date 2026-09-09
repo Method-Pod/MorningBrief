@@ -10,15 +10,17 @@ import {
   Plus,
   Search,
   StickyNote,
+  Tag,
   Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
-import type { Note } from "@/lib/types";
+import type { Note, NoteCategory, NoteInCategory } from "@/lib/types";
 import { dateTimeBR } from "@/lib/format";
 import { textoDaNota } from "@/lib/notas";
+import { GerenciarEtiquetas } from "@/components/GerenciarEtiquetas";
 import {
   Button,
   Card,
@@ -57,23 +59,41 @@ export default function AnotacoesPage() {
   const router = useRouter();
 
   const [rows, setRows] = useEstadoCacheado<Note[]>("notes", []);
+  const [cats, setCats] = useEstadoCacheado<NoteCategory[]>(
+    "note_categories",
+    []
+  );
+  const [ligacoes, setLigacoes] = useEstadoCacheado<NoteInCategory[]>(
+    "note_in_category",
+    []
+  );
   /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
   const [loading, setLoading] = React.useState(() => !temCache("notes"));
   const [q, setQ] = React.useState("");
   const [criando, setCriando] = React.useState(false);
+  const [filtro, setFiltro] = React.useState<"all" | "sem" | string>("all");
+  const [gerindo, setGerindo] = React.useState(false);
 
   const confirm = useConfirm();
   const notice = useNotice();
 
   const load = React.useCallback(async () => {
-    const { data, error } = await supabase
-      .from("notes")
-      .select("*")
-      .order("pinned", { ascending: false })
-      .order("updated_at", { ascending: false });
-    if (!error) setRows((data as Note[]) ?? []);
+    const [n, c, l] = await Promise.all([
+      supabase
+        .from("notes")
+        .select("*")
+        .order("pinned", { ascending: false })
+        .order("updated_at", { ascending: false }),
+      /* As categorias toleram falha: sem CATEGORIAS-DE-NOTA.sql a faixa de
+         filtro não aparece e o resto da tela continua funcionando. */
+      supabase.from("note_categories").select("*").order("name"),
+      supabase.from("note_in_category").select("*"),
+    ]);
+    if (!n.error) setRows((n.data as Note[]) ?? []);
+    setCats((c.data as NoteCategory[]) ?? []);
+    setLigacoes((l.data as NoteInCategory[]) ?? []);
     setLoading(false);
-  }, [supabase, setRows]);
+  }, [supabase, setRows, setCats, setLigacoes]);
 
   React.useEffect(() => {
     load();
@@ -132,21 +152,64 @@ export default function AnotacoesPage() {
       setRows((r) => r.filter((x) => x.id !== n.id));
     });
 
-  /* A busca olha o texto por trás do HTML: procurar "div" achava toda nota que
-     tivesse uma, agora que o conteúdo é marcado. */
+  /** Categorias de cada nota, por id, para a lista não varrer as ligações. */
+  const daNota = React.useMemo(() => {
+    const m = new Map<string, string[]>();
+    ligacoes.forEach((x) => {
+      const atual = m.get(x.note_id);
+      if (atual) atual.push(x.category_id);
+      else m.set(x.note_id, [x.category_id]);
+    });
+    return m;
+  }, [ligacoes]);
+
+  const nomeDaCat = React.useMemo(() => {
+    const m = new Map<string, string>();
+    cats.forEach((c) => m.set(c.id, c.name));
+    return m;
+  }, [cats]);
+
+  const usos = React.useMemo(() => {
+    const m: Record<string, number> = {};
+    ligacoes.forEach((x) => {
+      m[x.category_id] = (m[x.category_id] ?? 0) + 1;
+    });
+    return m;
+  }, [ligacoes]);
+
+  const semCategoria = React.useMemo(
+    () => rows.filter((n) => !(daNota.get(n.id) ?? []).length).length,
+    [rows, daNota]
+  );
+
+  /* Categoria e busca se somam: filtrar por "Estudo" e depois procurar uma
+     palavra procura dentro do que a categoria deixou. */
   const vista = React.useMemo(() => {
     const term = q.trim().toLowerCase();
-    if (!term) return rows;
-    return rows.filter(
-      (n) =>
+    return rows.filter((n) => {
+      const minhas = daNota.get(n.id) ?? [];
+      if (filtro === "sem" && minhas.length) return false;
+      if (filtro !== "all" && filtro !== "sem" && !minhas.includes(filtro))
+        return false;
+      if (!term) return true;
+      return (
         n.title.toLowerCase().includes(term) ||
         textoDaNota(n.content).toLowerCase().includes(term)
-    );
-  }, [rows, q]);
+      );
+    });
+  }, [rows, q, filtro, daNota]);
 
   const fixadas = vista.filter((n) => n.pinned).length;
 
   if (loading) return null;
+
+  const pilula = (ativa: boolean) =>
+    cx(
+      "h-8 shrink-0 rounded-full px-3 text-[11.5px] font-medium transition-colors",
+      ativa
+        ? "bg-brand-500 text-on-brand"
+        : "bg-ink-800 text-fg-mute hover:text-fg-dim"
+    );
 
   const linha = (n: Note) => (
     <li key={n.id} className="group flex items-center gap-2.5">
@@ -174,6 +237,22 @@ export default function AnotacoesPage() {
               </>
             )}
             {dateTimeBR(n.updated_at)}
+            {/* As categorias na mesma linha fraca da data: são rótulo, não
+                conteúdo, e uma linha própria para elas faria a altura do
+                índice crescer sem dizer mais. */}
+            {(daNota.get(n.id) ?? []).slice(0, 2).map((cid) => (
+              <span
+                key={cid}
+                className="inline-flex items-center gap-1 rounded-full bg-brand-500/12 px-1.5 py-0.5 text-[9.5px] font-medium text-brand-400"
+              >
+                {nomeDaCat.get(cid)}
+              </span>
+            ))}
+            {(daNota.get(n.id) ?? []).length > 2 && (
+              <span className="tnum">
+                +{(daNota.get(n.id) ?? []).length - 2}
+              </span>
+            )}
           </span>
         </span>
       </Link>
@@ -212,16 +291,66 @@ export default function AnotacoesPage() {
                 }`}
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={nova}
-          disabled={criando}
-          className="w-full sm:w-auto"
-        >
-          <Plus size={15} />
-          {criando ? "Criando..." : "Nova"}
-        </Button>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Button
+            onClick={() => setGerindo(true)}
+            className="shrink-0"
+            title="Gerenciar categorias"
+          >
+            <Tag size={15} />
+            <span className="hidden sm:inline">Categorias</span>
+          </Button>
+          <Button
+            variant="primary"
+            onClick={nova}
+            disabled={criando}
+            className="min-w-0 flex-1 sm:flex-none"
+          >
+            <Plus size={15} className="shrink-0" />
+            <span className="truncate">{criando ? "Criando..." : "Nova"}</span>
+          </Button>
+        </div>
       </div>
+
+      {/*
+        A faixa de filtro só aparece quando há categoria para filtrar. Uma
+        faixa com um botão "Todas" sozinho seria enfeite ocupando linha.
+      */}
+      {cats.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setFiltro("all")}
+            className={pilula(filtro === "all")}
+          >
+            Todas
+            <span className="ml-1.5 opacity-60 tnum">{rows.length}</span>
+          </button>
+          {cats.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setFiltro(c.id)}
+              className={pilula(filtro === c.id)}
+            >
+              {c.name}
+              <span className="ml-1.5 opacity-60 tnum">{usos[c.id] ?? 0}</span>
+            </button>
+          ))}
+          {/* "Sem categoria" só quando existe alguma assim: é o filtro que
+              serve para achar o que ficou de fora e arrumar. */}
+          {semCategoria > 0 && (
+            <button
+              type="button"
+              onClick={() => setFiltro("sem")}
+              className={pilula(filtro === "sem")}
+            >
+              Sem categoria
+              <span className="ml-1.5 opacity-60 tnum">{semCategoria}</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {rows.length > 4 && (
         <div className="relative">
@@ -242,14 +371,22 @@ export default function AnotacoesPage() {
         <Card>
           <Empty
             icon={<StickyNote size={18} />}
-            title={q ? "Nada encontrado" : "Nenhuma anotação"}
+            title={
+              q
+                ? "Nada encontrado"
+                : filtro !== "all"
+                  ? "Nada nesta categoria"
+                  : "Nenhuma anotação"
+            }
             sub={
               q
                 ? "Nenhum título ou texto com esse termo."
-                : "Cada nota abre numa página. Dentro dela, digite / para inserir título, lista, tarefa ou caixa de destaque."
+                : filtro !== "all"
+                  ? "Abra uma nota para pôr uma categoria nela."
+                  : "Cada nota abre numa página. Dentro dela, digite / para inserir título, lista, tarefa ou caixa de destaque."
             }
             action={
-              !q && (
+              !q && filtro === "all" && (
                 <Button variant="primary" size="sm" onClick={nova}>
                   <Plus size={14} />
                   Nova anotação
@@ -263,6 +400,24 @@ export default function AnotacoesPage() {
           <ul className="divide-y divide-line-soft">{vista.map(linha)}</ul>
         </Card>
       )}
+
+      <GerenciarEtiquetas
+        aberto={gerindo}
+        onFechar={() => setGerindo(false)}
+        supabase={supabase}
+        tabela="note_categories"
+        itens={cats}
+        onMudou={load}
+        usos={usos}
+        icone={<Tag size={13} />}
+        titulo="Categorias de anotação"
+        sub="Renomear aqui muda em todas as notas de uma vez."
+        rotuloNovo="Nova categoria"
+        exemplo="Estudo, Prompt, Roteiro, Bíblia..."
+        arquivoSql="CATEGORIAS-DE-NOTA.sql"
+        contagem={(n) => `${n} nota${n === 1 ? "" : "s"}`}
+        sugestoes={["Estudo", "Prompt", "Roteiro"]}
+      />
 
       {confirm.node}
       {notice.node}
