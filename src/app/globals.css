@@ -754,7 +754,15 @@ textarea::placeholder {
  * se dá um pouco de respiro, para a marca não colar na letra.
  */
 .nota-corpo mark {
-  background: none;
+  /*
+   * Amarelo de reserva, e não `background: none`.
+   *
+   * A cor escolhida vem no `style` do próprio `<mark>`, escrito pelo editor, e
+   * estilo em linha vence esta regra — então quem foi marcado no app aparece
+   * na sua cor. O amarelo é para o `<mark>` que chega sem cor: texto marcado
+   * colado de outro programa vinha como marca invisível.
+   */
+  background-color: #fef08a;
   color: inherit;
   border-radius: 4px;
   padding: 0.08em 0.15em;
