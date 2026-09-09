@@ -4,6 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import {
   AlertCircle,
+  BookOpen,
+  Library,
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   ListChecks,
@@ -46,6 +49,32 @@ import {
 import { Card, useNotice, cx } from "@/components/ui";
 import { useIdentity } from "@/components/identity";
 
+/*
+ * Recortes das duas tabelas novas.
+ *
+ * O painel lê só as colunas que mostra, e não a linha inteira: a descrição de
+ * um livro tem parágrafos, e trazê-la para desenhar uma barra de progresso
+ * seria payload por nada. Foi a mesma razão de `BookLista` na estante.
+ */
+type Livro = {
+  id: string;
+  title: string;
+  authors: string | null;
+  cover_url: string | null;
+  total_pages: number | null;
+  current_page: number;
+};
+
+type Ref = {
+  id: string;
+  name: string;
+  url: string | null;
+  image_url: string | null;
+  icon_url: string | null;
+  image_own: boolean;
+  busca: boolean;
+};
+
 const PRIO_DOT: Record<string, string> = {
   urgent: "bg-neg",
   high: "bg-warn",
@@ -85,6 +114,8 @@ export default function HomePage() {
   const [recurring, setRecurring] = useEstadoCacheado<RecurringTask[]>("recurring_tasks", []);
   const [events, setEvents] = useEstadoCacheado<CalendarEvent[]>("events", []);
   const [notes, setNotes] = useEstadoCacheado<Note[]>("notes", []);
+  const [lendo, setLendo] = useEstadoCacheado<Livro[]>("painel_lendo", []);
+  const [refs, setRefs] = useEstadoCacheado<Ref[]>("painel_refs", []);
   const [generated, setGenerated] = React.useState(0);
   const [limpas, setLimpas] = React.useState(0);
   const [draft, setDraft] = React.useState("");
@@ -95,12 +126,26 @@ export default function HomePage() {
   const today = todayISO();
 
   const load = React.useCallback(async () => {
-    const [b, t, r, e, n] = await Promise.all([
+    const [b, t, r, e, n, lv, rf] = await Promise.all([
       supabase.from("bills").select("*").order("due_date"),
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("recurring_tasks").select("*").order("created_at"),
       supabase.from("events").select("*").order("start_at"),
       supabase.from("notes").select("*").order("updated_at", { ascending: false }),
+      /*
+       * Leitura e referências toleram falha: quem não rodou LEITURA.sql ou
+       * REFERENCIAS.sql simplesmente não vê os dois cartões, e o resto do
+       * painel não sabe que eles existem.
+       */
+      supabase
+        .from("books")
+        .select("id,title,authors,cover_url,total_pages,current_page,status")
+        .eq("status", "reading"),
+      supabase
+        .from("referencias")
+        .select("id,name,url,image_url,icon_url,image_own,busca,created_at")
+        .order("created_at", { ascending: false })
+        .limit(8),
     ]);
     // numeric do Postgres vem como string no JSON; normaliza na fronteira
     setBills(
@@ -122,6 +167,8 @@ export default function HomePage() {
     setRecurring((r.data as RecurringTask[]) ?? []);
     setEvents((e.data as CalendarEvent[]) ?? []);
     setNotes((n.data as Note[]) ?? []);
+    setLendo((lv.data as Livro[]) ?? []);
+    setRefs((rf.data as Ref[]) ?? []);
     return (r.data as RecurringTask[]) ?? [];
   }, [supabase]);
 
@@ -266,27 +313,71 @@ export default function HomePage() {
         .filter((e) => localDay(e.start_at) >= today)
         .slice(0, 4),
       pinned: notes.filter((n) => n.pinned).slice(0, 2),
+
+      /*
+       * O que "Hoje" mostra: o que vence hoje mais o que passou do prazo.
+       *
+       * O atrasado entra aqui porque é a coisa mais urgente que existe, e
+       * ficava escondido num contador. Ordem: atrasado primeiro, depois por
+       * prioridade, e o concluído desce.
+       */
+      doDia: [
+        ...open.filter((t) => t.due_date?.slice(0, 10) === today),
+        ...open.filter(
+          (t) =>
+            t.due_date &&
+            t.due_date.slice(0, 10) !== today &&
+            daysUntil(t.due_date) < 0
+        ),
+        ...hoje.filter((t) => t.status === "done"),
+      ].sort(
+          (a, b) =>
+            Number(a.status === "done") - Number(b.status === "done") ||
+            Number(daysUntil(b.due_date ?? today) < 0) -
+              Number(daysUntil(a.due_date ?? today) < 0) ||
+            PRIO_RANK[a.priority] - PRIO_RANK[b.priority]
+        ),
+
+      /*
+       * O que "O que vem" mostra: prazo depois de hoje.
+       *
+       * Antes as duas seções liam a mesma lista e quatro das cinco linhas se
+       * repetiam na tela, com títulos diferentes. Agora cada demanda aparece
+       * num lugar só: hoje e atrasado em cima, o resto aqui.
+       */
+      depois: open
+        .filter((t) => t.due_date && daysUntil(t.due_date) > 0)
+        .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))
+        .slice(0, 5),
+
+      /* Sem prazo nenhum não cabe em "hoje" nem em "depois", e desapareceria
+         do painel. Entra no fim de "o que vem". */
+      semPrazo: open.filter((t) => !t.due_date).slice(0, 3),
     };
   }, [tasks, bills, recurring, events, notes, today]);
 
   if (loading) return null;
 
-  const R = 34;
-  const C = 2 * Math.PI * R;
   const now = new Date();
   const nomeMes = now.toLocaleDateString("pt-BR", { month: "long" });
 
   return (
     <div className="rise">
       {/* ------------------------------ saudação ------------------------------ */}
-      <div className="mb-[22px] flex flex-wrap items-start justify-between gap-3.5">
-        <div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3.5">
+        <div className="min-w-0">
           <h1 className="text-[clamp(24px,4vw,32px)] font-bold tracking-[-0.035em]">
             {nome ? `${greeting()}, ${nome}!` : `${greeting()}!`}
           </h1>
-          <p className="mt-1.5 text-[14.5px] text-fg-mute">
-            Vamos dar uma olhada no seu dia — tudo em um só lugar.
-          </p>
+          {/*
+            Sem subtítulo.
+            
+            Era "Vamos dar uma olhada no seu dia", que gastava a segunda linha
+            sem informar. Troquei por um resumo com números e caí no problema
+            que tinha acabado de consertar: "atrasada" aparecia no subtítulo,
+            na faixa e em "O que vem". Os números do dia moram na faixa
+            abaixo, e num lugar só — o que sobra aqui é o nome de quem entrou.
+          */}
         </div>
         {/* Data e clima na mesma pílula, separados por um traço fino.
             Duas pílulas soltas competiriam entre si; aqui a data continua sendo
@@ -321,81 +412,76 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ------------------------ seu dia + hoje ------------------------ */}
-      <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="flex flex-col rounded-[22px] bg-gradient-to-br from-[#26292b] to-[#1b1e20] p-[22px] text-white">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/60">
-                Seu dia
-              </p>
-              <p className="mt-2 text-[40px] font-bold leading-none tracking-[-0.04em]">
-                {m.feitas}
-                <span className="text-[0.5em] font-semibold opacity-60">
-                  /{m.hoje.length}
-                </span>
-              </p>
-              <p className="mt-1.5 text-[13px] text-white/70">
-                tarefas concluídas hoje
-              </p>
-            </div>
-            <div className="relative shrink-0">
-              <svg width="88" height="88" viewBox="0 0 88 88" className="-rotate-90">
-                <circle
-                  cx="44"
-                  cy="44"
-                  r={R}
-                  fill="none"
-                  stroke="rgb(255 255 255 / 0.18)"
-                  strokeWidth="7"
-                />
-                <circle
-                  cx="44"
-                  cy="44"
-                  r={R}
-                  fill="none"
-                  stroke="var(--a)"
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                  strokeDasharray={C.toFixed(1)}
-                  strokeDashoffset={(C * (1 - m.pct / 100)).toFixed(1)}
-                />
-              </svg>
-              <span className="absolute inset-0 grid place-items-center text-[15px] font-bold">
-                {m.pct}%
-              </span>
-            </div>
-          </div>
-          <div className="mt-auto grid grid-cols-3 gap-2 pt-[22px]">
-            <Mini icon={<CheckCircle2 size={15} />} value={m.feitas} label="feitas" />
-            <Mini icon={<Repeat2 size={15} />} value={m.actRec.length} label="recorrentes" />
-            <Mini icon={<CalendarDays size={15} />} value={m.evToday.length} label="na agenda" />
-          </div>
-        </div>
+      {/* ------------------------------ o dia ------------------------------ */}
+      {/*
+        Uma faixa fina, e não um cartão escuro com anel.
+        
+        O cartão anterior era a única coisa escura do app, tinha três níveis de
+        escuro empilhados, e gastava o maior elemento da tela — um anel de 88px
+        — para dizer o número que o cartão logo abaixo já dizia. Em zero, o
+        anel vazio parecia defeito.
+        
+        Aqui o número aparece uma vez só, a barra ocupa a largura que sobra, e
+        os contadores viram texto ao lado em vez de três sub-cartões.
+      */}
+      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-[18px] bg-white px-[18px] py-3.5 shadow-[0_1px_2px_rgb(20_24_26/0.05)]">
+        <p className="shrink-0 text-[15px] font-bold tracking-[-0.02em]">
+          {m.feitas}
+          <span className="font-semibold text-fg-mute">/{m.hoje.length}</span>
+          <span className="ml-1.5 text-[12.5px] font-medium text-fg-mute">
+            hoje
+          </span>
+        </p>
 
+        {/* Cresce por transform e não por width: largura recalcula layout a
+            cada quadro, e esta barra fica na primeira coisa pintada. */}
+        <span className="h-1.5 min-w-[80px] flex-1 overflow-hidden rounded-full bg-ink-800">
+          <span
+            className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-[420ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]"
+            style={{ transform: `scaleX(${m.pct / 100})` }}
+          />
+        </span>
+
+        <span className="flex shrink-0 items-center gap-x-4 gap-y-1 text-[12px] text-fg-mute">
+          <span className="inline-flex items-center gap-1.5">
+            <Repeat2 size={13} className="text-fg-mute/70" />
+            <b className="font-bold text-fg-dim tnum">{m.actRec.length}</b>
+            recorrentes
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <CalendarDays size={13} className="text-fg-mute/70" />
+            <b className="font-bold text-fg-dim tnum">{m.evToday.length}</b>
+            na agenda
+          </span>
+          {/* Contas da semana entram aqui porque a faixa é o resumo do dia, e
+              vencimento é a pendência que dói se passar batido. */}
+          {m.soon.length > 0 && (
+            <span className="inline-flex items-center gap-1.5">
+              <Wallet size={13} className="text-fg-mute/70" />
+              <b className="font-bold text-fg-dim tnum">{m.soon.length}</b>
+              vencendo
+            </span>
+          )}
+          {/* Atrasada em vermelho e por último: é o que se quer ver primeiro
+              justamente por ser o que não devia estar aí. */}
+          {m.lateT.length > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-neg">
+              <AlertCircle size={13} />
+              <b className="font-bold tnum">{m.lateT.length}</b>
+              atrasada{m.lateT.length === 1 ? "" : "s"}
+            </span>
+          )}
+        </span>
+      </div>
+
+      {/* ------------------------------ hoje ------------------------------ */}
+      <div>
         <Card className="flex flex-col">
           <Head icon={<ListChecks size={14} />} title="Hoje" href="/demandas" link="ver todas" />
           <div className="flex flex-1 flex-col px-[18px] pb-[18px] pt-3">
-            <div className="flex items-baseline justify-between">
-              <p className="text-[26px] font-bold tracking-[-0.035em]">
-                {m.feitas}
-                <span className="text-[0.55em] font-semibold text-fg-mute">
-                  /{m.hoje.length}
-                </span>
-              </p>
-              <span className="text-xs text-fg-mute">{m.pct}% do dia</span>
-            </div>
-            {/* Cresce por transform e não por width: largura recalcula layout
-                a cada quadro, e esta barra fica no cartão de entrada, que é o
-                primeiro a ser pintado. */}
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-800">
-              <div
-                className="h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-[420ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]"
-                style={{ transform: `scaleX(${m.pct / 100})` }}
-              />
-            </div>
-
-            <form onSubmit={quickAdd} className="mt-3.5 flex gap-2.5">
+            {/* O número e a barra saíram: são os mesmos da faixa acima. Este
+                cartão passa a ser só a lista e o campo de adicionar. */}
+            <form onSubmit={quickAdd} className="flex gap-2.5">
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
@@ -414,15 +500,10 @@ export default function HomePage() {
             </form>
 
             <div className="mt-1.5 flex flex-col">
-              {m.hoje.length === 0 ? (
+              {m.doDia.length === 0 ? (
                 <Ghost>Nada pra hoje. Adicione acima.</Ghost>
               ) : (
-                [...m.hoje]
-                  .sort(
-                    (a, b) =>
-                      Number(a.status === "done") - Number(b.status === "done") ||
-                      PRIO_RANK[a.priority] - PRIO_RANK[b.priority]
-                  )
+                m.doDia
                   .map((t) => (
                     <Row key={t.id}>
                       <button
@@ -446,11 +527,24 @@ export default function HomePage() {
                         >
                           {t.title}
                         </span>
-                        {t.client && (
-                          <span className="mt-0.5 block text-[11.5px] font-normal text-fg-mute">
-                            {t.client}
-                          </span>
-                        )}
+                        <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] font-normal text-fg-mute">
+                          {/*
+                            Diz qual é a atrasada.
+                            
+                            Elas passaram a entrar nesta lista para ficarem à
+                            vista, e sem marca ficavam idênticas às de hoje —
+                            "1 atrasada" na faixa acima sem dizer qual. O
+                            prazo entra junto: saber que passou não é saber de
+                            quanto.
+                          */}
+                          {t.due_date && daysUntil(t.due_date) < 0 && (
+                            <span className="inline-flex items-center gap-1 font-semibold text-neg">
+                              <AlertCircle size={11} />
+                              atrasada · {dateBR(t.due_date).slice(0, 5)}
+                            </span>
+                          )}
+                          {t.client && <span className="truncate">{t.client}</span>}
+                        </span>
                       </span>
                       <span
                         className={cx("h-[7px] w-[7px] shrink-0 rounded-full", PRIO_DOT[t.priority])}
@@ -466,7 +560,10 @@ export default function HomePage() {
       {/* ------------------------ demandas + notas ------------------------ */}
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <Card>
-          <Head icon={<ListChecks size={14} />} title="Demandas abertas" href="/demandas" link="ver quadro" />
+          {/* "O que vem", e não "Demandas abertas": as abertas de hoje e as
+              atrasadas já estão no cartão acima, e ler as duas listas do mesmo
+              lugar fazia quatro das cinco linhas se repetirem na tela. */}
+          <Head icon={<CalendarClock size={14} />} title="O que vem" href="/demandas" link="ver quadro" />
           <div className="px-[18px] pb-[18px] pt-3">
             <div className="mb-3 flex flex-wrap gap-2">
               {(["todo", "doing", "review"] as TaskStatus[]).map((s) => (
@@ -479,25 +576,18 @@ export default function HomePage() {
                   <b className="tnum">{tasks.filter((t) => t.status === s).length}</b>
                 </span>
               ))}
-              {m.lateT.length > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-neg/12 px-2 py-0.5 text-[11px] font-semibold text-neg">
-                  <AlertCircle size={11} />
-                  {m.lateT.length} atrasada{m.lateT.length > 1 ? "s" : ""}
-                </span>
-              )}
+              {/* A contagem de atrasadas saiu: ela vive na faixa do topo, e
+                  repetida aqui era a terceira aparição do mesmo número. */}
             </div>
             <div className="flex flex-col">
-              {m.open.length === 0 ? (
-                <Ghost>Nenhuma demanda aberta.</Ghost>
+              {[...m.depois, ...m.semPrazo].length === 0 ? (
+                <Ghost>
+                  {m.doDia.length
+                    ? "Nada além de hoje."
+                    : "Nenhuma demanda aberta."}
+                </Ghost>
               ) : (
-                [...m.open]
-                  .sort(
-                    (a, b) =>
-                      PRIO_RANK[a.priority] - PRIO_RANK[b.priority] ||
-                      (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999")
-                  )
-                  .slice(0, 5)
-                  .map((t) => (
+                [...m.depois, ...m.semPrazo].map((t) => (
                     <Row key={t.id}>
                       <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", PRIO_DOT[t.priority])} />
                       <span className="min-w-0 flex-1 text-sm font-medium">
@@ -507,18 +597,18 @@ export default function HomePage() {
                           {t.client && ` · ${t.client}`}
                         </span>
                       </span>
-                      {t.due_date && (
-                        <span
-                          className={cx(
-                            "shrink-0 text-[11.5px] font-semibold tnum",
-                            daysUntil(t.due_date) < 0 ? "text-neg" : "text-fg-mute"
-                          )}
-                        >
-                          {t.due_date.slice(0, 10) === today
-                            ? "hoje"
-                            : dateBR(t.due_date).slice(0, 5)}
-                        </span>
-                      )}
+                      {/* Sem prazo é informação, não ausência dela: a demanda
+                          sem data é justamente a que some de vista. */}
+                      <span
+                        className={cx(
+                          "shrink-0 text-[11.5px] font-semibold tnum",
+                          t.due_date ? "text-fg-mute" : "text-fg-mute/60"
+                        )}
+                      >
+                        {t.due_date
+                          ? dateBR(t.due_date).slice(0, 5)
+                          : "sem prazo"}
+                      </span>
                     </Row>
                   ))
               )}
@@ -699,6 +789,140 @@ export default function HomePage() {
         </Card>
       </div>
 
+      {/* ------------------------ leitura + referências ------------------------ */}
+      {/*
+        Duas abas que o painel ignorava.
+        
+        A estante e as referências existem há semanas e o Início nunca soube
+        delas: um livro em 78% e uma parede de referências não apareciam em
+        lugar nenhum da tela de entrada. Só aparecem quando têm o que mostrar —
+        cartão vazio em painel é espaço morto.
+      */}
+      {(lendo.length > 0 || refs.length > 0) && (
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+          {lendo.length > 0 && (
+            <Card>
+              <Head
+                icon={<BookOpen size={14} />}
+                title="Lendo agora"
+                href="/leitura"
+                link="estante"
+              />
+              <div className="flex flex-col px-[18px] pb-[18px] pt-3">
+                {lendo.slice(0, 2).map((l) => {
+                  const pct =
+                    l.total_pages && l.total_pages > 0
+                      ? Math.min(
+                          100,
+                          Math.round((l.current_page / l.total_pages) * 100)
+                        )
+                      : null;
+                  return (
+                    <Link
+                      key={l.id}
+                      href="/leitura"
+                      className="group flex items-center gap-3 border-b border-line-soft py-2.5 last:border-0"
+                    >
+                      {/* 2:3 fixo, como na estante: sem trava, capa alta e
+                          capa baixa fariam as duas linhas dançarem. */}
+                      <span className="relative block aspect-[2/3] w-[38px] shrink-0 overflow-hidden rounded-md bg-ink-800">
+                        {l.cover_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={l.cover_url}
+                            alt=""
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span className="grid h-full w-full place-items-center text-brand-400/40">
+                            <BookOpen size={14} />
+                          </span>
+                        )}
+                      </span>
+
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-semibold group-hover:text-brand-400">
+                          {l.title}
+                        </span>
+                        {l.authors && (
+                          <span className="mt-0.5 block truncate text-[11px] text-fg-mute">
+                            {l.authors}
+                          </span>
+                        )}
+                        {pct !== null && (
+                          <span className="mt-1.5 flex items-center gap-2">
+                            <span className="h-1 min-w-[40px] flex-1 overflow-hidden rounded-full bg-ink-800">
+                              <span
+                                className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
+                                style={{ transform: `scaleX(${pct / 100})` }}
+                              />
+                            </span>
+                            <span className="shrink-0 text-[10.5px] font-bold text-fg-mute tnum">
+                              pág {l.current_page}
+                              {l.total_pages ? ` de ${l.total_pages}` : ""}
+                            </span>
+                          </span>
+                        )}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {refs.length > 0 && (
+            <Card>
+              <Head
+                icon={<Library size={14} />}
+                title="Referências recentes"
+                href="/referencias"
+                link="ver todas"
+              />
+              <div className="px-[18px] pb-[18px] pt-3">
+                {/*
+                  Miniaturas, não linhas de texto.
+                  
+                  Referência é o que se reconhece de olho — o nome dela diz
+                  muito menos que a imagem. Por isso aqui é a única parte do
+                  painel que é imagem e não lista.
+                */}
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {refs.slice(0, 4).map((r) => (
+                    <Link
+                      key={r.id}
+                      href="/referencias"
+                      title={r.name}
+                      className="group block"
+                    >
+                      <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-[10px] bg-ink-800">
+                        {r.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={r.image_url}
+                            alt=""
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                          />
+                        ) : (
+                          <span className="grid h-full w-full place-items-center text-brand-400/40">
+                            <Library size={16} />
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-1.5 block truncate text-[11px] font-medium text-fg-dim group-hover:text-brand-400">
+                        {r.name}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
       {notice.node}
     </div>
   );
@@ -743,23 +967,6 @@ const Ghost = ({ children }: { children: React.ReactNode }) => (
   <p className="py-6 text-center text-[12.5px] text-fg-mute">{children}</p>
 );
 
-const Mini = ({
-  icon,
-  value,
-  label,
-}: {
-  icon: React.ReactNode;
-  value: number;
-  label: string;
-}) => (
-  <div className="rounded-[14px] bg-white/10 px-2.5 py-3">
-    <span className="opacity-65">{icon}</span>
-    <b className="mt-1.5 block text-[19px] font-bold leading-none tracking-[-0.03em]">
-      {value}
-    </b>
-    <small className="mt-1 block text-[10.5px] text-white/60">{label}</small>
-  </div>
-);
 
 /* ícone de nota sem puxar outro import do lucide */
 const StickyIcon = () => (
