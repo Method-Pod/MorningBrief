@@ -7,6 +7,7 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Placeholder } from "@tiptap/extensions";
+import { Highlight } from "@tiptap/extension-highlight";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { Range } from "@tiptap/core";
 import {
@@ -18,6 +19,7 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  Highlighter,
   Italic,
   Lightbulb,
   List,
@@ -45,6 +47,26 @@ import { cx } from "../ui";
  * mover um nó de um lugar para outro — o que falta é a alça e a decisão de qual
  * bloco ela está segurando.
  */
+
+/**
+ * As cores do marca-texto.
+ *
+ * Cinco, e não uma paleta inteira: marca-texto serve para separar o que
+ * importa do resto, e com doze cores a separação se perde — tudo fica
+ * marcado de alguma coisa. São as mesmas famílias que o app já usa nos outros
+ * lugares, para a nota não parecer de outro programa.
+ *
+ * O valor gravado é a cor final, e não um nome: o `data-color` do Highlight
+ * vira `background-color` direto no HTML, e um nome exigiria uma tabela de
+ * tradução em qualquer lugar que fosse mostrar a nota.
+ */
+const CANETAS = [
+  { chave: "amarelo", cor: "#fef08a", rotulo: "Amarelo" },
+  { chave: "verde", cor: "#bbf7d0", rotulo: "Verde" },
+  { chave: "azul", cor: "#bfdbfe", rotulo: "Azul" },
+  { chave: "rosa", cor: "#fbcfe8", rotulo: "Rosa" },
+  { chave: "laranja", cor: "#fed7aa", rotulo: "Laranja" },
+] as const;
 
 /** Espera antes de gravar, para não escrever no banco a cada tecla. */
 const ESPERA_MS = 900;
@@ -220,6 +242,9 @@ export function Editor({
            nota comprida vira poluição. */
         showOnlyCurrent: true,
       }),
+      /* `multicolor`: sem isso o Highlight é uma cor só, e o pedido era
+         escolher a cor como num marca-texto de verdade. */
+      Highlight.configure({ multicolor: true }),
       Destaque,
       MenuBarra.configure({ itens: ITENS, aoMudar: setMenu }),
     ],
@@ -484,6 +509,55 @@ export function Editor({
         >
           <Lightbulb size={14} />
         </button>
+
+        <span className="mx-0.5 h-5 w-px bg-line" />
+
+        {/*
+          As cinco canetas, como bolinhas.
+          
+          Direto na barra em vez de dentro de um submenu: marcar é um gesto de
+          um toque, e esconder a cor atrás de um segundo clique dobraria o
+          trabalho do gesto mais comum do marca-texto.
+        */}
+        {CANETAS.map((c) => (
+          <button
+            key={c.chave}
+            type="button"
+            onClick={() =>
+              editor.chain().focus().toggleHighlight({ color: c.cor }).run()
+            }
+            aria-label={`Marcar de ${c.rotulo.toLowerCase()}`}
+            title={c.rotulo}
+            aria-pressed={editor.isActive("highlight", { color: c.cor })}
+            className={cx(
+              "grid h-8 w-6 place-items-center rounded-lg transition-colors hover:bg-ink-800"
+            )}
+          >
+            <span
+              className={cx(
+                "h-4 w-4 rounded-full border transition-transform",
+                editor.isActive("highlight", { color: c.cor })
+                  ? "border-fg/35 scale-110"
+                  : "border-line"
+              )}
+              style={{ background: c.cor }}
+            />
+          </button>
+        ))}
+
+        {/* Tirar a marca. Só aparece quando há marca para tirar — um botão
+            que não faz nada é pior que a ausência dele. */}
+        {editor.isActive("highlight") && (
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().unsetHighlight().run()}
+            aria-label="Tirar a marca"
+            title="Tirar a marca"
+            className={botao(false)}
+          >
+            <Highlighter size={14} />
+          </button>
+        )}
       </BubbleMenu>
 
       <EditorContent editor={editor} />
@@ -501,8 +575,8 @@ export function Editor({
         <div
           /* `fixed` porque a coordenada vem do `coordsAtPos`, que é relativa à
              janela — e a caixa do editor rola. */
-          className="fixed z-50 max-h-[300px] w-[248px] overflow-y-auto rounded-[16px] border border-line bg-white p-1.5 shadow-[0_12px_32px_-8px_rgb(20_24_26/0.25)]"
-          style={{ left: menu.x, top: menu.y + 6 }}
+          className="fixed z-50 w-[248px] overflow-y-auto overscroll-contain rounded-[16px] border border-line bg-white p-1.5 shadow-[0_12px_32px_-8px_rgb(20_24_26/0.25)]"
+          style={lugarDoMenu(menu)}
         >
           {menu.itens.map((item, i) => {
             const Icone = ICONE_ITEM[item.chave] ?? Type;
@@ -516,6 +590,15 @@ export function Editor({
                   e.preventDefault();
                   item.rodar(editor, menu.faixa);
                 }}
+                /* Traz o item escolhido para dentro da vista: com a lista
+                   rolando, as setas passavam a selecionar item que ninguém
+                   estava vendo. */
+                ref={
+                  i === menu.indice
+                    ? (el) =>
+                        el?.scrollIntoView({ block: "nearest" })
+                    : undefined
+                }
                 className={cx(
                   "flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition-colors",
                   i === menu.indice ? "bg-brand-500/12" : "hover:bg-ink-800"
@@ -547,6 +630,34 @@ export function Editor({
         )}
     </div>
   );
+}
+
+/**
+ * Para onde o menu abre, e de que altura.
+ *
+ * Abre para baixo quando cabe; quando não cabe, abre para cima. E a altura
+ * nunca passa do espaço disponível, porque um menu que estoura a janela deixa
+ * itens inalcançáveis — não há para onde rolar a página com o menu preso ao
+ * caractere.
+ */
+const FOLGA = 10;
+const ALTURA_MINIMA = 150;
+
+function lugarDoMenu(menu: NonNullable<EstadoMenu>): React.CSSProperties {
+  const janela = typeof window === "undefined" ? 800 : window.innerHeight;
+  const abaixo = janela - menu.y - FOLGA;
+  const acima = menu.yTopo - FOLGA;
+
+  /* Só sobe quando embaixo não cabe o mínimo e em cima cabe mais. */
+  const paraCima = abaixo < ALTURA_MINIMA && acima > abaixo;
+
+  return paraCima
+    ? {
+        left: menu.x,
+        bottom: janela - menu.yTopo + 6,
+        maxHeight: Math.min(300, acima),
+      }
+    : { left: menu.x, top: menu.y + 6, maxHeight: Math.min(300, abaixo) };
 }
 
 export type { TomDestaque };

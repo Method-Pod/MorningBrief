@@ -715,3 +715,45 @@ textarea::placeholder {
   outline-offset: 3px;
   border-radius: 6px;
 }
+
+/*
+ * Link como pastilha, não como endereço cru.
+ *
+ * O texto já vem curto de `urlCurta`, mas o endereço continua sendo a coisa
+ * mais comprida da linha. A pastilha o separa do texto em volta sem gritar, e
+ * a quebra dentro dela é permitida — um endereço que não quebra estoura a
+ * largura de leitura no telefone.
+ */
+.nota-corpo a[href] {
+  display: inline;
+  background: color-mix(in srgb, var(--color-brand-500) 8%, transparent);
+  border-radius: 6px;
+  padding: 0.05em 0.3em;
+  text-decoration: none;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  word-break: break-word;
+  transition: background-color 0.15s;
+}
+
+.nota-corpo a[href]:hover {
+  background: color-mix(in srgb, var(--color-brand-500) 16%, transparent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/*
+ * Marca-texto.
+ *
+ * A cor vem no `style` do próprio `<mark>`, escrita pelo editor — aqui só se
+ * tira o que o navegador põe por padrão (fundo amarelo fixo e cor de texto) e
+ * se dá um pouco de respiro, para a marca não colar na letra.
+ */
+.nota-corpo mark {
+  background: none;
+  color: inherit;
+  border-radius: 4px;
+  padding: 0.08em 0.15em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}

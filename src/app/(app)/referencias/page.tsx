@@ -96,6 +96,15 @@ export default function ReferenciasPage() {
   const [falta, setFalta] = React.useState<{ texto: string } | null>(null);
 
   const [filtro, setFiltro] = React.useState<"all" | string>("all");
+  /*
+   * Imagens que falharam ao carregar.
+   *
+   * Ter endereço não é ter imagem: o site pode ter trocado o arquivo, o
+   * endereço pode expirar, e um print gerado sob demanda pode voltar 404. Sem
+   * isto o navegador desenha o próprio ícone de imagem quebrada — que foi
+   * exatamente o que apareceu na tela.
+   */
+  const [quebradas, setQuebradas] = React.useState<Record<string, true>>({});
   const [gerindo, setGerindo] = React.useState(false);
 
   /* modal de cadastro */
@@ -547,11 +556,14 @@ export default function ReferenciasPage() {
           />
         </Card>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        /* Mais colunas, cartão mais estreito. Em três colunas cada cartão
+           ficava largo o bastante para o nome caber em duas linhas, e aí a
+           altura dobrava sem o cartão dizer mais nada. */
+        <div className="grid gap-2.5 grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
           {lista.map((r, i) => (
             <Card
               key={r.id}
-              className="entra group flex flex-col overflow-hidden p-3"
+              className="entra group flex flex-col overflow-hidden p-2"
               style={{ "--i": i } as React.CSSProperties}
             >
               {/*
@@ -569,84 +581,109 @@ export default function ReferenciasPage() {
                 title={r.url}
                 className="relative block aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-ink-800"
               >
-                {r.image_url ? (
+                {r.image_url && !quebradas[r.id] ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={r.image_url}
                     alt=""
                     loading="lazy"
                     decoding="async"
+                    /* Falhou? Cai no ícone, como um cartão sem imagem. */
+                    onError={() =>
+                      setQuebradas((q) => ({ ...q, [r.id]: true }))
+                    }
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                   />
                 ) : (
                   <span className="grid h-full w-full place-items-center text-brand-400/40">
-                    <Link2 size={24} />
+                    <Link2 size={22} />
                   </span>
                 )}
               </a>
 
-              <div className="mt-2.5 flex min-w-0 flex-1 flex-col">
-                <div className="flex items-start justify-between gap-1.5">
+              {/*
+                Duas linhas de texto, não quatro.
+                
+                Antes eram nome (em duas linhas), domínio, anotação e
+                pastilhas empilhados, com pesos parecidos — a mesma confusão
+                que a linha da aula tinha. Agora o nome é a única coisa em
+                peso forte, numa linha só, e embaixo dele vem uma faixa fraca
+                com o domínio e as coleções. A anotação inteira fica no `title`
+                do cartão: ela é o motivo de ter salvo, não o que se lê ao
+                varrer a parede com o olho.
+              */}
+              <div
+                className="mt-2 flex min-w-0 flex-1 flex-col"
+                title={[r.name, r.url, r.notes ?? r.description]
+                  .filter(Boolean)
+                  .join("\n")}
+              >
+                <div className="flex items-center justify-between gap-1">
                   <a
                     href={r.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-w-0 flex-1 text-[13px] font-semibold leading-snug hover:text-brand-400"
+                    className="min-w-0 flex-1 truncate text-[12px] font-semibold leading-tight hover:text-brand-400"
                   >
                     {r.name}
                   </a>
-                  <span className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+
+                  {/*
+                    As ações somem quando o ponteiro não está no cartão, e num
+                    cartão estreito elas não podem empurrar o nome: por isso
+                    largura zero até o hover, em vez de só opacidade.
+                  */}
+                  <span className="flex shrink-0 items-center gap-0.5 overflow-hidden transition-[max-width,opacity] duration-150 lg:max-w-0 lg:opacity-0 lg:group-hover:max-w-[76px] lg:group-hover:opacity-100 lg:group-focus-within:max-w-[76px] lg:group-focus-within:opacity-100">
                     <a
                       href={r.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label={`Abrir ${r.name}`}
-                      className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-brand-500/15 hover:text-brand-400"
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-fg-mute hover:bg-brand-500/15 hover:text-brand-400"
                     >
-                      <ExternalLink size={13} />
+                      <ExternalLink size={12} />
                     </a>
                     <button
                       type="button"
                       onClick={() => abrir(r)}
                       aria-label={`Editar ${r.name}`}
-                      className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-ink-750 hover:text-fg"
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-fg-mute hover:bg-ink-750 hover:text-fg"
                     >
-                      <Pencil size={13} />
+                      <Pencil size={12} />
                     </button>
                     <button
                       type="button"
                       onClick={() => remover(r)}
                       aria-label={`Tirar ${r.name}`}
-                      className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={12} />
                     </button>
                   </span>
                 </div>
 
-                <p className="mt-0.5 truncate text-[10.5px] text-fg-mute">
-                  {dominioDe(r.url)}
-                </p>
-
-                {r.notes && (
-                  <p className="mt-1.5 line-clamp-2 text-[11.5px] text-fg-dim">
-                    {r.notes}
-                  </p>
-                )}
-
-                {!r.notes && r.description && (
-                  <p className="mt-1.5 line-clamp-2 text-[11.5px] text-fg-mute">
-                    {r.description}
-                  </p>
-                )}
-
-                {(doLink.get(r.id) ?? []).length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {(doLink.get(r.id) ?? []).map((cid) => (
-                      <Pastilha key={cid} nome={nomeDaColecao.get(cid)} />
-                    ))}
-                  </div>
-                )}
+                {/* Domínio e coleções na mesma linha fraca: são os dois
+                    rótulos do cartão, e separá-los em duas linhas fazia a
+                    altura crescer para dizer o mesmo. */}
+                <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden">
+                  <span className="shrink-0 text-[10px] text-fg-mute">
+                    {dominioDe(r.url)}
+                  </span>
+                  {(doLink.get(r.id) ?? []).slice(0, 2).map((cid) => (
+                    <Pastilha
+                      key={cid}
+                      nome={nomeDaColecao.get(cid)}
+                      className="shrink-0"
+                    />
+                  ))}
+                  {/* Passando de duas coleções, o resto vira um número: três
+                      pastilhas não cabem e a terceira sairia cortada. */}
+                  {(doLink.get(r.id) ?? []).length > 2 && (
+                    <span className="shrink-0 text-[10px] text-fg-mute tnum">
+                      +{(doLink.get(r.id) ?? []).length - 2}
+                    </span>
+                  )}
+                </div>
               </div>
             </Card>
           ))}

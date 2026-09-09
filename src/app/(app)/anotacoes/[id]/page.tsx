@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { NADA_GRAVADO, recadoDeErro } from "@/lib/erros";
 import { NOTE_COLORS, type Note } from "@/lib/types";
 import { dateTimeBR } from "@/lib/format";
-import { paraEditor } from "@/lib/notas";
+import { linkificar, paraEditor } from "@/lib/notas";
 import { Editor } from "@/components/editor/Editor";
 import { Button, Card, cx, useConfirm, useNotice } from "@/components/ui";
 
@@ -258,7 +258,16 @@ export default function NotaPage() {
           texto — sem isso ela ficaria por cima da primeira letra. */}
       <div className="pl-7">
         <Editor
-          html={paraEditor(nota.content)}
+          /*
+           * `linkificar` na entrada, e não uma vez no banco.
+           *
+           * As notas antigas eram texto puro, então os endereços dentro delas
+           * nunca foram links — o `autolink` do editor só marca o que se
+           * digita. Passar aqui faz o que já existe virar clicável sem
+           * migração e sem tocar em nada até você editar: o texto curto só é
+           * gravado na primeira mudança que você fizer na nota.
+           */
+          html={linkificar(paraEditor(nota.content))}
           onMudar={(content) => gravar({ content })}
           onGravando={(pendente) =>
             setEstado((e) => (pendente && e !== "gravando" ? "pendente" : e))

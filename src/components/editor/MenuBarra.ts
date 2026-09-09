@@ -34,9 +34,16 @@ export type EstadoMenu = {
    * a mesma conta, feita duas vezes e com mais chance de divergir.
    */
   faixa: Range;
-  /** Canto de baixo do "/" na tela, para o menu nascer colado nele. */
+  /**
+   * Onde o "/" está na tela.
+   *
+   * `y` é a base do caractere e `yTopo` o topo dele: com os dois, a tela
+   * decide abrir o menu para baixo ou para cima. Só com a base, um "/" no pé
+   * da janela abriria um menu que sai da tela.
+   */
   x: number;
   y: number;
+  yTopo: number;
 } | null;
 
 /** Tira acento, para "citacao" achar "citação". */
@@ -78,7 +85,7 @@ export const MenuBarra = Extension.create<OpcoesMenuBarra>({
     let itens: ItemMenu[] = [];
     let indice = 0;
     let faixa: Range | null = null;
-    let pos = { x: 0, y: 0 };
+    let pos = { x: 0, y: 0, yTopo: 0 };
 
     const avisar = () =>
       opcoes.aoMudar(
@@ -112,7 +119,7 @@ export const MenuBarra = Extension.create<OpcoesMenuBarra>({
              * direita à medida que se digitava. Aqui é o "/" exato.
              */
             const c = editor.view.coordsAtPos(r.from);
-            pos = { x: c.left, y: c.bottom };
+            pos = { x: c.left, y: c.bottom, yTopo: c.top };
             avisar();
           };
 
