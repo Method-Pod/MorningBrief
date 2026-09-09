@@ -29,6 +29,7 @@ import {
   localTime,
   todayISO,
 } from "@/lib/format";
+import { textoDaNota } from "@/lib/notas";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import {
   HORAS_RETENCAO,
@@ -539,9 +540,17 @@ export default function HomePage() {
                       {n.title || "Sem título"}
                     </p>
                   </div>
-                  {n.content && (
+                  {/*
+                    O texto por trás das tags.
+                    
+                    `content` guarda HTML desde que a anotação virou editor de
+                    blocos, e este cartão mostrava a marcação crua na tela —
+                    "<ul><li><p><strong>|&nbsp;TDAH..." em vez do texto.
+                    `textoDaNota` é a mesma função que a busca usa.
+                  */}
+                  {textoDaNota(n.content) && (
                     <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-fg-mute">
-                      {n.content}
+                      {textoDaNota(n.content)}
                     </p>
                   )}
                 </div>
