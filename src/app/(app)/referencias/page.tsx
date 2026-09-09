@@ -985,6 +985,36 @@ export default function ReferenciasPage() {
             </div>
           </Field>
 
+          {/*
+            A primeira pergunta, logo depois do link.
+            
+            Ela decide o sentido de tudo o que vem abaixo: o campo de imagem
+            vira "logo" e a prévia vira quadrada, as coleções desaparecem, e a
+            anotação troca de "por que salvei" para "o que se acha aqui".
+            Estava na penúltima posição, e aí quem abria o formulário via
+            "Imagem própria" com prévia de banner e só descobria três campos
+            depois que existia outro modo. Pergunta que muda o resto vem
+            primeiro.
+          */}
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-[14px] bg-ink-800 p-3">
+            <input
+              type="checkbox"
+              checked={form.busca}
+              onChange={(e) => setForm({ ...form, busca: e.target.checked })}
+              className="mt-[2px] h-4 w-4 shrink-0 accent-[var(--color-brand-500)]"
+            />
+            <span className="min-w-0">
+              <span className="block text-[12.5px] font-semibold">
+                É um site para buscar referência
+              </span>
+              <span className="mt-0.5 block text-[11px] text-fg-mute">
+                Dribbble, Mobbin, Awwwards — lugar onde você garimpa. Vai para a
+                lista <b>Onde buscar</b>, no topo, em vez da parede de quadros.
+              </span>
+            </span>
+          </label>
+
+
           {(previa || form.image_url) && (
             <div className="overflow-hidden rounded-[14px] bg-ink-800">
               {/*
@@ -1064,29 +1094,6 @@ export default function ReferenciasPage() {
               placeholder="Como você reconhece essa referência"
             />
           </Field>
-
-          {/*
-            Logo abaixo do nome, e antes das coleções, porque a resposta muda
-            o que vem depois: site de busca vai para a lista fixa do topo e
-            não entra em coleção nenhuma.
-          */}
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-[14px] bg-ink-800 p-3">
-            <input
-              type="checkbox"
-              checked={form.busca}
-              onChange={(e) => setForm({ ...form, busca: e.target.checked })}
-              className="mt-[2px] h-4 w-4 shrink-0 accent-[var(--color-brand-500)]"
-            />
-            <span className="min-w-0">
-              <span className="block text-[12.5px] font-semibold">
-                É um site para buscar referência
-              </span>
-              <span className="mt-0.5 block text-[11px] text-fg-mute">
-                Dribbble, Mobbin, Awwwards — lugar onde você garimpa. Vai para a
-                lista <b>Onde buscar</b>, no topo, em vez da parede de quadros.
-              </span>
-            </span>
-          </label>
 
           {!form.busca && (
           <Field label="Coleções" hint="Pode marcar mais de uma. Crie novas no botão Coleções.">
