@@ -9,6 +9,7 @@ import {
   PinOff,
   Plus,
   Search,
+  Pencil,
   StickyNote,
   Tag,
   Trash2,
@@ -17,7 +18,12 @@ import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
-import type { Note, NoteCategory, NoteInCategory } from "@/lib/types";
+import {
+  NOTE_COLORS,
+  type Note,
+  type NoteCategory,
+  type NoteInCategory,
+} from "@/lib/types";
 import { dateTimeBR } from "@/lib/format";
 import { textoDaNota } from "@/lib/notas";
 import { GerenciarEtiquetas } from "@/components/GerenciarEtiquetas";
@@ -25,7 +31,9 @@ import {
   Button,
   Card,
   Empty,
+  Field,
   Input,
+  Modal,
   useConfirm,
   useNotice,
   cx,
@@ -44,6 +52,16 @@ import {
  * que deixa reconhecer a nota de longe sem transformar a lista numa parede de
  * quadrados.
  */
+
+/** A bolinha de cada cor, no seletor da edição rápida. */
+const BOLINHA: Record<string, string> = {
+  blue: "bg-brand-500",
+  violet: "bg-violet-500",
+  emerald: "bg-pos",
+  amber: "bg-warn",
+  rose: "bg-neg",
+  slate: "bg-ink-600",
+};
 
 const COR_DO_ICONE: Record<string, string> = {
   blue: "text-brand-400 bg-brand-500/10",
@@ -73,6 +91,20 @@ export default function AnotacoesPage() {
   const [criando, setCriando] = React.useState(false);
   const [filtro, setFiltro] = React.useState<"all" | "sem" | string>("all");
   const [gerindo, setGerindo] = React.useState(false);
+
+  /*
+   * Edição rápida: o que se muda sem abrir a nota.
+   *
+   * Nome, cor e categoria são decisões de organização, e vêm à cabeça olhando
+   * a lista — "essa é de estudo", "essa devia ser verde". Ter que abrir a nota,
+   * mexer no cabeçalho dela e voltar transformava três segundos em três
+   * navegações. Por isso saíram da página da nota e vieram para cá.
+   */
+  const [editando, setEditando] = React.useState<Note | null>(null);
+  const [rascunho, setRascunho] = React.useState({ title: "", color: "blue" });
+  const [minhas, setMinhas] = React.useState<string[]>([]);
+  const [salvando, setSalvando] = React.useState(false);
+  const [erroEdicao, setErroEdicao] = React.useState("");
 
   const confirm = useConfirm();
   const notice = useNotice();
@@ -151,6 +183,99 @@ export default function AnotacoesPage() {
       if (!saiu?.length) return notice.show(NADA_GRAVADO);
       setRows((r) => r.filter((x) => x.id !== n.id));
     });
+
+  const abrirEdicao = (n: Note) => {
+    setEditando(n);
+    setRascunho({ title: n.title, color: n.color });
+    setMinhas(daNota.get(n.id) ?? []);
+    setErroEdicao("");
+  };
+
+  const fecharEdicao = () => {
+    setEditando(null);
+    setErroEdicao("");
+  };
+
+  const alternarCategoria = (cid: string) =>
+    setMinhas((v) =>
+      v.includes(cid) ? v.filter((x) => x !== cid) : [...v, cid]
+    );
+
+  /**
+   * Grava nome, cor e categorias de uma vez.
+   *
+   * As ligações são apagadas e reinseridas em vez de comparadas uma a uma: são
+   * poucas por nota, e um `delete` seguido de `insert` não tem como deixar uma
+   * sobra que a comparação erraria.
+   *
+   * `updated_at` só muda se o nome ou a cor mudaram. Trocar apenas a categoria
+   * não é editar a nota, e mexer na data faria a lista reordenar como se o
+   * texto tivesse sido escrito de novo.
+   */
+  const salvarEdicao = async () => {
+    if (!editando) return;
+    const title = rascunho.title.trim();
+    setSalvando(true);
+    setErroEdicao("");
+
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      setSalvando(false);
+      return setErroEdicao(SESSION_EXPIRED);
+    }
+
+    const mudouNota =
+      title !== editando.title || rascunho.color !== editando.color;
+
+    if (mudouNota) {
+      const { data, error } = await supabase
+        .from("notes")
+        .update({
+          title,
+          color: rascunho.color,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", editando.id)
+        .select("id")
+        .maybeSingle();
+      if (error || !data) {
+        setSalvando(false);
+        return setErroEdicao(error ? error.message : NADA_GRAVADO);
+      }
+    }
+
+    const antes = daNota.get(editando.id) ?? [];
+    const mudouCat =
+      antes.length !== minhas.length || antes.some((c) => !minhas.includes(c));
+
+    if (mudouCat) {
+      await supabase
+        .from("note_in_category")
+        .delete()
+        .eq("note_id", editando.id);
+      if (minhas.length) {
+        const { error } = await supabase.from("note_in_category").insert(
+          minhas.map((category_id) => ({
+            note_id: editando.id,
+            category_id,
+            user_id: uid,
+          }))
+        );
+        if (error) {
+          setSalvando(false);
+          return setErroEdicao(
+            `A nota foi salva, mas as categorias não: ${error.message}`
+          );
+        }
+      }
+    }
+
+    setSalvando(false);
+    /* Releitura completa: mudou a linha e as ligações, e refazer as duas à mão
+       daria mais chance de divergir do banco do que a ida de rede economiza. */
+    await load();
+    fecharEdicao();
+  };
 
   /** Categorias de cada nota, por id, para a lista não varrer as ligações. */
   const daNota = React.useMemo(() => {
@@ -258,6 +383,15 @@ export default function AnotacoesPage() {
       </Link>
 
       <span className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+        <button
+          type="button"
+          onClick={() => abrirEdicao(n)}
+          aria-label={`Editar ${n.title || "anotação"}`}
+          title="Nome, cor e categorias"
+          className="grid h-8 w-8 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+        >
+          <Pencil size={14} />
+        </button>
         <button
           type="button"
           onClick={() => fixar(n)}
@@ -400,6 +534,103 @@ export default function AnotacoesPage() {
           <ul className="divide-y divide-line-soft">{vista.map(linha)}</ul>
         </Card>
       )}
+
+      {/* ------------------------- edição rápida ------------------------- */}
+      <Modal
+        open={!!editando}
+        onClose={fecharEdicao}
+        title="Editar anotação"
+        sub="Nome, cor e categorias. O texto se edita abrindo a nota."
+        footer={
+          <>
+            <Button onClick={fecharEdicao}>Cancelar</Button>
+            <Button variant="primary" onClick={salvarEdicao} disabled={salvando}>
+              {salvando ? "Salvando..." : "Salvar"}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {erroEdicao && (
+            <p className="rounded-[14px] bg-neg/10 px-3.5 py-3 text-xs text-neg">
+              {erroEdicao}
+            </p>
+          )}
+
+          <Field label="Nome">
+            <Input
+              autoFocus
+              value={rascunho.title}
+              onChange={(e) =>
+                setRascunho({ ...rascunho, title: e.target.value })
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  salvarEdicao();
+                }
+              }}
+              placeholder="Sem título"
+            />
+          </Field>
+
+          {/* A cor é o que deixa reconhecer a nota de longe no índice, então
+              aparece como as próprias bolinhas e não como uma lista de nomes. */}
+          <Field label="Cor" hint="Aparece no ícone, na lista.">
+            <div className="flex items-center gap-2">
+              {NOTE_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setRascunho({ ...rascunho, color: c })}
+                  aria-label={`Cor ${c}`}
+                  aria-pressed={rascunho.color === c}
+                  className={cx(
+                    "h-7 w-7 rounded-full transition-transform",
+                    BOLINHA[c],
+                    rascunho.color === c
+                      ? "ring-2 ring-fg/25 ring-offset-2 ring-offset-white"
+                      : "opacity-45 hover:opacity-90"
+                  )}
+                />
+              ))}
+            </div>
+          </Field>
+
+          <Field
+            label="Categorias"
+            hint="Pode marcar mais de uma. Crie novas no botão Categorias."
+          >
+            {cats.length === 0 ? (
+              <p className="text-[11.5px] text-fg-mute">
+                Nenhuma categoria ainda — feche e crie em <b>Categorias</b>.
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {cats.map((c) => {
+                  const marcada = minhas.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => alternarCategoria(c.id)}
+                      aria-pressed={marcada}
+                      className={cx(
+                        "h-8 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
+                        marcada
+                          ? "border-brand-500 bg-brand-500/12 text-brand-400"
+                          : "border-line bg-white text-fg-mute hover:border-brand-400"
+                      )}
+                    >
+                      {c.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Field>
+        </div>
+      </Modal>
 
       <GerenciarEtiquetas
         aberto={gerindo}

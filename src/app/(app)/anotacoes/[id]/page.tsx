@@ -3,17 +3,10 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Check, Loader2, Pin, PinOff, Tag, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Pin, PinOff, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { limparCache } from "@/lib/cachePagina";
 import { NADA_GRAVADO, recadoDeErro } from "@/lib/erros";
-import {
-  NOTE_COLORS,
-  type Note,
-  type NoteCategory,
-  type NoteInCategory,
-} from "@/lib/types";
+import type { Note } from "@/lib/types";
 import { dateTimeBR } from "@/lib/format";
 import { linkificar, paraEditor } from "@/lib/notas";
 import { Editor } from "@/components/editor/Editor";
@@ -31,15 +24,6 @@ import { Button, Card, cx, useConfirm, useNotice } from "@/components/ui";
  * O que existe é o aviso de estado, que diz qual dos dois é o caso.
  */
 
-const CORES: Record<string, string> = {
-  blue: "bg-brand-500",
-  violet: "bg-violet-500",
-  emerald: "bg-pos",
-  amber: "bg-warn",
-  rose: "bg-neg",
-  slate: "bg-ink-600",
-};
-
 type Estado = "lendo" | "limpo" | "pendente" | "gravando" | "erro";
 
 export default function NotaPage() {
@@ -52,10 +36,6 @@ export default function NotaPage() {
   const [estado, setEstado] = React.useState<Estado>("lendo");
   const [falta, setFalta] = React.useState<string>("");
   const [titulo, setTitulo] = React.useState("");
-  const [cats, setCats] = React.useState<NoteCategory[]>([]);
-  /* As categorias desta nota. Local, e não derivado de uma lista global: esta
-     tela conhece uma nota só. */
-  const [minhas, setMinhas] = React.useState<string[]>([]);
 
   const confirm = useConfirm();
   const notice = useNotice();
@@ -84,19 +64,6 @@ export default function NotaPage() {
       setNota(n);
       setTitulo(n.title);
       setEstado("limpo");
-
-      /* As categorias vêm depois da nota, e a falha delas é tolerada: sem
-         CATEGORIAS-DE-NOTA.sql a faixa não aparece e escrever continua
-         funcionando. */
-      const [c, l] = await Promise.all([
-        supabase.from("note_categories").select("*").order("name"),
-        supabase.from("note_in_category").select("*").eq("note_id", id),
-      ]);
-      if (!vivo) return;
-      setCats((c.data as NoteCategory[]) ?? []);
-      setMinhas(
-        ((l.data as NoteInCategory[]) ?? []).map((x) => x.category_id)
-      );
     })();
     return () => {
       vivo = false;
@@ -149,52 +116,6 @@ export default function NotaPage() {
     gravar({ pinned: !nota.pinned });
   };
 
-  /**
-   * Marca ou desmarca uma categoria.
-   *
-   * Grava a ligação em vez de reescrever a nota: a nota em si não mudou, e
-   * mexer em `updated_at` por causa de uma etiqueta faria a lista reordenar
-   * como se o texto tivesse sido editado.
-   *
-   * Otimista, com desfazer no erro: é um clique numa pastilha, e esperar a ida
-   * de rede para ela acender tornaria o gesto mais lento que o pensamento.
-   */
-  const alternarCategoria = async (cid: string) => {
-    if (!id) return;
-    const tinha = minhas.includes(cid);
-    setMinhas((v) => (tinha ? v.filter((x) => x !== cid) : [...v, cid]));
-
-    const uid = await currentUserId(supabase);
-    if (!uid) {
-      setMinhas((v) => (tinha ? [...v, cid] : v.filter((x) => x !== cid)));
-      return notice.show(SESSION_EXPIRED);
-    }
-
-    const { error } = tinha
-      ? await supabase
-          .from("note_in_category")
-          .delete()
-          .eq("note_id", id)
-          .eq("category_id", cid)
-      : await supabase
-          .from("note_in_category")
-          .insert({ note_id: id, category_id: cid, user_id: uid });
-
-    if (error) {
-      setMinhas((v) => (tinha ? [...v, cid] : v.filter((x) => x !== cid)));
-      /* Cache da lista invalidado: ela guarda as ligações e ficaria mostrando
-         a pastilha que aqui não existe mais. */
-      notice.check(error, tinha ? "tirar a categoria" : "pôr a categoria");
-      return;
-    }
-    limparCache();
-  };
-
-  const trocarCor = (color: string) => {
-    if (!nota || nota.color === color) return;
-    gravar({ color });
-  };
-
   const remover = () =>
     confirm.ask(
       `Excluir "${nota?.title || "esta anotação"}"? Não pode ser desfeito.`,
@@ -238,27 +159,6 @@ export default function NotaPage() {
 
         <div className="flex items-center gap-1.5">
           <Aviso estado={estado} />
-
-          {/* A cor da nota, encolhida a seis bolinhas. Serve para reconhecer a
-              nota na lista, então mora perto do título e não num menu. */}
-          <span className="flex items-center gap-1 rounded-full bg-ink-800 p-1">
-            {NOTE_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => trocarCor(c)}
-                aria-label={`Cor ${c}`}
-                aria-pressed={nota.color === c}
-                className={cx(
-                  "h-4 w-4 rounded-full transition-transform",
-                  CORES[c],
-                  nota.color === c
-                    ? "ring-2 ring-fg/25 ring-offset-1 ring-offset-ink-800"
-                    : "opacity-45 hover:opacity-90"
-                )}
-              />
-            ))}
-          </span>
 
           <button
             type="button"
@@ -315,44 +215,17 @@ export default function NotaPage() {
         className="mb-1 w-full resize-none border-0 bg-transparent p-0 text-[30px] font-bold leading-tight tracking-[-0.03em] text-fg outline-none placeholder:text-fg-mute/40 field-sizing-content"
       />
 
-      <div className="mb-6 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-        <p className="text-[11px] text-fg-mute">
-          Editada em {dateTimeBR(nota.updated_at)}
-        </p>
-
-        {/*
-          As categorias logo abaixo do título, e não num menu.
-          
-          É onde a pessoa está olhando quando acaba de nomear a nota, e é o
-          momento em que ela sabe do que a nota é. Escondê-las num painel
-          faria a categoria ficar vazia na maioria das notas — e um filtro que
-          ninguém preenche não filtra nada.
-        */}
-        {cats.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1">
-            <Tag size={11} className="shrink-0 text-fg-mute" />
-            {cats.map((c) => {
-              const marcada = minhas.includes(c.id);
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => alternarCategoria(c.id)}
-                  aria-pressed={marcada}
-                  className={cx(
-                    "h-6 rounded-full border px-2 text-[10.5px] font-medium transition-colors",
-                    marcada
-                      ? "border-brand-500 bg-brand-500/12 text-brand-400"
-                      : "border-line bg-white text-fg-mute hover:border-brand-400"
-                  )}
-                >
-                  {c.name}
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      {/*
+        Só a data aqui.
+        
+        Cor e categoria saíram para a edição rápida da lista: são decisões de
+        organização, e vêm à cabeça olhando o índice — "essa é de estudo",
+        "essa devia ser verde" —, não no meio de escrever. Dentro da nota elas
+        eram seis bolinhas e N pastilhas competindo com o título pela atenção.
+      */}
+      <p className="mb-6 text-[11px] text-fg-mute">
+        Editada em {dateTimeBR(nota.updated_at)}
+      </p>
 
       {/* `pl-7` abre a calha onde a alça de arrastar aparece, à esquerda do
           texto — sem isso ela ficaria por cima da primeira letra. */}
