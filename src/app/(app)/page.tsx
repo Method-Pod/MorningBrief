@@ -339,24 +339,34 @@ export default function HomePage() {
         ),
 
       /*
-       * O que "O que vem" mostra: prazo depois de hoje.
+       * O que "O que vem" mostra: todas as demandas abertas.
        *
-       * Antes as duas seções liam a mesma lista e quatro das cinco linhas se
-       * repetiam na tela, com títulos diferentes. Agora cada demanda aparece
-       * num lugar só: hoje e atrasado em cima, o resto aqui.
+       * Cheguei a filtrar só o que vence depois de hoje, para cada demanda
+       * aparecer num lugar só — mas ele pediu a lista inteira aqui, e é ele
+       * que olha isso toda manhã. "Hoje" continua sendo o recorte do dia;
+       * este cartão é o quadro completo.
+       *
+       * Sem corte de quantidade, e por isso a ordem importa: atrasado
+       * primeiro, depois por prioridade, e o prazo mais próximo à frente.
        */
-      depois: open
-        .filter((t) => t.due_date && daysUntil(t.due_date) > 0)
-        .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""))
-        .slice(0, 5),
-
-      /* Sem prazo nenhum não cabe em "hoje" nem em "depois", e desapareceria
-         do painel. Entra no fim de "o que vem". */
-      semPrazo: open.filter((t) => !t.due_date).slice(0, 3),
+      todas: open.slice().sort((a, b) => {
+        const atrasoA = a.due_date && daysUntil(a.due_date) < 0 ? 0 : 1;
+        const atrasoB = b.due_date && daysUntil(b.due_date) < 0 ? 0 : 1;
+        return (
+          atrasoA - atrasoB ||
+          PRIO_RANK[a.priority] - PRIO_RANK[b.priority] ||
+          (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999")
+        );
+      }),
     };
   }, [tasks, bills, recurring, events, notes, today]);
 
   if (loading) return null;
+
+  /* Raio e circunferência do anel do card escuro: o `strokeDashoffset` precisa
+     do perímetro para desenhar a fatia. */
+  const R = 34;
+  const C = 2 * Math.PI * R;
 
   const now = new Date();
   const nomeMes = now.toLocaleDateString("pt-BR", { month: "long" });
@@ -412,70 +422,58 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ------------------------------ o dia ------------------------------ */}
-      {/*
-        Uma faixa fina, e não um cartão escuro com anel.
-        
-        O cartão anterior era a única coisa escura do app, tinha três níveis de
-        escuro empilhados, e gastava o maior elemento da tela — um anel de 88px
-        — para dizer o número que o cartão logo abaixo já dizia. Em zero, o
-        anel vazio parecia defeito.
-        
-        Aqui o número aparece uma vez só, a barra ocupa a largura que sobra, e
-        os contadores viram texto ao lado em vez de três sub-cartões.
-      */}
-      <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-[18px] bg-white px-[18px] py-3.5 shadow-[0_1px_2px_rgb(20_24_26/0.05)]">
-        <p className="shrink-0 text-[15px] font-bold tracking-[-0.02em]">
-          {m.feitas}
-          <span className="font-semibold text-fg-mute">/{m.hoje.length}</span>
-          <span className="ml-1.5 text-[12.5px] font-medium text-fg-mute">
-            hoje
-          </span>
-        </p>
+      {/* ------------------------ seu dia + hoje ------------------------ */}
+      <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+        <div className="flex flex-col rounded-[22px] bg-gradient-to-br from-[#26292b] to-[#1b1e20] p-[22px] text-white">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/60">
+                Seu dia
+              </p>
+              <p className="mt-2 text-[40px] font-bold leading-none tracking-[-0.04em]">
+                {m.feitas}
+                <span className="text-[0.5em] font-semibold opacity-60">
+                  /{m.hoje.length}
+                </span>
+              </p>
+              <p className="mt-1.5 text-[13px] text-white/70">
+                tarefas concluídas hoje
+              </p>
+            </div>
+            <div className="relative shrink-0">
+              <svg width="88" height="88" viewBox="0 0 88 88" className="-rotate-90">
+                <circle
+                  cx="44"
+                  cy="44"
+                  r={R}
+                  fill="none"
+                  stroke="rgb(255 255 255 / 0.18)"
+                  strokeWidth="7"
+                />
+                <circle
+                  cx="44"
+                  cy="44"
+                  r={R}
+                  fill="none"
+                  stroke="var(--a)"
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                  strokeDasharray={C.toFixed(1)}
+                  strokeDashoffset={(C * (1 - m.pct / 100)).toFixed(1)}
+                />
+              </svg>
+              <span className="absolute inset-0 grid place-items-center text-[15px] font-bold">
+                {m.pct}%
+              </span>
+            </div>
+          </div>
+          <div className="mt-auto grid grid-cols-3 gap-2 pt-[22px]">
+            <Mini icon={<CheckCircle2 size={15} />} value={m.feitas} label="feitas" />
+            <Mini icon={<Repeat2 size={15} />} value={m.actRec.length} label="recorrentes" />
+            <Mini icon={<CalendarDays size={15} />} value={m.evToday.length} label="na agenda" />
+          </div>
+        </div>
 
-        {/* Cresce por transform e não por width: largura recalcula layout a
-            cada quadro, e esta barra fica na primeira coisa pintada. */}
-        <span className="h-1.5 min-w-[80px] flex-1 overflow-hidden rounded-full bg-ink-800">
-          <span
-            className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-[420ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]"
-            style={{ transform: `scaleX(${m.pct / 100})` }}
-          />
-        </span>
-
-        <span className="flex shrink-0 items-center gap-x-4 gap-y-1 text-[12px] text-fg-mute">
-          <span className="inline-flex items-center gap-1.5">
-            <Repeat2 size={13} className="text-fg-mute/70" />
-            <b className="font-bold text-fg-dim tnum">{m.actRec.length}</b>
-            recorrentes
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <CalendarDays size={13} className="text-fg-mute/70" />
-            <b className="font-bold text-fg-dim tnum">{m.evToday.length}</b>
-            na agenda
-          </span>
-          {/* Contas da semana entram aqui porque a faixa é o resumo do dia, e
-              vencimento é a pendência que dói se passar batido. */}
-          {m.soon.length > 0 && (
-            <span className="inline-flex items-center gap-1.5">
-              <Wallet size={13} className="text-fg-mute/70" />
-              <b className="font-bold text-fg-dim tnum">{m.soon.length}</b>
-              vencendo
-            </span>
-          )}
-          {/* Atrasada em vermelho e por último: é o que se quer ver primeiro
-              justamente por ser o que não devia estar aí. */}
-          {m.lateT.length > 0 && (
-            <span className="inline-flex items-center gap-1.5 text-neg">
-              <AlertCircle size={13} />
-              <b className="font-bold tnum">{m.lateT.length}</b>
-              atrasada{m.lateT.length === 1 ? "" : "s"}
-            </span>
-          )}
-        </span>
-      </div>
-
-      {/* ------------------------------ hoje ------------------------------ */}
-      <div>
         <Card className="flex flex-col">
           <Head icon={<ListChecks size={14} />} title="Hoje" href="/demandas" link="ver todas" />
           <div className="flex flex-1 flex-col px-[18px] pb-[18px] pt-3">
@@ -560,9 +558,6 @@ export default function HomePage() {
       {/* ------------------------ demandas + notas ------------------------ */}
       <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
         <Card>
-          {/* "O que vem", e não "Demandas abertas": as abertas de hoje e as
-              atrasadas já estão no cartão acima, e ler as duas listas do mesmo
-              lugar fazia quatro das cinco linhas se repetirem na tela. */}
           <Head icon={<CalendarClock size={14} />} title="O que vem" href="/demandas" link="ver quadro" />
           <div className="px-[18px] pb-[18px] pt-3">
             <div className="mb-3 flex flex-wrap gap-2">
@@ -580,14 +575,10 @@ export default function HomePage() {
                   repetida aqui era a terceira aparição do mesmo número. */}
             </div>
             <div className="flex flex-col">
-              {[...m.depois, ...m.semPrazo].length === 0 ? (
-                <Ghost>
-                  {m.doDia.length
-                    ? "Nada além de hoje."
-                    : "Nenhuma demanda aberta."}
-                </Ghost>
+              {m.todas.length === 0 ? (
+                <Ghost>Nenhuma demanda aberta.</Ghost>
               ) : (
-                [...m.depois, ...m.semPrazo].map((t) => (
+                m.todas.map((t) => (
                     <Row key={t.id}>
                       <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", PRIO_DOT[t.priority])} />
                       <span className="min-w-0 flex-1 text-sm font-medium">
@@ -597,17 +588,31 @@ export default function HomePage() {
                           {t.client && ` · ${t.client}`}
                         </span>
                       </span>
-                      {/* Sem prazo é informação, não ausência dela: a demanda
-                          sem data é justamente a que some de vista. */}
+                      {/*
+                        Prazo à direita, e "sem prazo" escrito.
+                        
+                        Sem prazo é informação, não ausência dela: a demanda
+                        sem data é justamente a que some de vista. Vermelho no
+                        que passou, porque a lista inteira cabe aqui e o olho
+                        precisa de onde parar.
+                      */}
                       <span
                         className={cx(
                           "shrink-0 text-[11.5px] font-semibold tnum",
-                          t.due_date ? "text-fg-mute" : "text-fg-mute/60"
+                          !t.due_date
+                            ? "text-fg-mute/60"
+                            : daysUntil(t.due_date) < 0
+                              ? "text-neg"
+                              : t.due_date.slice(0, 10) === today
+                                ? "text-fg-dim"
+                                : "text-fg-mute"
                         )}
                       >
-                        {t.due_date
-                          ? dateBR(t.due_date).slice(0, 5)
-                          : "sem prazo"}
+                        {!t.due_date
+                          ? "sem prazo"
+                          : t.due_date.slice(0, 10) === today
+                            ? "hoje"
+                            : dateBR(t.due_date).slice(0, 5)}
                       </span>
                     </Row>
                   ))
@@ -960,6 +965,24 @@ function Head({
 const Row = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center gap-3 border-b border-line-soft py-2.5 last:border-0">
     {children}
+  </div>
+);
+
+const Mini = ({
+  icon,
+  value,
+  label,
+}: {
+  icon: React.ReactNode;
+  value: number;
+  label: string;
+}) => (
+  <div className="rounded-[14px] bg-white/10 px-2.5 py-3">
+    <span className="opacity-65">{icon}</span>
+    <b className="mt-1.5 block text-[19px] font-bold leading-none tracking-[-0.03em]">
+      {value}
+    </b>
+    <small className="mt-1 block text-[10.5px] text-white/60">{label}</small>
   </div>
 );
 
