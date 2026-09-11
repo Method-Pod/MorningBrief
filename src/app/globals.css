@@ -615,9 +615,18 @@ textarea::placeholder {
   font-size: inherit;
 }
 
+/*
+ * A divisória do "/", um tom mais escura.
+ *
+ * Usava `--color-line`, que é a cor de borda de cartão — desenhada para
+ * delimitar sem aparecer. Numa linha solta no meio do texto, sem nada em
+ * volta que a explique, ela quase sumia: era um traço que se via de perto e
+ * não se via de longe, e quem a inseriu não tinha certeza se tinha inserido.
+ * `--color-ink-600` é o próximo degrau da mesma escala de cinzas.
+ */
 .nota-corpo hr {
   border: 0;
-  border-top: 1px solid var(--color-line);
+  border-top: 1px solid var(--color-ink-600);
   margin: 1.6em 0;
 }
 

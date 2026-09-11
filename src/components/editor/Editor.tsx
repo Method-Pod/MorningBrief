@@ -200,10 +200,15 @@ export function Editor({
   barraEm?: HTMLElement | null;
 }) {
   const [menu, setMenu] = React.useState<EstadoMenu>(null);
+
+  /* A caixa do menu do "/" e o item selecionado dentro dela. */
+  const caixaMenu = React.useRef<HTMLDivElement>(null);
+  const itemSelecionado = React.useRef<HTMLButtonElement>(null);
   /* Portal só depois de montar: `document` não existe na renderização do
      servidor. Mesmo cuidado do Modal e do aviso em ui.tsx. */
   const [montado, setMontado] = React.useState(false);
   React.useEffect(() => setMontado(true), []);
+
   const relogio = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /*
@@ -310,6 +315,75 @@ export function Editor({
       }, ESPERA_MS);
     },
   });
+
+  /*
+   * O menu do "/" acompanha o texto quando a página rola.
+   *
+   * Ele é `position: fixed` e a âncora era calculada uma vez, na abertura.
+   * Rolar a página com o ponteiro fora da lista movia o texto e deixava o
+   * menu parado no ar — medido: com 200px de rolagem, a distância entre o
+   * cursor e o menu passava de 6px para 204px, e ele ficava boiando no meio
+   * da tela, longe do "/" a que pertence.
+   *
+   * `capture` no ouvinte porque quem rola pode ser um elemento no meio do
+   * caminho, e não a janela; eventos de rolagem não sobem, então sem a fase
+   * de captura este ouvinte não veria.
+   */
+  const faixaAberta = React.useRef<number | null>(null);
+  faixaAberta.current = menu ? menu.faixa.from : null;
+  const menuAberto = !!menu;
+
+  React.useEffect(() => {
+    if (!menuAberto || !editor) return;
+
+    const recolocar = () => {
+      const de = faixaAberta.current;
+      if (de === null) return;
+      try {
+        const c = editor.view.coordsAtPos(de);
+        setMenu((m) =>
+          m && (m.x !== c.left || m.y !== c.bottom)
+            ? { ...m, x: c.left, y: c.bottom, yTopo: c.top }
+            : m
+        );
+      } catch {
+        /* A posição deixou de existir (o texto mudou por baixo): deixa o
+           menu onde está; a próxima tecla o recoloca de todo jeito. */
+      }
+    };
+
+    window.addEventListener("scroll", recolocar, true);
+    window.addEventListener("resize", recolocar);
+    return () => {
+      window.removeEventListener("scroll", recolocar, true);
+      window.removeEventListener("resize", recolocar);
+    };
+  }, [menuAberto, editor]);
+
+  /*
+   * Traz o item escolhido para dentro da vista — e só ele, e só quando muda.
+   *
+   * Era um `scrollIntoView` pendurado no `ref` do item selecionado. Dois
+   * problemas nisso. O `ref` era uma função criada a cada renderização, então
+   * o React a chamava de novo a cada renderização, não só quando a seleção
+   * mudava. E `scrollIntoView`, mesmo com `block: "nearest"`, rola **todos**
+   * os ancestrais roláveis até a janela: com o menu aberto e a lista rolada,
+   * ele puxava a página junto, brigando com quem estivesse rolando.
+   *
+   * Aqui a conta é na mão, e só no `scrollTop` da própria caixa do menu:
+   * nada fora dela se mexe, por construção.
+   */
+  React.useEffect(() => {
+    const item = itemSelecionado.current;
+    const caixa = caixaMenu.current;
+    if (!item || !caixa) return;
+
+    const topo = item.offsetTop;
+    const base = topo + item.offsetHeight;
+    if (topo < caixa.scrollTop) caixa.scrollTop = topo;
+    else if (base > caixa.scrollTop + caixa.clientHeight)
+      caixa.scrollTop = base - caixa.clientHeight;
+  }, [menu?.indice, menu?.itens]);
 
   /* O conteúdo como o editor o entende, não como veio da página: o mesmo HTML
      pode ser escrito de duas formas, e comparar texto cru daria mudança falsa
@@ -651,6 +725,7 @@ export function Editor({
         montado &&
         createPortal(
         <div
+          ref={caixaMenu}
           /* `fixed` porque a coordenada vem do `coordsAtPos`, que é relativa à
              janela — e a caixa do editor rola. */
           className="fixed z-50 w-[248px] overflow-y-auto overscroll-contain rounded-[16px] border border-line bg-white p-1.5 shadow-[0_12px_32px_-8px_rgb(20_24_26/0.25)]"
@@ -668,15 +743,7 @@ export function Editor({
                   e.preventDefault();
                   item.rodar(editor, menu.faixa);
                 }}
-                /* Traz o item escolhido para dentro da vista: com a lista
-                   rolando, as setas passavam a selecionar item que ninguém
-                   estava vendo. */
-                ref={
-                  i === menu.indice
-                    ? (el) =>
-                        el?.scrollIntoView({ block: "nearest" })
-                    : undefined
-                }
+                ref={i === menu.indice ? itemSelecionado : undefined}
                 className={cx(
                   "flex w-full items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-left transition-colors",
                   i === menu.indice ? "bg-brand-500/12" : "hover:bg-ink-800"
