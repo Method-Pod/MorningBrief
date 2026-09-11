@@ -488,13 +488,29 @@ textarea::placeholder {
 .nota-corpo {
   max-width: 68ch;
   font-size: 15px;
-  line-height: 1.7;
-  color: var(--color-fg-dim);
+  /*
+   * 1.55, e não 1.7.
+   *
+   * 1.7 é entrelinha de artigo longo, de texto que se lê de cabo a rabo numa
+   * coluna estreita. Anotação se lê aos pedaços, procurando uma linha — e com
+   * 1.7 as linhas de um mesmo parágrafo se soltam umas das outras, então o
+   * olho perde qual bloco é qual. 1.55 mantém o parágrafo como um corpo só.
+   */
+  line-height: 1.55;
+  /*
+   * Tinta cheia, e não `--color-fg-dim`.
+   *
+   * O corpo era desenhado um tom abaixo do título, para dar hierarquia. Só
+   * que o título já se distingue por tamanho e peso, e o que sobrava do
+   * rebaixamento era o texto inteiro da nota parecendo apagado — o que é
+   * escrito à mão aqui é o conteúdo, não a legenda dele.
+   */
+  color: var(--color-fg);
   outline: none;
 }
 
 .nota-corpo > * + * {
-  margin-top: 0.7em;
+  margin-top: 0.55em;
 }
 
 .nota-corpo h1,
