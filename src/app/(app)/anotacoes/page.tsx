@@ -308,6 +308,27 @@ export default function AnotacoesPage() {
     [rows, daNota]
   );
 
+  /**
+   * O texto de cada anotação, sem marcação e em minúsculas, pronto para a
+   * busca.
+   *
+   * Isto estava dentro do filtro, o que significava tirar o HTML de **todas**
+   * as anotações a cada tecla digitada na busca — dez passadas de expressão
+   * regular por anotação, por tecla. Medido numa anotação de 9,5 kB: 1,5 ms
+   * para 20 anotações e 4,3 ms para 60, num computador. No telefone é
+   * bastante mais, e some no meio da digitação.
+   *
+   * Agora acontece uma vez por lista carregada. A dependência é `rows`, que
+   * só muda quando uma anotação é gravada, criada ou apagada — digitar na
+   * busca não a toca.
+   */
+  const textoBuscavel = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of rows)
+      m.set(n.id, `${n.title} ${textoDaNota(n.content)}`.toLowerCase());
+    return m;
+  }, [rows]);
+
   /* Categoria e busca se somam: filtrar por "Estudo" e depois procurar uma
      palavra procura dentro do que a categoria deixou. */
   const vista = React.useMemo(() => {
@@ -318,12 +339,9 @@ export default function AnotacoesPage() {
       if (filtro !== "all" && filtro !== "sem" && !minhas.includes(filtro))
         return false;
       if (!term) return true;
-      return (
-        n.title.toLowerCase().includes(term) ||
-        textoDaNota(n.content).toLowerCase().includes(term)
-      );
+      return (textoBuscavel.get(n.id) ?? "").includes(term);
     });
-  }, [rows, q, filtro, daNota]);
+  }, [rows, q, filtro, daNota, textoBuscavel]);
 
   const fixadas = vista.filter((n) => n.pinned).length;
 

@@ -61,6 +61,22 @@ export const daysUntil = (iso: string) => {
   return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 };
 
+/**
+ * A meia-noite de ontem, no fuso de quem olha, como instante ISO.
+ *
+ * Serve de piso para consultas que só mostram de hoje em diante — a agenda do
+ * painel é a primeira. É *ontem* e não hoje de propósito: o banco guarda
+ * timestamptz em UTC e a tela decide o dia pelo fuso local, então um evento
+ * que a tela chama de "hoje" pode estar gravado com data de ontem em UTC.
+ * Cortar na meia-noite de hoje deixaria esse evento de fora da consulta e ele
+ * sumiria da tela. Um dia de folga custa algumas linhas e não erra.
+ */
+export const inicioDeOntem = () => {
+  const d = new Date(todayISO() + "T00:00:00");
+  d.setDate(d.getDate() - 1);
+  return d.toISOString();
+};
+
 export const greeting = () => {
   const h = new Date().getHours();
   if (h < 12) return "Bom dia";

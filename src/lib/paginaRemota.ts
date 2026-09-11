@@ -14,7 +14,13 @@
  * Só roda no servidor: o navegador não consegue ler outro domínio (CORS), e
  * mesmo que conseguisse, baixar a página inteira no aparelho de alguém para
  * pegar um número seria pior que perguntar.
+ *
+ * E porque roda no servidor, todo endereço passa por `enderecoSeguro` antes
+ * da conexão — inclusive cada parada de um redirecionamento. O motivo está
+ * escrito lá.
  */
+
+import { enderecoPublico } from "./enderecoSeguro";
 
 /**
  * Chrome de Android.
@@ -42,6 +48,21 @@ const TETO_BYTES = 1_600_000;
 const TEMPO_LIMITE_MS = 8_000;
 
 /**
+ * Quantos redirecionamentos seguir à mão.
+ *
+ * O `fetch` segue sozinho por padrão, e é justamente isso que não serve
+ * aqui: conferir o endereço digitado e deixar o site mandar o servidor para
+ * outro lugar é conferir a porta e deixar a janela aberta. Um endereço
+ * público que redireciona para `http://169.254.169.254` passaria pela trava
+ * sem ela ver nada.
+ *
+ * Então `redirect: "manual"` e cada parada é conferida como se fosse a
+ * primeira. Três saltos cobrem o que existe de verdade — http→https, com
+ * www, endereço canônico — e um laço de redirecionamento para sozinho.
+ */
+const SALTOS = 3;
+
+/**
  * Baixa a página até `pronto` dizer que já tem o que precisa, e para.
  *
  * Ler em pedaços e cortar no meio economiza a cauda do documento — a duração
@@ -61,18 +82,55 @@ export async function htmlAte(
   const teto = opcoes.teto ?? TETO_BYTES;
 
   try {
-    const r = await fetch(url, {
-      signal: corte.signal,
-      headers: {
-        "user-agent": UA_PADRAO,
-        "accept-language": "pt-BR,pt;q=0.9,en;q=0.8",
-      },
-      /* A duração de um vídeo não muda, e o nome de um canal quase nunca. Um
-         dia de cache poupa a releitura de centenas de kB quando o mesmo link
-         é colado de novo. */
-      next: { revalidate: 86_400 },
-    });
-    if (!r.ok || !r.body) return null;
+    /*
+     * Segue os redirecionamentos na mão, conferindo cada parada.
+     *
+     * Ver `enderecoSeguro`: quem digita o endereço decide para onde o
+     * servidor conecta, e o servidor está dentro da rede.
+     */
+    let atual = url;
+    let r: Response | null = null;
+
+    for (let salto = 0; salto <= SALTOS; salto++) {
+      let alvo: URL;
+      try {
+        alvo = new URL(atual);
+      } catch {
+        return null;
+      }
+
+      const veredito = await enderecoPublico(alvo);
+      if (!veredito.ok) return null;
+
+      const resposta = await fetch(alvo, {
+        signal: corte.signal,
+        redirect: "manual",
+        headers: {
+          "user-agent": UA_PADRAO,
+          "accept-language": "pt-BR,pt;q=0.9,en;q=0.8",
+        },
+        /* A duração de um vídeo não muda, e o nome de um canal quase nunca.
+           Um dia de cache poupa a releitura de centenas de kB quando o mesmo
+           link é colado de novo. */
+        next: { revalidate: 86_400 },
+      });
+
+      if (resposta.status >= 300 && resposta.status < 400) {
+        const destino = resposta.headers.get("location");
+        if (!destino) return null;
+        /* Descarta o corpo do redirecionamento: sem isto a conexão fica
+           pendurada até o tempo limite. */
+        resposta.body?.cancel().catch(() => {});
+        /* Relativo resolve contra a parada atual, como o navegador faz. */
+        atual = new URL(destino, alvo).toString();
+        continue;
+      }
+
+      r = resposta;
+      break;
+    }
+
+    if (!r || !r.ok || !r.body) return null;
 
     const leitor = r.body.getReader();
     const decodificador = new TextDecoder();

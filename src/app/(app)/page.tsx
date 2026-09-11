@@ -26,6 +26,7 @@ import {
   dateBR,
   daysUntil,
   greeting,
+  inicioDeOntem,
   localDay,
   localTime,
   todayISO,
@@ -99,13 +100,34 @@ export default function HomePage() {
    * consultas antes de a primeira linha aparecer.
    */
   const [loading, setLoading] = React.useState(
-    () => !temCache("bills", "tasks", "recurring_tasks", "events", "notes")
+    () =>
+      !temCache(
+        "bills",
+        "tasks",
+        "recurring_tasks",
+        "painel_eventos",
+        "painel_notas"
+      )
   );
   const [bills, setBills] = useEstadoCacheado<Bill[]>("bills", []);
   const [tasks, setTasks] = useEstadoCacheado<Task[]>("tasks", []);
   const [recurring, setRecurring] = useEstadoCacheado<RecurringTask[]>("recurring_tasks", []);
-  const [events, setEvents] = useEstadoCacheado<CalendarEvent[]>("events", []);
-  const [notes, setNotes] = useEstadoCacheado<Note[]>("notes", []);
+  /*
+   * Chave própria, e não a do calendário e a das anotações.
+   *
+   * As duas consultas abaixo passaram a trazer um recorte — os eventos de
+   * hoje em diante, e só as duas notas fixadas. Guardar esse recorte sob a
+   * chave que o Calendário e as Anotações leem faria aquelas telas abrirem
+   * com um pedaço dos dados até a consulta delas responder, o que é pior do
+   * que abrirem vazias.
+   *
+   * O preço é real e assumido: o painel deixa de adiantar o cache daquelas
+   * duas telas. Ele é a tela de entrada e a que mais se abre; carregar a
+   * agenda inteira e o corpo de todas as anotações aqui para adiantar uma
+   * visita que pode não acontecer é pagar sempre por um ganho eventual.
+   */
+  const [events, setEvents] = useEstadoCacheado<CalendarEvent[]>("painel_eventos", []);
+  const [notes, setNotes] = useEstadoCacheado<Note[]>("painel_notas", []);
   const [lendo, setLendo] = useEstadoCacheado<Livro[]>("painel_lendo", []);
   const [refs, setRefs] = useEstadoCacheado<Ref[]>("painel_refs", []);
   const [generated, setGenerated] = React.useState(0);
@@ -122,8 +144,41 @@ export default function HomePage() {
       supabase.from("bills").select("*").order("due_date"),
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("recurring_tasks").select("*").order("created_at"),
-      supabase.from("events").select("*").order("start_at"),
-      supabase.from("notes").select("*").order("updated_at", { ascending: false }),
+      /*
+       * Agenda: de ontem para frente, e não a vida inteira.
+       *
+       * O painel mostra dois recortes — o que é hoje e os quatro próximos.
+       * Nada atrás disso aparece em lugar nenhum desta tela, e `events` não
+       * tinha filtro de data: ano após ano, cada abertura do painel baixava
+       * de novo tudo o que já aconteceu.
+       *
+       * O corte é a meia-noite de *ontem*, não a de hoje, porque o fuso
+       * mexe: um evento gravado em UTC pode cair no dia anterior quando lido
+       * na hora local, e é a hora local que a tela usa para decidir o que é
+       * "hoje". Um dia de folga cobre a diferença. O teto de 100 é o que
+       * garante os quatro próximos com sobra — vêm em ordem de data.
+       */
+      supabase
+        .from("events")
+        .select("*")
+        .gte("start_at", inicioDeOntem())
+        .order("start_at")
+        .limit(100),
+      /*
+       * Anotações: só as fixadas, e só duas.
+       *
+       * Era `select("*")` sem filtro, para desenhar dois cartõezinhos. Como
+       * `content` guarda o HTML inteiro da anotação, o painel baixava o
+       * corpo de **todas** elas a cada abertura para mostrar o começo de
+       * duas — de longe a maior transferência desta tela, e ela cresce a
+       * cada anotação escrita.
+       */
+      supabase
+        .from("notes")
+        .select("id,title,content,color,pinned,updated_at")
+        .eq("pinned", true)
+        .order("updated_at", { ascending: false })
+        .limit(2),
       /*
        * Leitura e referências toleram falha: quem não rodou LEITURA.sql ou
        * REFERENCIAS.sql simplesmente não vê os dois cartões, e o resto do
@@ -541,7 +596,9 @@ export default function HomePage() {
             {m.pinned.length === 0 ? (
               <Ghost>Nada fixado ainda.</Ghost>
             ) : (
-              m.pinned.map((n) => (
+              m.pinned.map((n) => {
+                const previa = textoDaNota(n.content);
+                return (
                 <div key={n.id} className="border-b border-line-soft py-2.5 last:border-0">
                   <div className="flex items-center gap-1.5">
                     <Pin size={12} style={{ color: NOTE_HEX[n.color] ?? NOTE_HEX.blue }} />
@@ -557,13 +614,14 @@ export default function HomePage() {
                     "<ul><li><p><strong>|&nbsp;TDAH..." em vez do texto.
                     `textoDaNota` é a mesma função que a busca usa.
                   */}
-                  {textoDaNota(n.content) && (
+                  {previa && (
                     <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-fg-mute">
-                      {textoDaNota(n.content)}
+                      {previa}
                     </p>
                   )}
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </Card>
