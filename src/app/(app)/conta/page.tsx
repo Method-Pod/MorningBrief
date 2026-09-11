@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { dateTimeBR } from "@/lib/format";
+import { sairDaConta } from "@/lib/sair";
 import { ACCENTS, useAccent } from "@/components/accent";
 import { TrocarFoto, useAvatar } from "@/components/Avatar";
 import { Button, Card, Input, cx } from "@/components/ui";
@@ -108,8 +109,17 @@ export default function ContaPage() {
     router.refresh();
   };
 
+  /*
+   * Sair passa pelo `sairDaConta`, que também esquece a memória de página.
+   *
+   * Antes esta tela só chamava `signOut`, e a limpeza da memória estava
+   * escrita no botão da barra lateral — duas saídas que tinham deixado de
+   * fazer a mesma coisa. Quem saísse por aqui deixava os próprios dados
+   * guardados na aba, e eles apareceriam por um instante para quem entrasse
+   * depois. Agora só existe esta saída, e ela é a certa.
+   */
   const sair = async () => {
-    await supabase.auth.signOut();
+    await sairDaConta();
     router.replace("/login");
     router.refresh();
   };

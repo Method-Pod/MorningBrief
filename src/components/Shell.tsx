@@ -12,15 +12,13 @@ import {
   Repeat2,
   LayoutDashboard,
   Library,
-  LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   StickyNote,
   Wallet,
   X,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { limparCache } from "@/lib/cachePagina";
-import { ACCENTS, useAccent } from "./accent";
 import { Iniciais, useAvatar } from "./Avatar";
 import { IdentityProvider } from "./identity";
 import { cx } from "./ui";
@@ -43,120 +41,59 @@ const NAV = [
   { href: "/calendario", label: "Calendário", icon: CalendarDays },
 ];
 
-function CaixaTema() {
-  const { accent, setAccent } = useAccent();
-  /* Fechada por padrão: a cor se troca raramente, não precisa ocupar a
-     barra lateral o tempo todo. Fechada, ainda mostra qual está ativa. */
-  const [aberta, setAberta] = React.useState(false);
-  const atual = ACCENTS.find((a) => a.key === accent) ?? ACCENTS[1];
-
-  return (
-    <section className="overflow-hidden rounded-[16px] bg-ink-800">
-      <button
-        onClick={() => setAberta((v) => !v)}
-        aria-expanded={aberta}
-        className="flex w-full items-center gap-2 px-3.5 py-3 text-left transition-colors hover:bg-black/[0.03]"
-      >
-        <span className="flex-1 text-[10px] font-bold uppercase tracking-[0.1em] text-fg-mute">
-          Tema
-        </span>
-        {!aberta && (
-          <span
-            className="h-4 w-4 shrink-0 rounded-full ring-1 ring-black/10"
-            style={{ background: atual.hex }}
-            title={atual.name}
-          />
-        )}
-        <ChevronRight
-          size={13}
-          className={cx(
-            "shrink-0 text-fg-mute transition-transform",
-            aberta && "rotate-90"
-          )}
-        />
-      </button>
-
-      {aberta && (
-        <div className="px-3.5 pb-3.5">
-          <p className="mb-2.5 text-[11.5px] text-fg-dim">Cor principal</p>
-          {/* Quebra linha: com oito cores, 24px cada mais o espaço somam 248px
-              num espaço de 196px na barra lateral. */}
-          <div className="flex flex-wrap gap-2">
-            {ACCENTS.map((a) => (
-              <button
-                key={a.key}
-                onClick={() => setAccent(a.key)}
-                title={a.name}
-                aria-label={`Cor ${a.name}`}
-                aria-pressed={accent === a.key}
-                style={{ background: a.hex }}
-                className={cx(
-                  "h-6 w-6 rounded-full transition-transform hover:scale-110",
-                  accent === a.key &&
-                    "ring-2 ring-fg-dim ring-offset-2 ring-offset-ink-800"
-                )}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
+/**
+ * A conta na barra lateral: uma linha, e nada mais.
+ *
+ * Tinha rótulo "CONTA", foto, nome, e-mail, seta e um botão "Sair" de
+ * largura cheia — cinco coisas para o que é um atalho. O e-mail saiu porque
+ * repete o que já está na tela de conta e ninguém precisa reler o próprio
+ * endereço na barra; o rótulo saiu porque a foto e o nome já dizem o que
+ * aquilo é; e "Sair" saiu porque existe igual dentro da tela de conta, a um
+ * clique daqui, e é a última coisa que se faz num dia de trabalho — não
+ * precisa de lugar cativo.
+ */
 function CaixaConta({
-  email,
   nome,
-  onSair,
   ativo,
+  compacta,
 }: {
-  email: string;
   nome: string;
-  onSair: () => void;
   ativo: boolean;
+  compacta?: boolean;
 }) {
   const { url: foto } = useAvatar();
 
   return (
-    <section
+    <Link
+      href="/conta"
+      prefetch={false}
+      title={compacta ? nome : undefined}
       className={cx(
-        "rounded-[16px] p-3.5 transition-colors",
-        ativo ? "bg-brand-500/12" : "bg-ink-800"
+        "flex items-center rounded-[16px] p-2.5 transition-colors",
+        compacta ? "justify-center" : "gap-2.5",
+        ativo ? "bg-brand-500/12" : "bg-ink-800 hover:bg-black/[0.03]"
       )}
     >
-      <p className="mb-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-fg-mute">
-        Conta
-      </p>
-      <Link
-        href="/conta"
-        className="flex items-center gap-2.5 rounded-[12px] transition-opacity hover:opacity-80"
-      >
-        <Iniciais nome={nome} url={foto} tamanho={32} />
-        <span className="min-w-0 flex-1">
+      <Iniciais nome={nome} url={foto} tamanho={30} />
+      {!compacta && (
+        <>
           <span
             className={cx(
-              "block truncate text-[12.5px] font-semibold",
+              "min-w-0 flex-1 truncate text-[12.5px] font-semibold",
               ativo ? "text-brand-400" : "text-fg"
             )}
           >
             {nome}
           </span>
-          <span className="block truncate text-[10.5px] text-fg-mute">
-            {email}
-          </span>
-        </span>
-        <ChevronRight size={14} className="shrink-0 text-fg-mute" />
-      </Link>
-      <button
-        onClick={onSair}
-        className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[12px] bg-white py-2 text-[11.5px] font-semibold text-fg-mute shadow-[0_1px_2px_rgb(20_24_26/0.05)] transition-colors hover:text-neg"
-      >
-        <LogOut size={13} />
-        Sair
-      </button>
-    </section>
+          <ChevronRight size={14} className="shrink-0 text-fg-mute" />
+        </>
+      )}
+    </Link>
   );
 }
+
+/** Onde fica guardado se a barra lateral abre inteira ou só com os ícones. */
+const LARGURA_GUARDADA = "mb.barraLateral";
 
 export function Shell({
   email,
@@ -173,15 +110,36 @@ export function Shell({
 
   React.useEffect(() => setOpen(false), [path]);
 
-  const signOut = async () => {
-    await createClient().auth.signOut();
-    /* A memória que acelera a troca de aba é por aba do navegador e não sabe de
-       quem é. Sem limpar, os dados de quem saiu apareceriam por um instante
-       para quem entrasse depois na mesma aba. */
-    limparCache();
-    router.replace("/login");
-    router.refresh();
-  };
+  /*
+   * Barra lateral encolhida: só os ícones.
+   *
+   * Vale apenas para o computador. A gaveta do telefone abre por cima do
+   * conteúdo e some ao escolher — encolher ali não devolveria espaço
+   * nenhum, e tiraria os nomes de um menu que a pessoa abriu justamente
+   * para ler.
+   *
+   * A escolha fica no navegador, como a da barra de formatação: é
+   * preferência de quem usa, não de uma tela. Começa aberta na primeira
+   * renderização e o efeito corrige em seguida — ler o armazenamento
+   * durante a renderização quebraria a hidratação, porque no servidor ele
+   * não existe.
+   */
+  const [encolhida, setEncolhida] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      setEncolhida(localStorage.getItem(LARGURA_GUARDADA) === "1");
+    } catch {
+      /* Armazenamento bloqueado: fica aberta, que é o padrão. */
+    }
+  }, []);
+
+  const alternarLargura = () =>
+    setEncolhida((v) => {
+      try {
+        localStorage.setItem(LARGURA_GUARDADA, v ? "0" : "1");
+      } catch {}
+      return !v;
+    });
 
   const wordmark = (
     <Link
@@ -216,7 +174,7 @@ export function Shell({
    */
   const adiantar = (href: string) => () => router.prefetch(href);
 
-  const nav = (
+  const navegacao = (compacta: boolean) => (
     <nav className="flex flex-col gap-[3px] px-2.5">
       {NAV.map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? path === "/" : path.startsWith(href);
@@ -227,29 +185,32 @@ export function Shell({
             prefetch={false}
             onMouseEnter={adiantar(href)}
             onTouchStart={adiantar(href)}
+            /* Encolhida, o nome vira balãozinho: sem ele restaria adivinhar
+               o que cada desenho quer dizer. */
+            title={compacta ? label : undefined}
+            aria-label={compacta ? label : undefined}
             className={cx(
-              "flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm font-medium transition-colors duration-150",
+              "flex items-center rounded-[14px] py-2.5 text-sm font-medium transition-colors duration-150",
+              compacta ? "justify-center px-0" : "gap-3 px-3",
               active
                 ? "bg-brand-500 text-on-brand"
                 : "text-fg-dim hover:bg-ink-800 hover:text-fg"
             )}
           >
             <Icon size={17} className={active ? "" : "opacity-80"} />
-            <span className="truncate">{label}</span>
+            {!compacta && <span className="truncate">{label}</span>}
           </Link>
         );
       })}
     </nav>
   );
 
-  const rodape = (
-    <div className="mt-auto flex flex-col gap-2.5 px-2.5 pt-4">
-      <CaixaTema />
+  const rodape = (compacta: boolean) => (
+    <div className="mt-auto px-2.5 pt-4">
       <CaixaConta
-        email={email}
         nome={nome || email.split("@")[0] || "você"}
-        onSair={signOut}
         ativo={path.startsWith("/conta")}
+        compacta={compacta}
       />
     </div>
   );
@@ -261,13 +222,41 @@ export function Shell({
         sticky em vez de fixed: o aside continua no fluxo, então mantém a
         largura na grade flex sem precisar de margem compensatória no <main>.
         h-dvh dá altura definida para o mt-auto do rodapé funcionar, e o
-        overflow-y-auto salva a barra em tela baixa, onde nav + tema + conta
-        passam da altura da janela.
+        overflow-y-auto salva a barra em tela baixa, onde a navegação e a
+        conta passam da altura da janela.
       */}
-      <aside className="camada-fixa sticky top-0 hidden h-dvh w-[224px] shrink-0 flex-col overflow-y-auto bg-white pt-6 pb-5 lg:flex">
-        <div className="mb-6">{wordmark}</div>
-        {nav}
-        {rodape}
+      <aside
+        className={cx(
+          "camada-fixa sticky top-0 hidden h-dvh shrink-0 flex-col overflow-y-auto overflow-x-hidden bg-white pt-6 pb-5 transition-[width] duration-200 lg:flex",
+          encolhida ? "w-[68px]" : "w-[224px]"
+        )}
+      >
+        {/*
+          Encolhida, a marca sai e fica só o botão, centralizado.
+
+          Um "morningbrief" cortado em 68px não é marca, é sobra de texto — e
+          voltar ao Início continua a um clique, pelo primeiro item da lista.
+        */}
+        <div
+          className={cx(
+            "mb-6 flex items-center",
+            encolhida ? "justify-center px-2.5" : "gap-1 pr-2.5"
+          )}
+        >
+          {!encolhida && <div className="min-w-0 flex-1">{wordmark}</div>}
+          <button
+            type="button"
+            onClick={alternarLargura}
+            aria-label={encolhida ? "Abrir a barra lateral" : "Encolher a barra lateral"}
+            aria-expanded={!encolhida}
+            title={encolhida ? "Abrir a barra" : "Encolher a barra"}
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+          >
+            {encolhida ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+        </div>
+        {navegacao(encolhida)}
+        {rodape(encolhida)}
       </aside>
 
       {/* -------- gaveta, mobile -------- */}
@@ -288,8 +277,8 @@ export function Shell({
                 <X size={17} />
               </button>
             </div>
-            {nav}
-            {rodape}
+            {navegacao(false)}
+            {rodape(false)}
           </aside>
         </div>
       )}
