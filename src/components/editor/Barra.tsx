@@ -106,6 +106,49 @@ const MAIOR = 96;
 /** Onde fica guardado se a barra abre fechada ou aberta. */
 const LEMBRETE = "mb.barraNota";
 
+/**
+ * Aberta ou fechada, e a escolha guardada.
+ *
+ * Fechada por padrão: uma fileira de dezoito controles em cima de toda nota é
+ * muito peso para quem abriu a anotação só para ler, e a maior parte da
+ * escrita não formata nada. Fechada, a barra é um botão; aberta, é a barra
+ * inteira.
+ *
+ * A preferência vai para o `localStorage` porque é da pessoa e não da nota:
+ * quem gosta de formatar quer a barra aberta em todas, e reabrir a cada
+ * anotação transformaria a comodidade em obrigação. Começa fechada na
+ * primeira renderização e o efeito corrige logo depois — ler o armazenamento
+ * durante a renderização quebraria a hidratação, porque no servidor ele não
+ * existe.
+ *
+ * O estado sai daqui em vez de morar dentro da `Barra` porque quem precisa
+ * dele não é só ela: a **página** precisa saber, para grudar no topo o lugar
+ * onde a barra é desenhada. Ver o comentário do `barraEm` no editor.
+ */
+export function useBarraAberta() {
+  const [aberta, setAberta] = React.useState(false);
+
+  React.useEffect(() => {
+    try {
+      setAberta(localStorage.getItem(LEMBRETE) === "1");
+    } catch {
+      /* Navegador com armazenamento bloqueado: fica fechada, e abre no
+         clique como sempre. Não é motivo para avisar ninguém. */
+    }
+  }, []);
+
+  const alternar = React.useCallback(() => {
+    setAberta((a) => {
+      try {
+        localStorage.setItem(LEMBRETE, a ? "0" : "1");
+      } catch {}
+      return !a;
+    });
+  }, []);
+
+  return { aberta, alternar };
+}
+
 const BLOCOS = [
   { chave: "p", rotulo: "Texto", classe: "text-[13px]" },
   { chave: "h1", rotulo: "Título 1", classe: "text-[17px] font-bold" },
@@ -265,12 +308,17 @@ export function Barra({
   aoCorrigir,
   corrigindo,
   semRecuo,
+  aberta,
+  alternar,
 }: {
   editor: TEditor;
   aoCorrigir: () => void;
   corrigindo: boolean;
   /** Desenhada fora da coluna de texto, onde não há calha de alça a compensar. */
   semRecuo?: boolean;
+  /** Ver `useBarraAberta`. O estado mora fora porque a página também o usa. */
+  aberta: boolean;
+  alternar: () => void;
 }) {
   /*
    * Redesenha a barra a cada mexida no editor.
@@ -289,39 +337,6 @@ export function Barra({
       editor.off("selectionUpdate", redesenhar);
     };
   }, [editor]);
-
-  /*
-   * Fechada por padrão, e a escolha fica guardada.
-   *
-   * Uma fileira de dezoito controles em cima de toda nota é muito peso para
-   * quem abriu a nota só para ler, e a maior parte da escrita não formata
-   * nada. Fechada, ela é um botão; aberta, é a barra inteira.
-   *
-   * A preferência vai para o `localStorage` porque ela é da pessoa, não da
-   * nota: quem gosta de formatar quer a barra aberta em todas, e ter de
-   * abrir de novo a cada anotação transformaria a comodidade em obrigação.
-   * Começa fechada na primeira renderização e o `useEffect` corrige logo
-   * depois — ler o armazenamento durante a renderização quebraria a
-   * hidratação, porque no servidor ele não existe.
-   */
-  const [aberta, setAberta] = React.useState(false);
-  React.useEffect(() => {
-    try {
-      setAberta(localStorage.getItem(LEMBRETE) === "1");
-    } catch {
-      /* Navegador com armazenamento bloqueado: fica fechada, e abre no
-         clique como sempre. Não é motivo para avisar ninguém. */
-    }
-  }, []);
-
-  const alternar = () => {
-    setAberta((a) => {
-      try {
-        localStorage.setItem(LEMBRETE, a ? "0" : "1");
-      } catch {}
-      return !a;
-    });
-  };
 
   const botao = (ativo: boolean) =>
     cx(
@@ -429,7 +444,7 @@ export function Barra({
        * controles passam da largura da tela.
        */
       className={cx(
-        "sticky top-0 z-30 mb-3 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-[14px] border border-line bg-white/95 px-1.5 py-1 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "mb-3 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-[14px] border border-line bg-white/95 px-1.5 py-1 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         semRecuo ? "" : "-ml-7 -mr-1"
       )}
     >

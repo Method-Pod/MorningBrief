@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { Destaque, type TomDestaque } from "./Destaque";
 import { MenuBarra, type EstadoMenu, type ItemMenu } from "./MenuBarra";
-import { Barra } from "./Barra";
+import { Barra, useBarraAberta } from "./Barra";
 import { PainelRevisao } from "./PainelRevisao";
 import {
   aplicarTroca,
@@ -200,6 +200,35 @@ export function Editor({
   barraEm?: HTMLElement | null;
 }) {
   const [menu, setMenu] = React.useState<EstadoMenu>(null);
+
+  /* Aberta ou fechada. Mora aqui e não dentro da `Barra` porque o efeito
+     abaixo precisa do valor para grudar o lugar dela no topo. */
+  const { aberta: barraAberta, alternar: alternarBarra } = useBarraAberta();
+
+  /*
+   * Quem gruda no topo é o lugar da barra, não a barra.
+   *
+   * `position: sticky` só desliza dentro do próprio pai. O pai aqui é o
+   * `<div>` que a página empresta, e ele tem exatamente a altura da barra —
+   * sem folga nenhuma para deslizar, então a barra subia e ia embora junto
+   * com o resto. Grudar esse `<div>`, que é filho direto do container alto da
+   * anotação, dá a ele a coluna inteira para deslizar.
+   *
+   * Classe aplicada no elemento emprestado, e não por `className`, porque
+   * quem o desenha é a página e quem sabe se a barra está aberta é o editor.
+   * Só duas classes, postas e tiradas juntas.
+   *
+   * Fechada não gruda, de propósito: fechada ela é um botão pequeno, e um
+   * botão pequeno pendurado no alto da tela o tempo todo atrapalha mais do
+   * que serve. Aberta é que ela precisa estar à mão enquanto se rola.
+   */
+  React.useEffect(() => {
+    if (!barraEm) return;
+    const classes = ["sticky", "top-0", "z-30"];
+    if (barraAberta) barraEm.classList.add(...classes);
+    else barraEm.classList.remove(...classes);
+    return () => barraEm.classList.remove(...classes);
+  }, [barraEm, barraAberta]);
 
   /* A caixa do menu do "/" e o item selecionado dentro dela. */
   const caixaMenu = React.useRef<HTMLDivElement>(null);
@@ -642,6 +671,8 @@ export function Editor({
           aoCorrigir={revisar}
           corrigindo={revisando}
           semRecuo={solta}
+          aberta={barraAberta}
+          alternar={alternarBarra}
         />
         {revisao && (
           <PainelRevisao
