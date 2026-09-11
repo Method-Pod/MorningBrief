@@ -12,6 +12,7 @@ import {
   Bold,
   Check,
   ChevronDown,
+  ChevronsLeft,
   Code,
   Italic,
   Lightbulb,
@@ -22,6 +23,7 @@ import {
   Plus,
   SpellCheck2,
   Strikethrough,
+  Type,
 } from "lucide-react";
 import { cx } from "../ui";
 
@@ -100,6 +102,9 @@ const TAMANHOS = [
  */
 const MENOR = 8;
 const MAIOR = 96;
+
+/** Onde fica guardado se a barra abre fechada ou aberta. */
+const LEMBRETE = "mb.barraNota";
 
 const BLOCOS = [
   { chave: "p", rotulo: "Texto", classe: "text-[13px]" },
@@ -285,6 +290,39 @@ export function Barra({
     };
   }, [editor]);
 
+  /*
+   * Fechada por padrão, e a escolha fica guardada.
+   *
+   * Uma fileira de dezoito controles em cima de toda nota é muito peso para
+   * quem abriu a nota só para ler, e a maior parte da escrita não formata
+   * nada. Fechada, ela é um botão; aberta, é a barra inteira.
+   *
+   * A preferência vai para o `localStorage` porque ela é da pessoa, não da
+   * nota: quem gosta de formatar quer a barra aberta em todas, e ter de
+   * abrir de novo a cada anotação transformaria a comodidade em obrigação.
+   * Começa fechada na primeira renderização e o `useEffect` corrige logo
+   * depois — ler o armazenamento durante a renderização quebraria a
+   * hidratação, porque no servidor ele não existe.
+   */
+  const [aberta, setAberta] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      setAberta(localStorage.getItem(LEMBRETE) === "1");
+    } catch {
+      /* Navegador com armazenamento bloqueado: fica fechada, e abre no
+         clique como sempre. Não é motivo para avisar ninguém. */
+    }
+  }, []);
+
+  const alternar = () => {
+    setAberta((a) => {
+      try {
+        localStorage.setItem(LEMBRETE, a ? "0" : "1");
+      } catch {}
+      return !a;
+    });
+  };
+
   const botao = (ativo: boolean) =>
     cx(
       "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors",
@@ -342,6 +380,30 @@ export function Barra({
     setRascunho(String(px));
     editor.chain().focus().setFontSize(`${px}px`).run();
   };
+
+  /*
+   * Fechada: só o botão de abrir.
+   *
+   * Ele fica no mesmo lugar onde a barra nasce, e não num canto: assim abrir
+   * não move o título nem o texto de lugar — o que muda é a largura da
+   * moldura, que cresce para o lado.
+   */
+  if (!aberta)
+    return (
+      <div className={cx("mb-3", semRecuo ? "" : "-ml-7")}>
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={alternar}
+          aria-expanded={false}
+          aria-label="Abrir a barra de formatação"
+          className="flex h-8 items-center gap-1.5 rounded-[14px] border border-line bg-white/95 px-2.5 text-[12px] font-semibold text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+        >
+          <Type size={14} />
+          Formatar
+        </button>
+      </div>
+    );
 
   return (
     <div
@@ -697,6 +759,22 @@ export function Barra({
       >
         <SpellCheck2 size={14} />
         {corrigindo ? "Lendo…" : "Revisar"}
+      </button>
+
+      {risco}
+
+      {/* Fechar. No fim da fila porque é o que menos se usa — e, fechada, a
+          barra volta a ser o botão "Formatar" no mesmo lugar. */}
+      <button
+        type="button"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={alternar}
+        aria-expanded
+        aria-label="Esconder a barra de formatação"
+        title="Esconder a barra"
+        className={botao(false)}
+      >
+        <ChevronsLeft size={14} />
       </button>
     </div>
   );
