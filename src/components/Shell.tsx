@@ -192,6 +192,30 @@ export function Shell({
     </Link>
   );
 
+  /*
+   * A barra lateral deixou de adiantar as nove telas de uma vez.
+   *
+   * O `<Link>` do Next adianta sozinho toda rota que esteja visível na tela,
+   * e as nove estão sempre — é uma barra lateral. Medido no registro de rede
+   * ao abrir o Início: nove pedidos `?_rsc=` para /demandas, /habitos,
+   * /leitura, /aulas, /contas, /referencias, /anotacoes, /calendario e
+   * /conta, disparados **antes** dos arquivos da própria página, e todos
+   * cancelados em seguida.
+   *
+   * Cada um deles custa duas conferências de sessão no servidor — a do
+   * middleware e a do layout — e uma renderização. E, no navegador, ocupam a
+   * fila de conexões na hora exata em que a página precisa dela para buscar
+   * os próprios dados.
+   *
+   * O ganho do adiantamento também é pequeno aqui: estas telas são todas de
+   * cliente e buscam os dados delas depois de montar, então o que vinha
+   * adiantado era a casca, não o conteúdo.
+   *
+   * Em lugar disso, adianta ao passar o mouse ou ao encostar o dedo — que é
+   * o instante antes do clique, e cobre uma rota só: a que vai ser aberta.
+   */
+  const adiantar = (href: string) => () => router.prefetch(href);
+
   const nav = (
     <nav className="flex flex-col gap-[3px] px-2.5">
       {NAV.map(({ href, label, icon: Icon }) => {
@@ -200,6 +224,9 @@ export function Shell({
           <Link
             key={href}
             href={href}
+            prefetch={false}
+            onMouseEnter={adiantar(href)}
+            onTouchStart={adiantar(href)}
             className={cx(
               "flex items-center gap-3 rounded-[14px] px-3 py-2.5 text-sm font-medium transition-colors duration-150",
               active

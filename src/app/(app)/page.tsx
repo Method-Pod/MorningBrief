@@ -924,8 +924,15 @@ function Head({
         {icon}
         {title}
       </span>
+      {/*
+        `prefetch={false}` pelo mesmo motivo da barra lateral: são sete
+        cabeçalhos de cartão, todos visíveis ao abrir, e cada um adiantava a
+        sua tela sozinho. Somados aos nove da barra, davam dezesseis pedidos
+        ao servidor antes de o painel buscar o primeiro dado dele.
+      */}
       <Link
         href={href}
+        prefetch={false}
         className="text-xs font-medium text-fg-mute transition-colors hover:text-brand-400"
       >
         {link}
