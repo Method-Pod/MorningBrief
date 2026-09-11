@@ -358,9 +358,16 @@ export function Barra({
        * para a alça caber ali, e a barra não precisa desse recuo — medida,
        * ela perdia exatamente os 28px que faltavam para "Revisar" caber na
        * linha. Acima do título não há calha, e aí o recuo sai.
+       *
+       * `w-fit max-w-full` para a moldura terminar no último botão. Como
+       * bloco, ela se esticava até o fim da coluna e sobrava uma faixa branca
+       * depois de "Revisar" — vazia, mas com borda e fundo, então lia como
+       * parte da barra que faltou preencher. Com `w-fit` a largura é a dos
+       * controles; `max-w-full` mantém a rolagem lateral no telefone, onde os
+       * controles passam da largura da tela.
        */
       className={cx(
-        "sticky top-0 z-30 mb-3 flex items-center gap-0.5 overflow-x-auto rounded-[14px] border border-line bg-white/95 px-1.5 py-1 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "sticky top-0 z-30 mb-3 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-[14px] border border-line bg-white/95 px-1.5 py-1 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         semRecuo ? "" : "-ml-7 -mr-1"
       )}
     >

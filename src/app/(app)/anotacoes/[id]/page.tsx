@@ -247,9 +247,20 @@ export default function NotaPage() {
         Editada em {dateTimeBR(nota.updated_at)}
       </p>
 
-      {/* `pl-7` abre a calha onde a alça de arrastar aparece, à esquerda do
-          texto — sem isso ela ficaria por cima da primeira letra. */}
-      <div className="pl-7">
+      {/*
+        O corpo começa na mesma coluna do título, sem recuo.
+
+        Havia um `pl-7` aqui para abrir calha à alça de arrastar. O preço era
+        o texto inteiro da nota deslocado 28px à direita do título, e é isso
+        que se vê antes de se ver a calha: uma margem que não tem motivo
+        aparente. A alça passou a morar na margem da página — no computador
+        sobra espaço dos dois lados da coluna de 820px, e no telefone ela não
+        aparece de todo jeito, porque não existe passar o mouse.
+
+        Recuo no corpo agora só quando o texto pede: lista, citação e caixa
+        de destaque trazem o seu, e aí ele quer dizer alguma coisa.
+      */}
+      <div>
         <Editor
           /*
            * `linkificar` na entrada, e não uma vez no banco.
