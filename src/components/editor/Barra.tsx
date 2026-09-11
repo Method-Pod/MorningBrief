@@ -412,7 +412,7 @@ export function Barra({
           onClick={alternar}
           aria-expanded={false}
           aria-label="Abrir a barra de formatação"
-          className="flex h-8 items-center gap-1.5 rounded-[14px] border border-line bg-white/95 px-2.5 text-[12px] font-semibold text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+          className="flex h-8 items-center gap-1.5 rounded-[14px] border border-line bg-white px-2.5 text-[12px] font-semibold text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
         >
           <Type size={14} />
           Formatar
@@ -444,7 +444,7 @@ export function Barra({
        * controles passam da largura da tela.
        */
       className={cx(
-        "mb-3 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-[14px] border border-line bg-white/95 px-1.5 py-1 backdrop-blur-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "mb-3 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-[14px] border border-line bg-white px-1.5 py-1 shadow-[0_4px_16px_-8px_rgb(20_24_26/0.25)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         semRecuo ? "" : "-ml-7 -mr-1"
       )}
     >

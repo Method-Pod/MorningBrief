@@ -224,7 +224,10 @@ export function Editor({
    */
   React.useEffect(() => {
     if (!barraEm) return;
-    const classes = ["sticky", "top-0", "z-30"];
+    /* `top-4` e não `top-0`: colada no teto da janela a barra encosta no
+       texto que passa por baixo e fica sem ar em volta. 16px de folga a
+       deixam flutuando sobre a anotação, que é o que ela é. */
+    const classes = ["sticky", "top-4", "z-30"];
     if (barraAberta) barraEm.classList.add(...classes);
     else barraEm.classList.remove(...classes);
     return () => barraEm.classList.remove(...classes);
