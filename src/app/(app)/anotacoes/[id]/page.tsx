@@ -36,6 +36,11 @@ export default function NotaPage() {
   const [estado, setEstado] = React.useState<Estado>("lendo");
   const [falta, setFalta] = React.useState<string>("");
   const [titulo, setTitulo] = React.useState("");
+  /* Onde a barra de formatação do editor é desenhada. Ver o comentário no
+     `<div ref={setLugarDaBarra} />`, lá embaixo. */
+  const [lugarDaBarra, setLugarDaBarra] = React.useState<HTMLDivElement | null>(
+    null
+  );
 
   const confirm = useConfirm();
   const notice = useNotice();
@@ -192,6 +197,21 @@ export default function NotaPage() {
       )}
 
       {/*
+        O lugar da barra de formatação, acima do título.
+
+        Um div vazio, e não a barra em si: a barra precisa do estado do editor
+        para acender o negrito e dizer em que bloco o cursor está, e esse
+        estado vive lá dentro. A página empresta o lugar e o editor desenha
+        nele por portal — assim a ordem na tela é a que se quer (barra, depois
+        título) sem subir o editor inteiro para cá.
+
+        `ref` em estado, e não `useRef`: o portal só pode ser criado depois de
+        o elemento existir, e um `useRef` não avisa ninguém quando ele passa a
+        existir. Com estado, a montagem dispara o redesenho que cria o portal.
+      */}
+      <div ref={setLugarDaBarra} />
+
+      {/*
         O título é um campo de texto sem moldura, do tamanho de um título.
 
         Igual ao Notion e ao Docs: a primeira linha da página é o nome dela, e
@@ -245,6 +265,7 @@ export default function NotaPage() {
           onGravando={(pendente) =>
             setEstado((e) => (pendente && e !== "gravando" ? "pendente" : e))
           }
+          barraEm={lugarDaBarra}
         />
       </div>
 

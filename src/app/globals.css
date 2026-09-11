@@ -542,8 +542,16 @@ textarea::placeholder {
   margin-top: 0;
 }
 
+/*
+ * O negrito herda a cor em vez de fixar a sua.
+ *
+ * Fixava `--color-fg` de volta a tempos em que o corpo era mais claro que o
+ * título. Com cor de letra na barra isso vira defeito: pintar de vermelho um
+ * trecho em negrito não pintava nada, porque este seletor ganha do `<span>`
+ * colorido em volta — só o texto sem negrito mudava de cor.
+ */
 .nota-corpo strong {
-  color: var(--color-fg);
+  color: inherit;
   font-weight: 650;
 }
 

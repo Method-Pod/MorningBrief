@@ -3,35 +3,41 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { EditorContent, useEditor, type Editor as TEditor } from "@tiptap/react";
-import { BubbleMenu } from "@tiptap/react/menus";
 import StarterKit from "@tiptap/starter-kit";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Placeholder } from "@tiptap/extensions";
 import { Highlight } from "@tiptap/extension-highlight";
+import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
+import { TextAlign } from "@tiptap/extension-text-align";
 import { NodeSelection } from "@tiptap/pm/state";
 import type { Range } from "@tiptap/core";
 import {
   AlertTriangle,
-  Bold,
   Check,
-  ChevronsUpDown,
   Code,
+  GripVertical,
   Heading1,
   Heading2,
   Heading3,
-  Highlighter,
-  Italic,
   Lightbulb,
   List,
   ListOrdered,
   ListTodo,
   Minus,
   Quote,
-  Strikethrough,
   Type,
 } from "lucide-react";
 import { Destaque, type TomDestaque } from "./Destaque";
 import { MenuBarra, type EstadoMenu, type ItemMenu } from "./MenuBarra";
+import { Barra } from "./Barra";
+import { PainelRevisao } from "./PainelRevisao";
+import {
+  aplicarTroca,
+  deslocar,
+  faixaDoAchado,
+  textoDoDoc,
+  type Achado,
+} from "./revisao";
 import { cx } from "../ui";
 
 /**
@@ -47,26 +53,6 @@ import { cx } from "../ui";
  * mover um nó de um lugar para outro — o que falta é a alça e a decisão de qual
  * bloco ela está segurando.
  */
-
-/**
- * As cores do marca-texto.
- *
- * Cinco, e não uma paleta inteira: marca-texto serve para separar o que
- * importa do resto, e com doze cores a separação se perde — tudo fica
- * marcado de alguma coisa. São as mesmas famílias que o app já usa nos outros
- * lugares, para a nota não parecer de outro programa.
- *
- * O valor gravado é a cor final, e não um nome: o `data-color` do Highlight
- * vira `background-color` direto no HTML, e um nome exigiria uma tabela de
- * tradução em qualquer lugar que fosse mostrar a nota.
- */
-const CANETAS = [
-  { chave: "amarelo", cor: "#fef08a", rotulo: "Amarelo" },
-  { chave: "verde", cor: "#bbf7d0", rotulo: "Verde" },
-  { chave: "azul", cor: "#bfdbfe", rotulo: "Azul" },
-  { chave: "rosa", cor: "#fbcfe8", rotulo: "Rosa" },
-  { chave: "laranja", cor: "#fed7aa", rotulo: "Laranja" },
-] as const;
 
 /** Espera antes de gravar, para não escrever no banco a cada tecla. */
 const ESPERA_MS = 900;
@@ -193,12 +179,25 @@ export function Editor({
   html,
   onMudar,
   onGravando,
+  barraEm,
 }: {
   /** Conteúdo inicial. Só é lido na montagem — depois o editor é a verdade. */
   html: string;
   onMudar: (html: string) => void;
   /** Avisa a página que há mudança pendente, para ela mostrar "salvando...". */
   onGravando?: (pendente: boolean) => void;
+  /**
+   * Onde desenhar a barra de formatação, quando não for aqui dentro.
+   *
+   * A barra pertence ao editor — ela precisa do estado dele para acender o
+   * negrito e saber em que bloco o cursor está —, mas na tela ela fica acima
+   * do título da nota, que é da página. Em vez de subir todo o estado do
+   * editor para a página, a página empresta um lugar e a barra é desenhada
+   * lá, por portal. O estado continua onde nasceu.
+   *
+   * Sem isto, a barra aparece no lugar de sempre, logo acima do texto.
+   */
+  barraEm?: HTMLElement | null;
 }) {
   const [menu, setMenu] = React.useState<EstadoMenu>(null);
   /* Portal só depois de montar: `document` não existe na renderização do
@@ -258,6 +257,24 @@ export function Editor({
       /* `multicolor`: sem isso o Highlight é uma cor só, e o pedido era
          escolher a cor como num marca-texto de verdade. */
       Highlight.configure({ multicolor: true }),
+      /*
+       * Cor e tamanho da letra.
+       *
+       * `TextStyle` é o `<span style="...">` onde as duas moram; `Color` e
+       * `FontSize` só sabem escrever dentro dele, e sem ele não funcionam —
+       * daí os três juntos e nesta ordem.
+       */
+      TextStyle,
+      Color,
+      FontSize,
+      /*
+       * Alinhamento.
+       *
+       * Só em parágrafo e título. Item de lista alinhado à direita separa o
+       * texto do marcador, que fica sozinho do outro lado da linha — e a
+       * caixa de destaque tem alinhamento próprio do bloco de dentro.
+       */
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
       Destaque,
       MenuBarra.configure({ itens: ITENS, aoMudar: setMenu }),
     ],
@@ -393,7 +410,183 @@ export function Editor({
     setAlca(null);
   };
 
+  /* ------------------------------ revisão ------------------------------ */
+
+  const [revisao, setRevisao] = React.useState<{
+    achados: Achado[];
+    aviso: string | null;
+  } | null>(null);
+  const [revisando, setRevisando] = React.useState(false);
+
+  /**
+   * Manda o texto ao corretor e monta a lista.
+   *
+   * O texto vai como texto puro, sem nada da formatação: o corretor não tem o
+   * que fazer com negrito, e mandar HTML faria ele apontar erro dentro de
+   * nome de etiqueta.
+   */
+  const revisar = React.useCallback(async () => {
+    if (!editor || revisando) return;
+    setRevisando(true);
+    try {
+      const { texto } = textoDoDoc(editor.state.doc);
+
+      const r = await fetch("/api/ortografia", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ texto }),
+      });
+      const dados = await r.json();
+
+      if (!r.ok) {
+        setRevisao({
+          achados: [],
+          aviso: dados?.recado ?? "Não deu para revisar agora.",
+        });
+        return;
+      }
+
+      type Cru = {
+        inicio: number;
+        tamanho: number;
+        errado: string;
+        trocas: string[];
+        motivo: string;
+      };
+
+      const achados: Achado[] = (dados.achados as Cru[]).map((a, i) => ({
+        ...a,
+        id: `${a.inicio}-${a.tamanho}-${i}`,
+        /* O contexto sai do mesmo texto que foi enviado, então bate com as
+           posições que voltaram. 34 caracteres de cada lado: dá para
+           reconhecer a frase e ainda cabe numa linha da lista. */
+        antes: texto.slice(Math.max(0, a.inicio - 34), a.inicio).replace(/\n/g, " "),
+        depois: texto
+          .slice(a.inicio + a.tamanho, a.inicio + a.tamanho + 34)
+          .replace(/\n/g, " "),
+      }));
+
+      setRevisao({
+        achados,
+        aviso: dados.cortou
+          ? "A nota é longa e só a primeira parte foi revisada."
+          : achados.length === 0 && dados.total > 0
+            ? "O corretor só achou questões de estilo, que esta revisão não mostra."
+            : null,
+      });
+    } catch {
+      setRevisao({ achados: [], aviso: "Não deu para falar com o corretor." });
+    } finally {
+      setRevisando(false);
+    }
+  }, [editor, revisando]);
+
+  /**
+   * Aplica uma correção e reposiciona as que sobraram.
+   *
+   * O mapa é remontado aqui, e não guardado da revisão: cada correção
+   * aplicada muda as posições do documento, e um mapa velho faria a próxima
+   * cair fora do lugar.
+   */
+  const aplicar = React.useCallback(
+    (achado: Achado, troca: string) => {
+      if (!editor) return;
+      const { pedacos } = textoDoDoc(editor.state.doc);
+      const faixa = faixaDoAchado(editor, pedacos, achado);
+
+      setRevisao((atual) => {
+        if (!atual) return atual;
+        const restantes = atual.achados.filter((a) => a.id !== achado.id);
+
+        /* O trecho mudou desde a revisão: some da lista sem trocar nada. Sem
+           isto a correção cairia em cima de texto que ninguém revisou. */
+        if (!faixa)
+          return {
+            achados: restantes,
+            aviso: "Esse trecho mudou depois da revisão, e foi deixado de lado.",
+          };
+
+        aplicarTroca(editor, faixa, troca);
+        return {
+          achados: deslocar(
+            restantes,
+            achado.inicio,
+            troca.length - achado.errado.length
+          ),
+          aviso: atual.aviso,
+        };
+      });
+    },
+    [editor]
+  );
+
+  /**
+   * Aplica tudo de uma vez, do fim para o começo.
+   *
+   * De trás para frente porque uma correção só desloca o que vem depois
+   * dela: começando pelo último, os anteriores continuam válidos e não
+   * precisam de ajuste nenhum.
+   */
+  const aplicarTodas = React.useCallback(() => {
+    if (!editor) return;
+    const { pedacos } = textoDoDoc(editor.state.doc);
+
+    setRevisao((atual) => {
+      if (!atual) return atual;
+      let feitas = 0;
+      for (const a of [...atual.achados].sort((x, y) => y.inicio - x.inicio)) {
+        const troca = a.trocas[0];
+        if (!troca) continue;
+        const faixa = faixaDoAchado(editor, pedacos, a);
+        if (!faixa) continue;
+        aplicarTroca(editor, faixa, troca);
+        feitas++;
+      }
+      return {
+        achados: [],
+        aviso:
+          feitas === atual.achados.length
+            ? null
+            : `${feitas} de ${atual.achados.length} aplicadas — o resto mudou desde a revisão.`,
+      };
+    });
+  }, [editor]);
+
   if (!editor) return null;
+
+  /**
+   * A barra e o painel de revisão, desenhados aqui ou no lugar emprestado.
+   *
+   * `solta` quer dizer fora da coluna de texto: sem o recuo que compensa a
+   * calha da alça de arrastar, porque acima do título não existe calha.
+   */
+  const comandos = ({ solta }: { solta: boolean }) => {
+    const conteudo = (
+      <>
+        <Barra
+          editor={editor}
+          aoCorrigir={revisar}
+          corrigindo={revisando}
+          semRecuo={solta}
+        />
+        {revisao && (
+          <PainelRevisao
+            achados={revisao.achados}
+            aviso={revisao.aviso}
+            aoAplicar={aplicar}
+            aoIgnorar={(id: string) =>
+              setRevisao((a) =>
+                a ? { ...a, achados: a.achados.filter((x) => x.id !== id) } : a
+              )
+            }
+            aoAplicarTodas={aplicarTodas}
+            aoFechar={() => setRevisao(null)}
+          />
+        )}
+      </>
+    );
+    return solta && barraEm ? createPortal(conteudo, barraEm) : conteudo;
+  };
 
   const botao = (ativo: boolean) =>
     cx(
@@ -410,6 +603,8 @@ export function Editor({
       onMouseMove={aoMover}
       onMouseLeave={() => !arrastando.current && setAlca(null)}
     >
+      {comandos(barraEm ? { solta: true } : { solta: false })}
+
       {/*
         A alça vive fora da coluna de texto, à esquerda.
 
@@ -428,150 +623,20 @@ export function Editor({
           className="absolute -left-7 z-10 grid h-6 w-6 cursor-grab place-items-center rounded-md text-fg-mute/70 transition-colors hover:bg-ink-800 hover:text-fg active:cursor-grabbing"
           style={{ top: alca.topo }}
         >
-          <ChevronsUpDown size={13} />
+          {/*
+            Seis pontinhos, e não duas setas.
+            
+            Era `ChevronsUpDown` — uma seta para cima e outra para baixo —, e
+            a primeira pessoa que viu perguntou o que era aquilo. Duas setas
+            opostas são o desenho universal de "abre uma lista"; o de
+            "segure e arraste" é a pega de pontinhos, que é o que o Notion e
+            todo mundo usa para exatamente esta função.
+          */}
+          <GripVertical size={13} />
         </button>
       )}
 
-      {/*
-        Barra que aparece com texto selecionado.
 
-        Flutuante, e não fixa no topo: a barra fixa rouba uma faixa da tela em
-        toda nota, inclusive nas que só têm três linhas de texto corrido.
-      */}
-      <BubbleMenu
-        editor={editor}
-        options={{ placement: "top" }}
-        className="flex items-center gap-0.5 rounded-[14px] border border-line bg-white p-1 shadow-[0_8px_24px_-8px_rgb(20_24_26/0.25)]"
-      >
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          className={botao(editor.isActive("bold"))}
-          aria-label="Negrito"
-        >
-          <Bold size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          className={botao(editor.isActive("italic"))}
-          aria-label="Itálico"
-        >
-          <Italic size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleStrike().run()}
-          className={botao(editor.isActive("strike"))}
-          aria-label="Riscado"
-        >
-          <Strikethrough size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleCode().run()}
-          className={botao(editor.isActive("code"))}
-          aria-label="Código"
-        >
-          <Code size={14} />
-        </button>
-
-        <span className="mx-0.5 h-5 w-px bg-line" />
-
-        <button
-          type="button"
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 1 }).run()
-          }
-          className={botao(editor.isActive("heading", { level: 1 }))}
-          aria-label="Título 1"
-        >
-          <Heading1 size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
-          }
-          className={botao(editor.isActive("heading", { level: 2 }))}
-          aria-label="Título 2"
-        >
-          <Heading2 size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={botao(editor.isActive("bulletList"))}
-          aria-label="Lista"
-        >
-          <List size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().toggleTaskList().run()}
-          className={botao(editor.isActive("taskList"))}
-          aria-label="Lista de tarefas"
-        >
-          <ListTodo size={14} />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.chain().focus().alternarDestaque("nota").run()}
-          className={botao(editor.isActive("destaque"))}
-          aria-label="Caixa de destaque"
-        >
-          <Lightbulb size={14} />
-        </button>
-
-        <span className="mx-0.5 h-5 w-px bg-line" />
-
-        {/*
-          As cinco canetas, como bolinhas.
-          
-          Direto na barra em vez de dentro de um submenu: marcar é um gesto de
-          um toque, e esconder a cor atrás de um segundo clique dobraria o
-          trabalho do gesto mais comum do marca-texto.
-        */}
-        {CANETAS.map((c) => (
-          <button
-            key={c.chave}
-            type="button"
-            onClick={() =>
-              editor.chain().focus().toggleHighlight({ color: c.cor }).run()
-            }
-            aria-label={`Marcar de ${c.rotulo.toLowerCase()}`}
-            title={c.rotulo}
-            aria-pressed={editor.isActive("highlight", { color: c.cor })}
-            className={cx(
-              "grid h-8 w-6 place-items-center rounded-lg transition-colors hover:bg-ink-800"
-            )}
-          >
-            <span
-              className={cx(
-                "h-4 w-4 rounded-full border transition-transform",
-                editor.isActive("highlight", { color: c.cor })
-                  ? "border-fg/35 scale-110"
-                  : "border-line"
-              )}
-              style={{ background: c.cor }}
-            />
-          </button>
-        ))}
-
-        {/* Tirar a marca. Só aparece quando há marca para tirar — um botão
-            que não faz nada é pior que a ausência dele. */}
-        {editor.isActive("highlight") && (
-          <button
-            type="button"
-            onClick={() => editor.chain().focus().unsetHighlight().run()}
-            aria-label="Tirar a marca"
-            title="Tirar a marca"
-            className={botao(false)}
-          >
-            <Highlighter size={14} />
-          </button>
-        )}
-      </BubbleMenu>
 
       <EditorContent editor={editor} />
 
