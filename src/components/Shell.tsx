@@ -14,7 +14,6 @@ import {
   Library,
   Menu,
   PanelLeftClose,
-  PanelLeftOpen,
   StickyNote,
   Wallet,
   X,
@@ -232,10 +231,13 @@ export function Shell({
         )}
       >
         {/*
-          Encolhida, a marca sai e fica só o botão, centralizado.
+          A marca fica nos dois estados; o que muda é a forma dela.
 
-          Um "morningbrief" cortado em 68px não é marca, é sobra de texto — e
-          voltar ao Início continua a um clique, pelo primeiro item da lista.
+          Aberta, o nome escrito; encolhida, o símbolo sozinho — que é o mesmo
+          da tela de início do telefone. Antes a marca sumia e sobrava o botão
+          de encolher, e uma barra sem marca nenhuma no alto perde o ponto de
+          referência: não dá para saber de relance de que programa é aquela
+          fileira de ícones.
         */}
         <div
           className={cx(
@@ -243,20 +245,59 @@ export function Shell({
             encolhida ? "justify-center px-2.5" : "gap-1 pr-2.5"
           )}
         >
-          {!encolhida && <div className="min-w-0 flex-1">{wordmark}</div>}
-          <button
-            type="button"
-            onClick={alternarLargura}
-            aria-label={encolhida ? "Abrir a barra lateral" : "Encolher a barra lateral"}
-            aria-expanded={!encolhida}
-            title={encolhida ? "Abrir a barra" : "Encolher a barra"}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
-          >
-            {encolhida ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-          </button>
+          {encolhida ? (
+            <Link href="/" prefetch={false} aria-label="Início" title="Morning Brief">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/icon-dark.svg"
+                alt=""
+                width={30}
+                height={30}
+                className="block h-[30px] w-[30px] rounded-[9px]"
+              />
+            </Link>
+          ) : (
+            <>
+              <div className="min-w-0 flex-1">{wordmark}</div>
+              <button
+                type="button"
+                onClick={alternarLargura}
+                aria-label="Encolher a barra lateral"
+                aria-expanded
+                title="Encolher a barra"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+              >
+                <PanelLeftClose size={17} />
+              </button>
+            </>
+          )}
         </div>
         {navegacao(encolhida)}
         {rodape(encolhida)}
+
+        {/*
+          A borda da direita é o que reabre a barra.
+
+          Encolhida não há botão: 68px de largura já são a fileira de ícones, e
+          um botão a mais ali disputaria espaço com eles. A faixa tem 10px de
+          alvo — larga o bastante para o ponteiro acertar — e mostra um risco
+          fino quando o ponteiro passa, que é o aviso de que dali se puxa.
+
+          `absolute` dentro do `aside`, que é `sticky` e portanto posicionado:
+          a faixa acompanha a altura da barra sem entrar no fluxo dela.
+        */}
+        {encolhida && (
+          <button
+            type="button"
+            onClick={alternarLargura}
+            aria-label="Abrir a barra lateral"
+            aria-expanded={false}
+            title="Abrir a barra"
+            className="group absolute inset-y-0 right-0 w-2.5 cursor-pointer"
+          >
+            <span className="absolute inset-y-0 right-0 w-[2px] bg-transparent transition-colors group-hover:bg-brand-500/40" />
+          </button>
+        )}
       </aside>
 
       {/* -------- gaveta, mobile -------- */}
