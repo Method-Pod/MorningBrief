@@ -218,15 +218,23 @@ export function Shell({
     <div className="flex min-h-dvh">
       {/* -------- barra lateral, desktop -------- */}
       {/*
-        sticky em vez de fixed: o aside continua no fluxo, então mantém a
+        Um cartão solto, não uma faixa colada na janela.
+
+        Ela ia de borda a borda — encostava em cima, embaixo e na esquerda —,
+        e por isso lia como parte da moldura do navegador em vez de parte do
+        app. Com 12px de folga em volta e o mesmo `card` que todo o resto usa
+        (branco, canto de 22px, a mesma sombra de 1px), ela passa a ser mais
+        um cartão sobre o fundo cinza, igual aos do painel.
+
+        `sticky` em vez de `fixed`: o aside continua no fluxo, então mantém a
         largura na grade flex sem precisar de margem compensatória no <main>.
-        h-dvh dá altura definida para o mt-auto do rodapé funcionar, e o
-        overflow-y-auto salva a barra em tela baixa, onde a navegação e a
-        conta passam da altura da janela.
+        A altura é a da janela menos as duas folgas, e é ela que dá base ao
+        `mt-auto` do rodapé; o `overflow-y-auto` salva a barra em tela baixa,
+        onde a navegação e a conta passam da altura disponível.
       */}
       <aside
         className={cx(
-          "camada-fixa sticky top-0 hidden h-dvh shrink-0 flex-col overflow-y-auto overflow-x-hidden bg-white pt-6 pb-5 transition-[width] duration-200 lg:flex",
+          "card camada-fixa sticky top-3 my-3 ml-3 hidden h-[calc(100dvh-24px)] shrink-0 flex-col overflow-y-auto overflow-x-hidden pt-5 pb-4 transition-[width] duration-200 lg:flex",
           encolhida ? "w-[68px]" : "w-[224px]"
         )}
       >
@@ -295,7 +303,10 @@ export function Shell({
             title="Abrir a barra"
             className="group absolute inset-y-0 right-0 w-2.5 cursor-pointer"
           >
-            <span className="absolute inset-y-0 right-0 w-[2px] bg-transparent transition-colors group-hover:bg-brand-500/40" />
+            {/* O risco não vai de ponta a ponta: com o canto arredondado, uma
+                linha reta colada na borda escaparia da curva. Recuada em
+                cima e embaixo, ela lê como puxador. */}
+            <span className="absolute inset-y-10 right-[3px] w-[3px] rounded-full bg-transparent transition-colors group-hover:bg-brand-500/40" />
           </button>
         )}
       </aside>
