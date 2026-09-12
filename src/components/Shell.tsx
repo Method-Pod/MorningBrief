@@ -6,6 +6,7 @@ import * as React from "react";
 import {
   BookOpen,
   CalendarDays,
+  ChevronLeft,
   ChevronRight,
   GraduationCap,
   ListChecks,
@@ -13,7 +14,6 @@ import {
   LayoutDashboard,
   Library,
   Menu,
-  PanelLeftClose,
   StickyNote,
   Wallet,
   X,
@@ -275,7 +275,7 @@ export function Shell({
                 title="Encolher a barra"
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
               >
-                <PanelLeftClose size={17} />
+                <ChevronLeft size={18} />
               </button>
             </>
           )}
