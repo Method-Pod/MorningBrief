@@ -77,7 +77,7 @@ export default function AnotacoesPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const router = useRouter();
 
-  const [rows, setRows] = useEstadoCacheado<Note[]>("notes", []);
+  const [rows, setRows] = useEstadoCacheado<NotaDaLista[]>("notes", []);
   const [cats, setCats] = useEstadoCacheado<NoteCategory[]>(
     "note_categories",
     []
@@ -101,7 +101,7 @@ export default function AnotacoesPage() {
    * mexer no cabeçalho dela e voltar transformava três segundos em três
    * navegações. Por isso saíram da página da nota e vieram para cá.
    */
-  const [editando, setEditando] = React.useState<Note | null>(null);
+  const [editando, setEditando] = React.useState<NotaDaLista | null>(null);
   const [rascunho, setRascunho] = React.useState({ title: "", color: "blue" });
   const [minhas, setMinhas] = React.useState<string[]>([]);
   const [salvando, setSalvando] = React.useState(false);
@@ -112,9 +112,19 @@ export default function AnotacoesPage() {
 
   const load = React.useCallback(async () => {
     const [n, c, l] = await Promise.all([
+      /*
+       * Tudo menos o corpo da anotação.
+       *
+       * O índice não mostra texto nenhum — só título, data e categorias —,
+       * mas baixava o HTML inteiro de todas as anotações a cada abertura,
+       * só para a busca ter o que procurar. Medido nesta base: 47 kB de
+       * resposta, dos quais 43 eram corpo que a tela não desenha. O corpo
+       * agora vem separado, e só quando a busca é usada de verdade; ver
+       * `carregarIndice` mais abaixo.
+       */
       supabase
         .from("notes")
-        .select("*")
+        .select("id,user_id,title,color,pinned,created_at,updated_at")
         .order("pinned", { ascending: false })
         .order("updated_at", { ascending: false }),
       /* As categorias toleram falha: sem CATEGORIAS-DE-NOTA.sql a faixa de
@@ -122,7 +132,7 @@ export default function AnotacoesPage() {
       supabase.from("note_categories").select("*").order("name"),
       supabase.from("note_in_category").select("*"),
     ]);
-    if (!n.error) setRows((n.data as Note[]) ?? []);
+    if (!n.error) setRows((n.data as NotaDaLista[]) ?? []);
     setCats((c.data as NoteCategory[]) ?? []);
     setLigacoes((l.data as NoteInCategory[]) ?? []);
     setLoading(false);
@@ -158,7 +168,7 @@ export default function AnotacoesPage() {
     router.push(`/anotacoes/${data.id}`);
   };
 
-  const fixar = async (n: Note) => {
+  const fixar = async (n: NotaDaLista) => {
     setRows((r) =>
       r.map((x) => (x.id === n.id ? { ...x, pinned: !x.pinned } : x))
     );
@@ -174,7 +184,7 @@ export default function AnotacoesPage() {
     else setRows((r) => ordenar(r));
   };
 
-  const remover = (n: Note) =>
+  const remover = (n: NotaDaLista) =>
     confirm.ask(`Excluir "${n.title || "esta anotação"}"?`, async () => {
       const { data: saiu, error } = await supabase
         .from("notes")
@@ -186,7 +196,7 @@ export default function AnotacoesPage() {
       setRows((r) => r.filter((x) => x.id !== n.id));
     });
 
-  const abrirEdicao = (n: Note) => {
+  const abrirEdicao = (n: NotaDaLista) => {
     setEditando(n);
     setRascunho({ title: n.title, color: n.color });
     setMinhas(daNota.get(n.id) ?? []);
@@ -309,26 +319,65 @@ export default function AnotacoesPage() {
     [rows, daNota]
   );
 
+  /*
+   * O corpo das anotações, buscado só quando alguém usa a busca.
+   *
+   * O índice da tela não desenha texto nenhum, então carregar o corpo de
+   * todas as anotações na abertura era pagar adiantado por uma busca que a
+   * maioria das visitas não faz — e a conta cresce a cada anotação escrita.
+   * Agora ele vem numa segunda consulta, disparada quando a caixa de busca
+   * recebe o cursor: até a segunda letra estar digitada, já chegou.
+   *
+   * Enquanto não chega, a busca por TÍTULO já funciona, porque o título vem
+   * na primeira consulta. É por isso que o campo não trava nem fica vazio.
+   */
+  const [corpos, setCorpos] = React.useState<Map<string, string> | null>(null);
+  const [buscandoCorpos, setBuscandoCorpos] = React.useState(false);
+
+  /* A lista mudou desde o índice que está em mãos? Editar uma anotação muda
+     o `updated_at` dela, então isto pega o corpo que ficou velho. */
+  const assinatura = React.useMemo(
+    () => rows.map((n) => `${n.id}:${n.updated_at}`).join("|"),
+    [rows]
+  );
+  const assinaturaDosCorpos = React.useRef("");
+
+  const carregarCorpos = React.useCallback(async () => {
+    if (buscandoCorpos || assinaturaDosCorpos.current === assinatura) return;
+    setBuscandoCorpos(true);
+    const { data, error } = await supabase.from("notes").select("id,content");
+    setBuscandoCorpos(false);
+    if (error) return;
+
+    const m = new Map<string, string>();
+    for (const n of (data as { id: string; content: string }[]) ?? [])
+      m.set(n.id, textoDaNota(n.content).toLowerCase());
+    assinaturaDosCorpos.current = assinatura;
+    setCorpos(m);
+  }, [supabase, assinatura, buscandoCorpos]);
+
   /**
    * O texto de cada anotação, sem marcação e em minúsculas, pronto para a
    * busca.
    *
-   * Isto estava dentro do filtro, o que significava tirar o HTML de **todas**
-   * as anotações a cada tecla digitada na busca — dez passadas de expressão
+   * Isto já esteve dentro do filtro, o que significava tirar o HTML de
+   * **todas** as anotações a cada tecla digitada — dez passadas de expressão
    * regular por anotação, por tecla. Medido numa anotação de 9,5 kB: 1,5 ms
    * para 20 anotações e 4,3 ms para 60, num computador. No telefone é
    * bastante mais, e some no meio da digitação.
    *
-   * Agora acontece uma vez por lista carregada. A dependência é `rows`, que
-   * só muda quando uma anotação é gravada, criada ou apagada — digitar na
-   * busca não a toca.
+   * Agora acontece uma vez por índice carregado, e digitar na busca não o
+   * toca.
    */
   const textoBuscavel = React.useMemo(() => {
     const m = new Map<string, string>();
     for (const n of rows)
-      m.set(n.id, `${n.title} ${textoDaNota(n.content)}`.toLowerCase());
+      m.set(n.id, `${n.title} ${corpos?.get(n.id) ?? ""}`.toLowerCase());
     return m;
-  }, [rows]);
+  }, [rows, corpos]);
+
+  /** A busca ainda não alcança o texto das anotações? */
+  const soNoTitulo = !!q.trim() && !corpos;
 
   /* Categoria e busca se somam: filtrar por "Estudo" e depois procurar uma
      palavra procura dentro do que a categoria deixou. */
@@ -356,7 +405,7 @@ export default function AnotacoesPage() {
         : "bg-ink-800 text-fg-mute hover:text-fg-dim"
     );
 
-  const linha = (n: Note) => (
+  const linha = (n: NotaDaLista) => (
     <li key={n.id} className="group flex items-center gap-2.5">
       <Link
         href={`/anotacoes/${n.id}`}
@@ -516,7 +565,13 @@ export default function AnotacoesPage() {
           />
           <Input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onFocus={carregarCorpos}
+            onChange={(e) => {
+              setQ(e.target.value);
+              /* Também no digitar: colar com o teclado ou chegar ao campo por
+                 Tab pode pular o foco que a gente esperava. */
+              carregarCorpos();
+            }}
             placeholder="Buscar no título e no texto..."
             className="pl-9"
           />
@@ -529,14 +584,18 @@ export default function AnotacoesPage() {
             icon={<StickyNote size={18} />}
             title={
               q
-                ? "Nada encontrado"
+                ? soNoTitulo
+                  ? "Procurando no texto..."
+                  : "Nada encontrado"
                 : filtro !== "all"
                   ? "Nada nesta categoria"
                   : "Nenhuma anotação"
             }
             sub={
               q
-                ? "Nenhum título ou texto com esse termo."
+                ? soNoTitulo
+                  ? "Nenhum título com esse termo. O texto das anotações está chegando."
+                  : "Nenhum título ou texto com esse termo."
                 : filtro !== "all"
                   ? "Abra uma nota para pôr uma categoria nela."
                   : "Cada nota abre numa página. Dentro dela, digite / para inserir título, lista, tarefa ou caixa de destaque."
@@ -679,7 +738,16 @@ export default function AnotacoesPage() {
 }
 
 /** Fixadas em cima, e dentro de cada grupo a mais mexida primeiro. */
-const ordenar = (r: Note[]) =>
+/**
+ * A anotação como o índice a conhece: tudo menos o corpo.
+ *
+ * O corpo é o que pesa — 43 dos 47 kB medidos nesta base — e esta tela não
+ * desenha uma linha dele. Tirá-lo do tipo é o que garante que ninguém volte
+ * a usá-lo aqui sem perceber: o TypeScript recusa.
+ */
+type NotaDaLista = Omit<Note, "content">;
+
+const ordenar = (r: NotaDaLista[]) =>
   [...r].sort((a, b) =>
     a.pinned === b.pinned
       ? b.updated_at.localeCompare(a.updated_at)
