@@ -274,6 +274,16 @@ export default function ContasPage() {
     const ultimoDia = new Date(ano, m, 0).getDate();
     const dia = String(Math.min(cartao.vence_dia, ultimoDia)).padStart(2, "0");
 
+    /*
+     * A tela vai junto para o mês da fatura.
+     *
+     * Sem isto, quem clicasse em setembro criaria a fatura de outubro e
+     * continuaria vendo "sem fatura" no quadro — que mostra o mês da tela.
+     * A conta estaria salva e correta, e a pessoa concluiria que o botão não
+     * funcionou. Mover a tela é o que faz o resultado aparecer onde se olhou.
+     */
+    if (alvo !== mes) trocarMes(alvo);
+
     setEditing(null);
     setForm({
       ...vazio(),
