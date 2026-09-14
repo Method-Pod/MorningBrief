@@ -1318,18 +1318,18 @@ export default function ContasPage() {
         </Card>
 
         {/*
-          Os cartões, na mesma grade e só quando existem.
-
-          Terceiro item de uma grade de duas colunas: ele cai embaixo do
-          calendário, alinhado com ele, sem precisar de uma segunda grade
-          para dizer a mesma coisa.
+          Os cartões, terceira faixa e só quando existem.
 
           Sem cartão cadastrado o quadro nem aparece. Uma tela que já é densa
           não ganha uma moldura vazia para anunciar um recurso que ninguém
           pediu para usar; quem quiser começar entra por "Cartões", no alto.
+
+          Sem `self-start`: o cartão estica até a altura da faixa e o conteúdo
+          se distribui dentro dele — lista em cima, total no pé. Ver
+          QuadroCartoes.
         */}
         {cartoes.length > 0 && (
-          <Card className="self-start">
+          <Card className="flex flex-col">
             <Cabeca titulo="Cartões" sub={`Fatura de ${rotuloMes(mes)}`} />
             <QuadroCartoes
               cartoes={cartoes}

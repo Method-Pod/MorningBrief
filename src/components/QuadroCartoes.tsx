@@ -48,7 +48,16 @@ export function QuadroCartoes({
   const faltam = linhas.filter((l) => l.conta && semValorAinda(l.conta)).length;
 
   return (
-    <div className="px-[18px] pb-[18px] pt-1">
+    /*
+     * Coluna que ocupa a altura toda do cartão.
+     *
+     * O quadro tem uma linha por cartão e o vizinho tem sete contas fixas, o
+     * que deixava um vão de meia tela embaixo dele. Esticar a moldura sem
+     * mais nada só mudaria o vazio de lugar; o que resolve é a lista em cima
+     * e o total **no pé** — o vão passa a ser respiro entre as duas coisas,
+     * que é o que ele é numa grade de blocos.
+     */
+    <div className="flex flex-1 flex-col px-[18px] pb-[18px] pt-1">
       {linhas.map(({ cartao, conta }) => (
         <div
           key={cartao.id}
@@ -78,7 +87,9 @@ export function QuadroCartoes({
         O total segue a mesma regra do resto da tela: soma o que sabe e diz o
         que falta, em vez de parecer fechado. Ver `semValorAinda`.
       */}
-      <div className="mt-1 flex items-baseline justify-between border-t border-line pt-3">
+      {/* `mt-auto` empurra o total para o fim da coluna. Com um cartão só ele
+          fica lá embaixo; com cinco, logo abaixo da lista. */}
+      <div className="mt-auto flex items-baseline justify-between border-t border-line pt-3">
         <span className="text-[12px] text-fg-mute">
           Total dos cartões
           {faltam > 0 && (
