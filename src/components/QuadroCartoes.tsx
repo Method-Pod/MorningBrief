@@ -28,11 +28,14 @@ export function QuadroCartoes({
   cartoes,
   contas,
   onLancar,
+  onCriar,
 }: {
   cartoes: Cartao[];
   /** Só as contas do mês que está na tela: o recorte é de quem chama. */
   contas: Bill[];
   onLancar: (conta: Bill, valor: number) => Promise<void>;
+  /** Abre a criação da conta de fatura já preenchida para este cartão. */
+  onCriar: (cartao: Cartao) => void;
 }) {
   const linhas = cartoes.map((c) => ({
     cartao: c,
@@ -79,7 +82,12 @@ export function QuadroCartoes({
               fecha {cartao.fecha_dia} · vence {cartao.vence_dia}
             </span>
           </span>
-          <Estado conta={conta} onLancar={onLancar} />
+          <Estado
+            cartao={cartao}
+            conta={conta}
+            onLancar={onLancar}
+            onCriar={onCriar}
+          />
         </div>
       ))}
 
@@ -106,20 +114,43 @@ export function QuadroCartoes({
   );
 }
 
-/** O lado direito da linha: o valor, o campo, ou o aviso de que não há conta. */
+/** O lado direito da linha: o valor, o campo, ou o caminho para criar a conta. */
 function Estado({
+  cartao,
   conta,
   onLancar,
+  onCriar,
 }: {
+  cartao: Cartao;
   conta: Bill | null;
   onLancar: (conta: Bill, valor: number) => Promise<void>;
+  onCriar: (cartao: Cartao) => void;
 }) {
   const [texto, setTexto] = React.useState("");
   const [gravando, setGravando] = React.useState(false);
 
+  /*
+   * Sem conta ligada ao cartão, um botão — e não o aviso "sem fatura".
+   *
+   * Cadastrar o cartão não cria a fatura: a fatura é uma conta, e é ela que
+   * vence, é paga e entra no total. Só que quem acabou de cadastrar não tem
+   * como saber disso, e o aviso mandava a pessoa procurar sozinha onde ligar
+   * uma coisa na outra. Um beco sem saída num quadro que existe para ser
+   * operado.
+   *
+   * O botão abre o formulário já preenchido: descrição, cartão, dia do
+   * fechamento, vencimento do mês e a marca de valor variável. Resta conferir
+   * e salvar.
+   */
   if (!conta)
     return (
-      <span className="shrink-0 text-[11.5px] text-fg-mute">sem fatura</span>
+      <button
+        type="button"
+        onClick={() => onCriar(cartao)}
+        className="shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-[11.5px] font-semibold text-fg-mute transition-colors hover:border-brand-500/40 hover:bg-brand-500/10 hover:text-brand-400"
+      >
+        criar fatura
+      </button>
     );
 
   if (!semValorAinda(conta)) {

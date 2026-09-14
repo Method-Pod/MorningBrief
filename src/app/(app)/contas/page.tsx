@@ -231,6 +231,66 @@ export default function ContasPage() {
     setOpen(true);
   };
 
+  /**
+   * Abre a criação da fatura de um cartão, já preenchida.
+   *
+   * Cadastrar o cartão não cria a fatura — a fatura é uma conta, e é ela que
+   * vence, é paga e entra no total. Quem acabou de cadastrar não tem como
+   * saber disso, então o quadro de cartões traz a pessoa para cá em vez de
+   * mandá-la procurar.
+   *
+   * O vencimento cai no `vence_dia` do cartão, dentro do mês que está na
+   * tela. `Math.min` com o último dia do mês porque "vence dia 31" em
+   * fevereiro não existe, e uma data inválida voltaria do banco como erro
+   * cru no meio do formulário.
+   */
+  const criarFatura = (cartao: Cartao) => {
+    /*
+     * Mês da fatura: este, ou o próximo se o vencimento deste já passou.
+     *
+     * Quem cadastra o cartão no dia 14 tem a fatura de setembro fechada desde
+     * o dia 1 e vencida desde o dia 8 — criá-la agora nasceria uma conta
+     * atrasada, pedindo um valor de um mês que já foi pago por fora. A
+     * primeira fatura útil é a do mês seguinte.
+     *
+     * Só vale quando se está olhando o mês corrente. Quem navegou até agosto
+     * de propósito quer agosto, e mandá-lo para setembro seria desfazer a
+     * escolha dele.
+     */
+    const olhandoEsteMes = mes === todayISO().slice(0, 7);
+    let [ano, m] = mes.split("-").map(Number);
+    if (olhandoEsteMes) {
+      const ultimo = new Date(ano, m, 0).getDate();
+      const venceEm = `${mes}-${String(Math.min(cartao.vence_dia, ultimo)).padStart(2, "0")}`;
+      if (venceEm < todayISO()) {
+        m += 1;
+        if (m > 12) {
+          m = 1;
+          ano += 1;
+        }
+      }
+    }
+    const alvo = `${ano}-${String(m).padStart(2, "0")}`;
+    const ultimoDia = new Date(ano, m, 0).getDate();
+    const dia = String(Math.min(cartao.vence_dia, ultimoDia)).padStart(2, "0");
+
+    setEditing(null);
+    setForm({
+      ...vazio(),
+      description: `Fatura | ${cartao.nome}`,
+      due_date: `${alvo}-${dia}`,
+      /* Fixa, senão ela não se repete sozinha no mês seguinte — e é
+         justamente a repetição que faz a marca de valor variável servir. */
+      recurring: true,
+      valorVariavel: true,
+      cartaoId: cartao.id,
+      fechaDia: String(cartao.fecha_dia),
+      categoriaEscolhida: true,
+    });
+    setErr("");
+    setOpen(true);
+  };
+
   const editar = (b: Bill) => {
     setEditing(b);
     setForm({
@@ -1335,6 +1395,7 @@ export default function ContasPage() {
               cartoes={cartoes}
               contas={doMes}
               onLancar={lancarFatura}
+              onCriar={criarFatura}
             />
           </Card>
         )}
