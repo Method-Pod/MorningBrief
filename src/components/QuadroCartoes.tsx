@@ -39,9 +39,19 @@ export function QuadroCartoes({
 }) {
   const linhas = cartoes.map((c) => ({
     cartao: c,
-    /* A fatura do mês. Mais de uma por cartão no mesmo mês não deveria
-       existir; se existir, a primeira por vencimento é a que interessa. */
-    conta: contas.find((b) => b.cartao_id === c.id) ?? null,
+    /*
+     * A fatura do mês. Mais de uma por cartão no mesmo mês não deveria
+     * existir; se existir, a primeira por vencimento é a que interessa.
+     *
+     * Era `find`, que devolve a primeira na ordem em que a lista chegou —
+     * e essa ordem é a do `order("due_date")` da consulta hoje, mas nada
+     * aqui obrigava a ser. Uma lista reordenada na tela trocaria a fatura
+     * mostrada sem ninguém mexer em nada.
+     */
+    conta:
+      contas
+        .filter((b) => b.cartao_id === c.id)
+        .sort((a, b) => a.due_date.localeCompare(b.due_date))[0] ?? null,
   }));
 
   const somadas = linhas
