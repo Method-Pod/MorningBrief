@@ -42,6 +42,7 @@ import {
   useCategorias,
 } from "@/components/Categorias";
 import { AbaterModal, ProgressoAbatida } from "@/components/ContasLote";
+import { QuadroCartoes } from "@/components/QuadroCartoes";
 import { brl, dataCurta, daysUntil, rotuloMes, todayISO } from "@/lib/format";
 import {
   EditorParcelas,
@@ -489,6 +490,25 @@ export default function ContasPage() {
       )
     )
       load();
+  };
+
+  /**
+   * Grava o valor de uma fatura lançada pelo quadro de cartões.
+   *
+   * `select("id")` porque `.update()` devolve 204 sem erro quando nenhuma
+   * linha casa — sem isto, uma gravação que não aconteceu pareceria ter dado
+   * certo, e o valor sumiria no próximo carregamento.
+   */
+  const lancarFatura = async (conta: Bill, valor: number) => {
+    const { data, error } = await supabase
+      .from("bills")
+      .update({ amount: valor })
+      .eq("id", conta.id)
+      .select("id");
+    if (error || !data?.length) return notice.show(NADA_GRAVADO);
+    setRows((r) =>
+      r.map((b) => (b.id === conta.id ? { ...b, amount: valor } : b))
+    );
   };
 
   /** Duplica a conta fixa para o mês seguinte, já em aberto. */
@@ -1281,6 +1301,28 @@ export default function ContasPage() {
             <ContasFixas contas={rows} onLancar={lancarProximo} ocupado={lancando} />
           </div>
         </Card>
+
+        {/*
+          Os cartões, na mesma grade e só quando existem.
+
+          Terceiro item de uma grade de duas colunas: ele cai embaixo do
+          calendário, alinhado com ele, sem precisar de uma segunda grade
+          para dizer a mesma coisa.
+
+          Sem cartão cadastrado o quadro nem aparece. Uma tela que já é densa
+          não ganha uma moldura vazia para anunciar um recurso que ninguém
+          pediu para usar; quem quiser começar entra por "Cartões", no alto.
+        */}
+        {cartoes.length > 0 && (
+          <Card className="self-start">
+            <Cabeca titulo="Cartões" sub={`Fatura de ${rotuloMes(mes)}`} />
+            <QuadroCartoes
+              cartoes={cartoes}
+              contas={doMes}
+              onLancar={lancarFatura}
+            />
+          </Card>
+        )}
       </div>
 
       {/* ------------------------------ análises ------------------------------ */}
