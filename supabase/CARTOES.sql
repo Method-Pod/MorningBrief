@@ -19,12 +19,9 @@
 -- doze vezes por ano e divergiriam na primeira vez que o banco mudasse o
 -- vencimento.
 --
--- **Os quatro últimos dígitos, e só eles.** O número inteiro de um cartão
--- não entra aqui nem entraria se fosse pedido: ele não serve a nada nesta
--- tela — o que se quer é reconhecer de qual cartão é a fatura — e guardar
--- número completo transforma um caderno de contas num alvo. Os quatro
--- finais são o que o próprio banco usa para isso, e não pagam nada
--- sozinhos.
+-- **Nenhum dígito do cartão é guardado.** Nome, banco e bandeira já bastam
+-- para saber de qual cartão é a fatura, e o que não é preciso guardar é
+-- melhor não guardar. Ver a coluna `final`, logo abaixo.
 create table if not exists public.cartoes (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users(id) on delete cascade,
@@ -35,7 +32,17 @@ create table if not exists public.cartoes (
   banco       text not null default '',
   /* Visa, Mastercard, Elo, Amex… Livre pelo mesmo motivo. */
   bandeira    text not null default '',
-  /* Só os quatro finais. Ver o comentário acima. */
+  /*
+   * Os quatro finais — coluna sem uso.
+   *
+   * A tela chegou a pedir e mostrar, e o campo saiu a pedido: nome, banco e
+   * bandeira já bastam para saber de qual cartão é a fatura, e o que não é
+   * preciso guardar é melhor não guardar. A coluna fica porque derrubá-la
+   * seria migração destrutiva sem ganho nenhum; nada a lê nem a escreve.
+   *
+   * Para tirá-la do banco também, um dia:
+   *   alter table public.cartoes drop column if exists final;
+   */
   final       text not null default '',
 
   /*

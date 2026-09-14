@@ -36,15 +36,11 @@ const VAZIO = {
   nome: "",
   banco: "",
   bandeira: "",
-  final: "",
   fecha_dia: "1",
   vence_dia: "10",
   limite: "",
   cor: "blue",
 };
-
-/** Só dígito, e no máximo quatro. Ver o porquê no comentário do campo. */
-const soQuatro = (v: string) => v.replace(/\D/g, "").slice(0, 4);
 
 /** Traz um dia digitado para dentro de 1–31, que é o que o banco aceita. */
 const diaValido = (v: string) => {
@@ -97,7 +93,6 @@ export default function CartoesPage() {
       nome: c.nome,
       banco: c.banco ?? "",
       bandeira: c.bandeira ?? "",
-      final: c.final ?? "",
       fecha_dia: String(c.fecha_dia),
       vence_dia: String(c.vence_dia),
       limite: c.limite == null ? "" : String(c.limite),
@@ -118,7 +113,6 @@ export default function CartoesPage() {
       nome,
       banco: form.banco.trim(),
       bandeira: form.bandeira.trim(),
-      final: soQuatro(form.final),
       fecha_dia: diaValido(form.fecha_dia),
       vence_dia: diaValido(form.vence_dia),
       limite: form.limite.trim() ? Number(form.limite) : null,
@@ -235,9 +229,8 @@ export default function CartoesPage() {
                     {c.nome}
                   </p>
                   <p className="truncate text-[11.5px] text-fg-mute">
-                    {[c.banco, c.bandeira, c.final && `•••• ${c.final}`]
-                      .filter(Boolean)
-                      .join(" · ") || "Sem detalhes"}
+                    {[c.banco, c.bandeira].filter(Boolean).join(" · ") ||
+                      "Sem detalhes"}
                   </p>
                 </div>
                 <button
@@ -329,26 +322,6 @@ export default function CartoesPage() {
               />
             </Field>
           </div>
-
-          {/*
-            Quatro dígitos, e é tudo.
-
-            O número inteiro não entra aqui nem entraria se fosse pedido: ele
-            não serve a nada nesta tela — o que se quer é reconhecer de qual
-            cartão é a fatura — e guardar número completo transforma um
-            caderno de contas num alvo. Os quatro finais são o que o próprio
-            banco usa para isso, e não pagam nada sozinhos.
-          */}
-          <Field label="Quatro últimos dígitos (opcional)">
-            <Input
-              inputMode="numeric"
-              value={form.final}
-              onChange={(e) =>
-                setForm({ ...form, final: soQuatro(e.target.value) })
-              }
-              placeholder="1234"
-            />
-          </Field>
 
           <Field label="Cor">
             <div className="flex flex-wrap gap-2">

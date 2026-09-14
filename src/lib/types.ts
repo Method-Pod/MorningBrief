@@ -303,9 +303,11 @@ export const CORES_HEX: Record<string, string> = {
 /**
  * Um cartão de crédito. Ver supabase/CARTOES.sql.
  *
- * Só os quatro últimos dígitos, e de propósito: o número inteiro não serve a
- * nada aqui — o que se quer é reconhecer de qual cartão é a fatura — e
- * guardá-lo transformaria um caderno de contas num alvo.
+ * Nenhum dígito do cartão entra aqui. A tabela tem uma coluna `final`, dos
+ * quatro últimos, que a tela chegou a mostrar e não mostra mais — nome, banco
+ * e bandeira já bastam para saber de qual cartão é a fatura, e o que não é
+ * preciso guardar é melhor não guardar. A coluna ficou no banco por ser
+ * migração destrutiva sem ganho; nada a lê nem a escreve.
  */
 export type Cartao = {
   id: string;
@@ -313,7 +315,6 @@ export type Cartao = {
   nome: string;
   banco: string;
   bandeira: string;
-  final: string;
   /** Dia do mês em que a fatura fecha. É dele que sai a hora de perguntar. */
   fecha_dia: number;
   /** Dia do mês do vencimento. Só sugere a data ao criar a conta. */
