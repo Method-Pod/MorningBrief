@@ -220,13 +220,21 @@ export default function CartoesPage() {
           {rows.map((c) => (
             <Card key={c.id} className="p-[18px]">
               <div className="flex items-start gap-2.5">
-                <span
-                  className="mt-0.5 h-8 w-8 shrink-0 rounded-[10px]"
-                  style={{ background: CORES_HEX[c.cor] ?? CORES_HEX.blue }}
-                />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14px] font-bold tracking-[-0.01em]">
-                    {c.nome}
+                  {/*
+                    A cor virou um ponto antes do nome.
+
+                    Era um quadrado de 32px ao lado, que pesava mais que o
+                    nome do cartão e não dizia nada — cor não é logo de banco.
+                    Como ponto, ela faz o que cor faz bem: distinguir de
+                    relance na lista, sem disputar atenção com o texto.
+                  */}
+                  <p className="flex items-center gap-2 text-[14px] font-bold tracking-[-0.01em]">
+                    <span
+                      className="h-2 w-2 shrink-0 rounded-full"
+                      style={{ background: CORES_HEX[c.cor] ?? CORES_HEX.blue }}
+                    />
+                    <span className="truncate">{c.nome}</span>
                   </p>
                   <p className="truncate text-[11.5px] text-fg-mute">
                     {[c.banco, c.bandeira].filter(Boolean).join(" · ") ||
