@@ -1,18 +1,45 @@
 import { createServerClient, type SetAllCookies } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { novoNonce, politicaDeConteudo } from "../csp";
 
 const PUBLIC_PATHS = ["/login", "/auth"];
 
 type CookiesToSet = Parameters<SetAllCookies>[0];
 
 export async function updateSession(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  /*
+   * O nonce da política de conteúdo, sorteado aqui porque é aqui que cada
+   * requisição passa uma vez só.
+   *
+   * Ele vai em dois lugares e os dois são necessários: no cabeçalho da
+   * RESPOSTA, que é o que o navegador obedece, e no cabeçalho da REQUISIÇÃO,
+   * que é de onde o Next lê o número para carimbar nas próprias tags
+   * <script>. Sem o segundo, o navegador barraria o JavaScript do próprio
+   * app — a tela abriria em branco.
+   */
+  const nonce = novoNonce();
+  const politica = politicaDeConteudo({
+    nonce,
+    supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    desenvolvimento: process.env.NODE_ENV !== "production",
+  });
+
+  const cabecalhosDaRequisicao = new Headers(request.headers);
+  cabecalhosDaRequisicao.set("x-nonce", nonce);
+  cabecalhosDaRequisicao.set("content-security-policy", politica);
+
+  const comPolitica = <T extends { headers: Headers }>(r: T): T => {
+    r.headers.set("content-security-policy", politica);
+    return r;
+  };
+
+  let response = NextResponse.next({ request: { headers: cabecalhosDaRequisicao } });
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   // Sem env configurada, deixa passar para a página mostrar o aviso de setup.
-  if (!url || !key) return response;
+  if (!url || !key) return comPolitica(response);
 
   const supabase = createServerClient(url, key, {
     cookies: {
@@ -23,7 +50,9 @@ export async function updateSession(request: NextRequest) {
         cookiesToSet.forEach(({ name, value }) =>
           request.cookies.set(name, value)
         );
-        response = NextResponse.next({ request });
+        response = NextResponse.next({
+          request: { headers: cabecalhosDaRequisicao },
+        });
         cookiesToSet.forEach(({ name, value, options }) =>
           response.cookies.set(name, value, options)
         );
@@ -69,15 +98,15 @@ export async function updateSession(request: NextRequest) {
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/login";
     redirect.searchParams.set("next", path);
-    return NextResponse.redirect(redirect);
+    return comPolitica(NextResponse.redirect(redirect));
   }
 
   if (autenticado && path === "/login") {
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/";
     redirect.search = "";
-    return NextResponse.redirect(redirect);
+    return comPolitica(NextResponse.redirect(redirect));
   }
 
-  return response;
+  return comPolitica(response);
 }

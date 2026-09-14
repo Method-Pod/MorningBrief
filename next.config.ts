@@ -4,9 +4,9 @@ import type { NextConfig } from "next";
  * Cabeçalhos de resposta. Nenhum deles altera o que é renderizado — são
  * instruções para o navegador, invisíveis na página.
  *
- * Sem CSP por enquanto: o app injeta um <script> inline no layout para
- * aplicar o tema antes da primeira pintura, e uma política sem nonce
- * bloquearia exatamente esse script. CSP exige um passo próprio.
+ * A política de conteúdo (CSP) NÃO está aqui, e sim no middleware: ela leva
+ * um nonce sorteado a cada requisição, e cabeçalho fixo de configuração não
+ * tem como sortear nada. Ver src/lib/csp.ts.
  */
 const cabecalhos = [
   // impede que o app seja embutido em iframe de terceiro (clickjacking)

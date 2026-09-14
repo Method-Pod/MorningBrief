@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { RegistroApp } from "@/components/RegistroApp";
 import "./globals.css";
@@ -109,11 +110,24 @@ export const viewport: Viewport = {
 const ACCENT_BOOT = `try{var a=localStorage.getItem('mb.accent');
 if(['red','blue','green','yellow'].indexOf(a)>-1)document.documentElement.dataset.accent=a}catch(e){}`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  /*
+   * O nonce da requisição, sorteado no middleware.
+   *
+   * Sem ele o script abaixo não roda: a política só aceita script inline que
+   * traga o número do dia. E o script precisa rodar antes da primeira
+   * pintura, senão a página abre no azul e pisca para a cor escolhida.
+   *
+   * Ler cabeçalho torna a renderização dinâmica — /login deixa de ser
+   * gerada na build. Custa uma renderização por visita numa tela que já
+   * passa pelo middleware de qualquer forma.
+   */
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     // suppressHydrationWarning: o ACCENT_BOOT troca data-accent antes da
     // hidratação, então o <html> do servidor divergir do cliente é esperado.
@@ -127,7 +141,20 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: ACCENT_BOOT }} />
+        {/*
+          `suppressHydrationWarning` por causa do nonce, e não do conteúdo.
+
+          O navegador esconde o atributo `nonce` de quem lê o DOM — é parte da
+          proteção: script injetado não pode copiar o número de uma tag
+          vizinha. Só que a hidratação do React lê o DOM para conferir, vê
+          `nonce=""` onde o servidor escreveu o número, e acusa divergência a
+          cada carregamento. A divergência é do navegador, não do código.
+        */}
+        <script
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: ACCENT_BOOT }}
+        />
       </head>
       <body className="min-h-dvh font-sans antialiased">
         {children}

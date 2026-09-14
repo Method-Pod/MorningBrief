@@ -9,6 +9,18 @@
         "dev"
       ],
       "port": 3000
+    },
+    {
+      "name": "producao",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "start",
+        "--",
+        "-p",
+        "3100"
+      ],
+      "port": 3100
     }
   ]
 }
