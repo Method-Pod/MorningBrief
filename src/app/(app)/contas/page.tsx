@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  CreditCard,
   PartyPopper,
   Pencil,
   Repeat2,
@@ -29,9 +30,12 @@ import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
 import {
   ehAbatida,
+  jaFechou,
   restanteDe,
+  semValorAinda,
   type Bill,
   type BillStatus,
+  type Cartao,
 } from "@/lib/types";
 import {
   GerenciarCategorias,
@@ -117,6 +121,13 @@ const vazio = () => ({
   // conta paga aos poucos, sem data marcada
   abatida: false,
   paid_amount: "0",
+  /*
+   * Fatura de cartão e afins: o valor é para ser perguntado todo mês, não
+   * copiado do mês passado. Ver supabase/CARTOES.sql.
+   */
+  valorVariavel: false,
+  cartaoId: "",
+  fechaDia: "",
 });
 
 export default function ContasPage() {
@@ -156,19 +167,33 @@ export default function ContasPage() {
   const [gerindoCategorias, setGerindoCategorias] = React.useState(false);
   const [abatendo, setAbatendo] = React.useState<Bill | null>(null);
   const [emLote, setEmLote] = React.useState(false);
+  /*
+   * Os cartões cadastrados, para o seletor do formulário.
+   *
+   * Tolera falha de propósito: quem não rodou CARTOES.sql simplesmente não vê
+   * o seletor, e o resto da tela continua funcionando — o mesmo trato que
+   * leitura e referências recebem no painel.
+   */
+  const [cartoes, setCartoes] = useEstadoCacheado<Cartao[]>("cartoes", []);
 
   const load = React.useCallback(async () => {
-    const { data } = await supabase.from("bills").select("*").order("due_date");
+    const [contas, cs] = await Promise.all([
+      supabase.from("bills").select("*").order("due_date"),
+      supabase.from("cartoes").select("*").order("nome"),
+    ]);
     // numeric do Postgres chega como string no JSON
     setRows(
-      ((data as Bill[]) ?? []).map((b) => ({
+      ((contas.data as Bill[]) ?? []).map((b) => ({
         ...b,
         amount: Number(b.amount),
         paid_amount: b.paid_amount == null ? null : Number(b.paid_amount),
       }))
     );
+    /* Sem erro na tela: tabela ausente aqui só quer dizer que o seletor de
+       cartão não aparece. Ver o comentário do estado. */
+    if (!cs.error) setCartoes((cs.data as Cartao[]) ?? []);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, setCartoes]);
 
   React.useEffect(() => {
     (async () => {
@@ -220,6 +245,9 @@ export default function ContasPage() {
       parcelas: [],
       abatida: ehAbatida(b),
       paid_amount: String(b.paid_amount ?? 0),
+      valorVariavel: !!b.valor_variavel,
+      cartaoId: b.cartao_id ?? "",
+      fechaDia: b.fecha_dia == null ? "" : String(b.fecha_dia),
     });
     setErr("");
     setOpen(true);
@@ -233,8 +261,15 @@ export default function ContasPage() {
       String(form.amount).replace(/\./g, "").replace(",", ".")
     );
     if (!desc) return setErr("Informe a descrição.");
-    if (!Number.isFinite(valor) || valor <= 0)
+    /*
+     * Conta de valor variável pode nascer sem valor — é o ponto dela.
+     * Para as outras, zero continua sendo erro de digitação: uma conta de
+     * R$ 0,00 lançada por engano soma nada e esconde que alguém errou.
+     */
+    if (!form.valorVariavel && (!Number.isFinite(valor) || valor <= 0))
       return setErr("Informe um valor maior que zero.");
+    if (form.valorVariavel && Number.isFinite(valor) && valor < 0)
+      return setErr("O valor não pode ser negativo.");
     if (!form.due_date) return setErr("Informe a data de vencimento.");
     if (form.parcelado && form.installment_no > form.installment_total)
       return setErr("A parcela atual não pode ser maior que o total.");
@@ -251,9 +286,20 @@ export default function ContasPage() {
 
     setBusy(true);
     const temAbatimento = form.abatida || editing?.paid_amount != null;
+    /*
+     * Valor variável sem número digitado entra como 0.
+     *
+     * Zero mais a marca `valor_variavel` é o par que a tela lê como "a
+     * informar" — ver `semValorAinda` em lib/types. Zero sozinho continua
+     * sendo zero real, de uma fatura sem compras.
+     */
+    const temCartao =
+      form.valorVariavel ||
+      editing?.valor_variavel ||
+      editing?.cartao_id != null;
     const payload = {
       description: desc,
-      amount: valor,
+      amount: form.valorVariavel && !Number.isFinite(valor) ? 0 : valor,
       due_date: form.due_date,
       category: form.category,
       status: form.status,
@@ -271,6 +317,18 @@ export default function ContasPage() {
        * não rodou, contas simples continuam sendo criadas normalmente em vez
        * de todas falharem com "could not find the column".
        */
+      /*
+       * As três de CARTOES.sql seguem a mesma regra: só entram quando a conta
+       * tem a ver com elas. Num banco onde o SQL ainda não rodou, conta comum
+       * continua sendo criada em vez de todas falharem por coluna inexistente.
+       */
+      ...(temCartao
+        ? {
+            valor_variavel: form.valorVariavel,
+            cartao_id: form.cartaoId || null,
+            fecha_dia: form.fechaDia ? Number(form.fechaDia) : null,
+          }
+        : {}),
       /* paid_amount vem de ABATIDAS.sql. Só entra no payload quando a conta é
          abatida, para o banco sem a migração continuar aceitando conta comum. */
       ...(temAbatimento
@@ -698,6 +756,18 @@ export default function ContasPage() {
     [filtradas]
   );
 
+  /**
+   * Quantas contas na tela ainda esperam um valor.
+   *
+   * Elas somam zero acima, o que está certo — inventar um número seria pior.
+   * O que não pode é o total parecer fechado: este contador é o que diz, ao
+   * lado da soma, que falta coisa.
+   */
+  const semValorNoFiltro = React.useMemo(
+    () => filtradas.filter(semValorAinda).length,
+    [filtradas]
+  );
+
   /** Uso por categoria em TODAS as contas, não só no filtro: o aviso antes de
       excluir precisa contar tudo, senão diria "sem uso" para categoria em uso
       fora do recorte visível. */
@@ -946,6 +1016,12 @@ export default function ContasPage() {
               Gerenciar
             </Button>
           </Link>
+          <Link href="/contas/cartoes">
+            <Button>
+              <CreditCard size={15} />
+              Cartões
+            </Button>
+          </Link>
           <Button onClick={() => setGerindoCategorias(true)}>
             <Tag size={15} />
             Categorias
@@ -1162,6 +1238,16 @@ export default function ContasPage() {
             <div className="mt-1 flex items-baseline justify-between border-t border-line-soft px-[18px] py-3.5">
               <span className="text-[12px] text-fg-mute">
                 Soma do filtro
+                {/*
+                  O aviso de incompleto anda junto com a soma, e não num canto
+                  da tela: um total sem ressalva parece fechado, e quem planeja
+                  em cima dele planeja errado.
+                */}
+                {semValorNoFiltro > 0 && (
+                  <span className="ml-1.5 font-semibold text-warn">
+                    +{semValorNoFiltro} sem valor
+                  </span>
+                )}
               </span>
               <span className="text-[16px] font-bold tracking-[-0.02em] tnum">
                 {brl(somaFiltro)}
@@ -1382,6 +1468,92 @@ export default function ContasPage() {
               </span>
             </span>
           </label>
+
+          {/*
+            O valor muda todo mês.
+
+            Fica logo abaixo de "Conta fixa" porque só faz sentido junto com
+            ela: é a fixa que gera o mês seguinte, e esta caixa muda *como* ele
+            é gerado — vazio, em vez de com o valor repetido.
+          */}
+          <div className="rounded-[14px] bg-ink-800 p-3.5">
+            <label className="flex cursor-pointer items-start gap-2.5">
+              <input
+                type="checkbox"
+                checked={form.valorVariavel}
+                onChange={(e) =>
+                  setForm({ ...form, valorVariavel: e.target.checked })
+                }
+                className="mt-0.5 h-4 w-4 accent-[var(--a)]"
+              />
+              <span className="text-sm text-fg-dim">
+                <span className="font-semibold text-fg">
+                  O valor muda todo mês
+                </span>
+                <span className="mt-0.5 block text-[11.5px] text-fg-mute">
+                  Fatura de cartão, luz, água. Todo mês a conta nasce vazia
+                  esperando o valor, em vez de repetir o do mês passado.
+                </span>
+              </span>
+            </label>
+
+            {form.valorVariavel && (
+              <div className="mt-3 grid gap-3 border-t border-line-soft pt-3 sm:grid-cols-2">
+                <Field label="Cartão (opcional)">
+                  <Select
+                    value={form.cartaoId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const c = cartoes.find((x) => x.id === id);
+                      /* Escolher o cartão preenche o dia do fechamento: é
+                         dado que já existe na ficha dele, e redigitar seria
+                         só chance de divergir. */
+                      setForm({
+                        ...form,
+                        cartaoId: id,
+                        fechaDia: c ? String(c.fecha_dia) : form.fechaDia,
+                      });
+                    }}
+                  >
+                    <option value="">Nenhum</option>
+                    {cartoes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Fecha dia">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={form.fechaDia}
+                    onChange={(e) =>
+                      setForm({ ...form, fechaDia: e.target.value })
+                    }
+                    placeholder="1"
+                  />
+                </Field>
+                <p className="text-[11.5px] leading-relaxed text-fg-mute sm:col-span-2">
+                  {cartoes.length === 0 ? (
+                    <>
+                      Nenhum cartão cadastrado ainda —{" "}
+                      <Link
+                        href="/contas/cartoes"
+                        className="font-semibold text-brand-400 hover:underline"
+                      >
+                        cadastre em Meus cartões
+                      </Link>
+                      . O dia do fechamento também pode ser digitado aqui.
+                    </>
+                  ) : (
+                    "A partir do dia do fechamento, o Início cobra o valor. Em branco, cobra assim que a conta existe."
+                  )}
+                </p>
+              </div>
+            )}
+          </div>
 
           <div className="rounded-[14px] bg-ink-800 p-3.5">
             <label className="flex cursor-pointer items-start gap-2.5">
@@ -1724,15 +1896,29 @@ function Linha({
         {abatida && <ProgressoAbatida conta={b} />}
       </div>
 
-      <span
-        className={cx(
-          "shrink-0 text-[14.5px] font-bold tracking-[-0.02em] tnum",
-          atrasada && "text-neg",
-          paga && "text-fg-mute"
-        )}
-      >
-        {brl(b.amount)}
-      </span>
+      {/*
+        "a informar" no lugar de R$ 0,00.
+
+        São coisas diferentes e não podem ter a mesma cara: R$ 0,00 é uma
+        fatura sem compras, e "a informar" é uma fatura que fechou e ninguém
+        digitou ainda. Escrever zero nas duas faria o total do mês parecer
+        completo quando não está. Ver `semValorAinda` em lib/types.
+      */}
+      {semValorAinda(b) ? (
+        <span className="shrink-0 rounded-full bg-warn/15 px-2.5 py-1 text-[11.5px] font-bold text-warn">
+          a informar
+        </span>
+      ) : (
+        <span
+          className={cx(
+            "shrink-0 text-[14.5px] font-bold tracking-[-0.02em] tnum",
+            atrasada && "text-neg",
+            paga && "text-fg-mute"
+          )}
+        >
+          {brl(b.amount)}
+        </span>
+      )}
 
       <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
         {abatida && !paga && (

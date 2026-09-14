@@ -8,6 +8,7 @@ import {
   Library,
   CalendarDays,
   CheckCircle2,
+  CreditCard,
   ListChecks,
   Pin,
   Plus,
@@ -20,6 +21,7 @@ import { Clima } from "@/components/Clima";
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { CORES_HEX, jaFechou, semValorAinda } from "@/lib/types";
 import type { Bill, CalendarEvent, Note, RecurringTask, Task } from "@/lib/types";
 import {
   brl,
@@ -81,14 +83,6 @@ const PRIO_DOT: Record<string, string> = {
   low: "bg-ink-600",
 };
 const PRIO_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
-const NOTE_HEX: Record<string, string> = {
-  blue: "#2563a8",
-  violet: "#6d5bd0",
-  emerald: "#1f9d63",
-  amber: "#b8820c",
-  rose: "#cf4a3f",
-  slate: "#666e74",
-};
 
 export default function HomePage() {
   const supabase = React.useMemo(() => createClient(), []);
@@ -323,6 +317,21 @@ export default function HomePage() {
   };
 
   /* ------------------------------ derivados ------------------------------ */
+  /**
+   * As contas que já fecharam e ainda esperam um valor.
+   *
+   * Só as em aberto: uma conta marcada como paga com valor zero é coisa
+   * resolvida de outro jeito, e cobrar por ela seria cobrar por nada.
+   */
+  const aCobrar = React.useMemo(
+    () =>
+      bills.filter(
+        (b) =>
+          b.status === "pending" && semValorAinda(b) && jaFechou(b, today)
+      ),
+    [bills, today]
+  );
+
   const m = React.useMemo(() => {
     const hoje = tasks.filter((t) => t.due_date?.slice(0, 10) === today);
     const feitas = hoje.filter((t) => t.status === "done").length;
@@ -448,6 +457,37 @@ export default function HomePage() {
           </Link>
         </div>
       )}
+
+      {/*
+        Fatura fechou e ninguém disse quanto foi.
+
+        Em cima de tudo, e com o campo aqui mesmo: a conta já existe e já está
+        na lista de Contas a pagar, mas com valor zero ela não puxa a atenção
+        de ninguém — some no meio das outras e só aparece como problema quando
+        o total do mês não fecha. Perguntar no lugar em que se abre o dia é o
+        que faz a pergunta ser respondida.
+
+        Só a partir do dia do fechamento: as contas fixas são geradas um mês
+        antes, e sem esse corte o aviso cobraria em setembro o valor de uma
+        fatura de outubro. Ver `jaFechou` em lib/types.
+      */}
+      {aCobrar.map((b) => (
+        <ValorDaFatura
+          key={b.id}
+          conta={b}
+          onGravar={async (valor) => {
+            const { error } = await supabase
+              .from("bills")
+              .update({ amount: valor })
+              .eq("id", b.id)
+              .select("id");
+            if (error) return notice.show("Não deu para gravar o valor.");
+            setBills((r) =>
+              r.map((x) => (x.id === b.id ? { ...x, amount: valor } : x))
+            );
+          }}
+        />
+      ))}
 
       {/* ------------------------ seu dia + hoje ------------------------ */}
       <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -601,7 +641,7 @@ export default function HomePage() {
                 return (
                 <div key={n.id} className="border-b border-line-soft py-2.5 last:border-0">
                   <div className="flex items-center gap-1.5">
-                    <Pin size={12} style={{ color: NOTE_HEX[n.color] ?? NOTE_HEX.blue }} />
+                    <Pin size={12} style={{ color: CORES_HEX[n.color] ?? CORES_HEX.blue }} />
                     <p className="truncate text-[13px] font-semibold">
                       {n.title || "Sem título"}
                     </p>
@@ -711,7 +751,7 @@ export default function HomePage() {
                   <Row key={e.id}>
                     <span
                       className="h-[7px] w-[7px] shrink-0 rounded-full"
-                      style={{ background: NOTE_HEX[e.color] ?? "var(--a)" }}
+                      style={{ background: CORES_HEX[e.color] ?? "var(--a)" }}
                     />
                     <span className="min-w-0 flex-1 text-sm font-medium">
                       <span className="block truncate">{e.title}</span>
@@ -901,6 +941,64 @@ export default function HomePage() {
       )}
 
       {notice.node}
+    </div>
+  );
+}
+
+/**
+ * O aviso de fatura fechada, com o campo para digitar o valor.
+ *
+ * Componente próprio porque cada aviso tem o seu rascunho: com um estado só,
+ * digitar no aviso do cartão A escreveria no campo do cartão B.
+ */
+function ValorDaFatura({
+  conta,
+  onGravar,
+}: {
+  conta: Bill;
+  onGravar: (valor: number) => Promise<void>;
+}) {
+  const [texto, setTexto] = React.useState("");
+  const [gravando, setGravando] = React.useState(false);
+
+  /* Aceita "1.234,56" e "1234.56": é o mesmo tratamento do formulário de
+     contas, e quem digita não deveria ter de saber qual dos dois o campo
+     espera. */
+  const valor = parseFloat(texto.replace(/\./g, "").replace(",", "."));
+  const vale = Number.isFinite(valor) && valor >= 0;
+
+  const gravar = async () => {
+    if (!vale || gravando) return;
+    setGravando(true);
+    await onGravar(valor);
+    setGravando(false);
+  };
+
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-2.5 rounded-[14px] bg-warn/12 px-4 py-3 text-[12.5px] font-medium text-warn">
+      <CreditCard size={15} className="shrink-0" />
+      <span className="min-w-0">
+        A fatura de <b>{conta.description}</b> fechou. Quanto ficou?
+      </span>
+      <div className="ml-auto flex items-center gap-2">
+        <input
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && gravar()}
+          inputMode="decimal"
+          placeholder="0,00"
+          aria-label={`Valor da fatura de ${conta.description}`}
+          className="h-8 w-[110px] rounded-lg border border-warn/30 bg-white px-2.5 text-right text-[13px] font-bold text-fg outline-none transition-colors tnum focus:border-warn"
+        />
+        <button
+          type="button"
+          onClick={gravar}
+          disabled={!vale || gravando}
+          className="h-8 rounded-lg bg-warn px-3 text-[12px] font-bold text-white transition-opacity disabled:opacity-40"
+        >
+          {gravando ? "..." : "Lançar"}
+        </button>
+      </div>
     </div>
   );
 }

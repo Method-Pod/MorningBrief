@@ -41,6 +41,53 @@ export type Bill = {
    * Ver ABATIDAS.sql.
    */
   paid_amount: number | null;
+  /*
+   * Fatura de cartão e afins. Ver supabase/CARTOES.sql.
+   *
+   * `valor_variavel` quer dizer "este valor é para ser perguntado, não
+   * copiado do mês passado" — e é separado de `amount = 0` porque zero é um
+   * valor legítimo: uma fatura sem compras fecha em zero, e isso é diferente
+   * de ainda não saber.
+   *
+   * `fecha_dia` diz a partir de quando faz sentido perguntar. Nulo quer
+   * dizer "assim que a conta existir".
+   */
+  cartao_id: string | null;
+  valor_variavel: boolean;
+  fecha_dia: number | null;
+};
+
+/**
+ * A conta está esperando você digitar o valor?
+ *
+ * As duas condições juntas, sempre: a marca sozinha não basta (depois de
+ * informado, o valor continua variável para o mês que vem), e o zero sozinho
+ * também não (uma conta comum de R$ 0,00 não está esperando nada).
+ */
+export const semValorAinda = (b: Pick<Bill, "valor_variavel" | "amount">) =>
+  !!b.valor_variavel && Number(b.amount) === 0;
+
+/**
+ * Já passou do fechamento, e portanto já dá para saber o valor?
+ *
+ * Sem `fecha_dia`, a resposta é sim — é o caso de quem não tem data de
+ * fechamento e quer ser perguntado desde já.
+ *
+ * A comparação é dentro do mês da própria conta: uma fatura que vence em
+ * novembro e fecha dia 1 só é cobrada a partir de 1º de novembro, e não em
+ * outubro, quando a linha nasceu. As fixas são geradas um mês antes, então
+ * sem esta conta o aviso apareceria um mês cedo demais.
+ */
+export const jaFechou = (
+  b: Pick<Bill, "fecha_dia" | "due_date">,
+  hojeISO: string
+) => {
+  if (!b.fecha_dia) return true;
+  const mesDaConta = b.due_date.slice(0, 7);
+  const mesDeHoje = hojeISO.slice(0, 7);
+  if (mesDeHoje > mesDaConta) return true;
+  if (mesDeHoje < mesDaConta) return false;
+  return Number(hojeISO.slice(8, 10)) >= b.fecha_dia;
 };
 
 /** Quanto falta numa conta abatida. Conta comum devolve o valor cheio. */
@@ -205,6 +252,45 @@ export const BILL_CATEGORIES = [
 ];
 
 export const NOTE_COLORS = ["blue", "violet", "emerald", "amber", "rose", "slate"];
+
+/**
+ * O tom de cada cor de `NOTE_COLORS`, para desenhar a bolinha.
+ *
+ * Estava escrito dentro do painel, e os cartões precisavam do mesmo mapa —
+ * uma segunda cópia começaria a divergir da primeira no dia em que alguém
+ * ajustasse um tom. Aqui, ao lado da lista de nomes que ele traduz.
+ */
+export const CORES_HEX: Record<string, string> = {
+  blue: "#2563a8",
+  violet: "#6d5bd0",
+  emerald: "#1f9d63",
+  amber: "#b8820c",
+  rose: "#cf4a3f",
+  slate: "#666e74",
+};
+
+/**
+ * Um cartão de crédito. Ver supabase/CARTOES.sql.
+ *
+ * Só os quatro últimos dígitos, e de propósito: o número inteiro não serve a
+ * nada aqui — o que se quer é reconhecer de qual cartão é a fatura — e
+ * guardá-lo transformaria um caderno de contas num alvo.
+ */
+export type Cartao = {
+  id: string;
+  user_id: string;
+  nome: string;
+  banco: string;
+  bandeira: string;
+  final: string;
+  /** Dia do mês em que a fatura fecha. É dele que sai a hora de perguntar. */
+  fecha_dia: number;
+  /** Dia do mês do vencimento. Só sugere a data ao criar a conta. */
+  vence_dia: number;
+  limite: number | null;
+  cor: string;
+  created_at: string;
+};
 
 export type Habit = {
   id: string;

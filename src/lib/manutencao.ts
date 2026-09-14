@@ -94,13 +94,30 @@ export async function lancarProximoMesDasFixas(
       return {
         user_id: b.user_id,
         description: b.description,
-        amount: Number(b.amount),
+        /*
+         * Conta de valor variável nasce zerada, e não com o valor do mês
+         * passado.
+         *
+         * Copiar serve para aluguel e internet. Para a fatura do cartão, o
+         * valor copiado é errado todos os meses — e errado do pior jeito,
+         * porque é plausível: entra no total do mês sem parecer suspeito, e
+         * a pessoa planeja em cima de um número que ninguém conferiu.
+         *
+         * Zerada mais `valor_variavel` é o par que a tela lê como "a
+         * informar". Ver `semValorAinda` em lib/types.
+         */
+        amount: b.valor_variavel ? 0 : Number(b.amount),
         due_date: mesesAdiante(b.due_date, n),
         category: b.category,
         status: "pending",
         notes: b.notes,
         recurring: true,
         paid_at: null,
+        /* Seguem a série: quem é de cartão continua sendo, e o dia de
+           fechamento continua valendo no mês novo. */
+        cartao_id: b.cartao_id ?? null,
+        valor_variavel: !!b.valor_variavel,
+        fecha_dia: b.fecha_dia ?? null,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
