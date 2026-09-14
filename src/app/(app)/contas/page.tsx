@@ -1360,7 +1360,21 @@ export default function ContasPage() {
       */}
       <div
         className={cx(
-          "mt-4 grid gap-4",
+          /*
+           * `grid-cols-[minmax(0,1fr)]` na largura de telefone, e não só as
+           * colunas do `xl:`.
+           *
+           * Sem coluna declarada, a grade cria uma trilha `auto`, e trilha
+           * `auto` cresce até o conteúdo pedir — ela não se prende à largura
+           * da tela. Medido num telefone de 375px: a grade media 327px e o
+           * cartão dos cartões saía com 391px, empurrando a página para o
+           * lado. Com `minmax(0, 1fr)` a trilha não passa da tela, o cartão
+           * encolhe junto e o nome comprido corta com reticências, que é o
+           * que o `truncate` dele já esperava poder fazer.
+           *
+           * No `xl:` nada muda: as três colunas de baixo continuam mandando.
+           */
+          "mt-4 grid grid-cols-[minmax(0,1fr)] gap-4",
           cartoes.length > 0
             ? "xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_minmax(0,352px)]"
             : "xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]"
