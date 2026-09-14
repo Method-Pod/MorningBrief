@@ -21,10 +21,16 @@ import { Clima } from "@/components/Clima";
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { CORES_HEX, jaFechou, semValorAinda } from "@/lib/types";
+import {
+  CORES_HEX,
+  dataDoFechamento,
+  jaFechou,
+  semValorAinda,
+} from "@/lib/types";
 import type { Bill, CalendarEvent, Note, RecurringTask, Task } from "@/lib/types";
 import {
   brl,
+  dataCurta,
   dateBR,
   daysUntil,
   greeting,
@@ -960,6 +966,9 @@ function ValorDaFatura({
 }) {
   const [texto, setTexto] = React.useState("");
   const [gravando, setGravando] = React.useState(false);
+  /* A data no aviso serve de conferência: se ela não bate com o fechamento
+     do cartão, o erro está no cadastro e dá para ver sem esperar o mês. */
+  const fechou = dataDoFechamento(conta);
 
   /* Aceita "1.234,56" e "1234.56": é o mesmo tratamento do formulário de
      contas, e quem digita não deveria ter de saber qual dos dois o campo
@@ -978,7 +987,8 @@ function ValorDaFatura({
     <div className="mb-4 flex flex-wrap items-center gap-2.5 rounded-[14px] bg-warn/12 px-4 py-3 text-[12.5px] font-medium text-warn">
       <CreditCard size={15} className="shrink-0" />
       <span className="min-w-0">
-        A fatura de <b>{conta.description}</b> fechou. Quanto ficou?
+        A fatura de <b>{conta.description}</b> fechou
+        {fechou && ` em ${dataCurta(fechou)}`}. Quanto ficou?
       </span>
       <div className="ml-auto flex items-center gap-2">
         <input

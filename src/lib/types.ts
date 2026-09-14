@@ -68,26 +68,57 @@ export const semValorAinda = (b: Pick<Bill, "valor_variavel" | "amount">) =>
   !!b.valor_variavel && Number(b.amount) === 0;
 
 /**
+ * Em que dia esta fatura fechou. Nulo quando a conta não tem fechamento.
+ *
+ * A regra que decide o mês: **a fatura sempre fecha antes de vencer.** Então,
+ * para uma conta que vence no dia D:
+ *
+ * - fechamento até o dia D → fechou no mesmo mês do vencimento
+ *   (Nubank fecha 1, vence 10 → a fatura de outubro fecha 1º de outubro)
+ * - fechamento depois do dia D → fechou no mês anterior
+ *   (um cartão que fecha 28 e vence 7 fecha em 28 de outubro a fatura que
+ *   vence em 7 de novembro)
+ *
+ * Essa segunda linha é o conserto de um buraco real: a conta comparava mês
+ * com mês, e a fatura que fecha num mês e vence no outro só era cobrada no
+ * mês do vencimento — ou seja, um mês atrasada, quando já estava vencendo.
+ *
+ * `Math.min` com o último dia do mês: "fecha dia 31" em fevereiro fecha no
+ * dia 28. Sem isso, `new Date` viraria para março e a cobrança atrasaria.
+ */
+export const dataDoFechamento = (
+  b: Pick<Bill, "fecha_dia" | "due_date">
+): string | null => {
+  if (!b.fecha_dia) return null;
+
+  const [ano, mes, dia] = b.due_date.slice(0, 10).split("-").map(Number);
+  if (!ano || !mes || !dia) return null;
+
+  const noMesAnterior = b.fecha_dia > dia;
+  const alvo = new Date(Date.UTC(ano, mes - 1 - (noMesAnterior ? 1 : 0), 1));
+  const ultimoDia = new Date(
+    Date.UTC(alvo.getUTCFullYear(), alvo.getUTCMonth() + 1, 0)
+  ).getUTCDate();
+  alvo.setUTCDate(Math.min(b.fecha_dia, ultimoDia));
+
+  return alvo.toISOString().slice(0, 10);
+};
+
+/**
  * Já passou do fechamento, e portanto já dá para saber o valor?
  *
  * Sem `fecha_dia`, a resposta é sim — é o caso de quem não tem data de
  * fechamento e quer ser perguntado desde já.
  *
- * A comparação é dentro do mês da própria conta: uma fatura que vence em
- * novembro e fecha dia 1 só é cobrada a partir de 1º de novembro, e não em
- * outubro, quando a linha nasceu. As fixas são geradas um mês antes, então
- * sem esta conta o aviso apareceria um mês cedo demais.
+ * O corte existe porque as contas fixas são geradas um mês antes: sem ele, o
+ * aviso cobraria em setembro o valor de uma fatura de outubro.
  */
 export const jaFechou = (
   b: Pick<Bill, "fecha_dia" | "due_date">,
   hojeISO: string
 ) => {
-  if (!b.fecha_dia) return true;
-  const mesDaConta = b.due_date.slice(0, 7);
-  const mesDeHoje = hojeISO.slice(0, 7);
-  if (mesDeHoje > mesDaConta) return true;
-  if (mesDeHoje < mesDaConta) return false;
-  return Number(hojeISO.slice(8, 10)) >= b.fecha_dia;
+  const fechou = dataDoFechamento(b);
+  return !fechou || hojeISO.slice(0, 10) >= fechou;
 };
 
 /** Quanto falta numa conta abatida. Conta comum devolve o valor cheio. */
