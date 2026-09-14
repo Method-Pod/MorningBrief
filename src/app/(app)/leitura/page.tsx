@@ -24,7 +24,7 @@ import {
 import { dataCurta, todayISO, ultimosDias } from "@/lib/format";
 import { type LivroAchado } from "@/lib/livros";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
-import { recadoDeErro } from "@/lib/erros";
+import { nenhumaLinha, recadoDeErro } from "@/lib/erros";
 import {
   Badge,
   Button,
@@ -477,7 +477,16 @@ export default function LeituraPage() {
     if (arquivoCapa) {
       const { url, erro } = await enviarCapa(supabase, uid, novo.id, arquivoCapa);
       if (url) {
-        await supabase.from("books").update({ cover_url: url }).eq("id", novo.id);
+        /* `select("id")` para a capa não sumir em silêncio: a imagem já subiu
+           para o Storage, e se o endereço dela não entrar no livro ela fica
+           órfã lá e o livro aparece sem capa, sem nada dizer por quê. */
+        const { data: gravadas } = await supabase
+          .from("books")
+          .update({ cover_url: url })
+          .eq("id", novo.id)
+          .select("id");
+        if (!gravadas?.length)
+          notice.show("Livro salvo, mas a capa não entrou. Ponha pelo detalhe.");
         novo.cover_url = url;
       } else if (erro) {
         notice.show(`Livro salvo, mas a capa não subiu: ${erro}`);
@@ -530,10 +539,12 @@ export default function LeituraPage() {
       mudanca.finished_on = hoje;
     }
 
-    const { error } = await supabase
+    const { data: gravadas, error: falha } = await supabase
       .from("books")
       .update(mudanca)
-      .eq("id", livro.id);
+      .eq("id", livro.id)
+      .select("id");
+    const error = falha ?? nenhumaLinha(gravadas);
 
     /*
      * A sessão volta com `select().single()` para entrar no estado com o id e a
@@ -586,25 +597,27 @@ export default function LeituraPage() {
         `Você já está na página ${livro.current_page}; o total não pode ser menor.`
       );
     const total = Math.round(n);
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("books")
       .update({ total_pages: total })
-      .eq("id", livro.id);
+      .eq("id", livro.id)
+      .select("id");
     setTotalEmEdicao("");
-    if (!notice.check(error, "gravar o total de páginas"))
+    if (!notice.check(error ?? nenhumaLinha(gravadas), "gravar o total de páginas"))
       patch(livro.id, { total_pages: total });
   };
 
   const darNota = async (livro: BookLista, nota: number | null) => {
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("books")
       .update({ rating: nota })
-      .eq("id", livro.id);
+      .eq("id", livro.id)
+      .select("id");
     if (error && /rating/.test(error.message))
       return notice.show(
         "Nota precisa de supabase/LEITURA-EXTRAS.sql no banco. Rode o arquivo."
       );
-    if (!notice.check(error, "gravar a nota")) patch(livro.id, { rating: nota });
+    if (!notice.check(error ?? nenhumaLinha(gravadas), "gravar a nota")) patch(livro.id, { rating: nota });
   };
 
   const salvarMeta = async () => {
@@ -681,11 +694,12 @@ export default function LeituraPage() {
     const descricao = ou(formEdit.description);
 
     setErroEdit("");
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("books")
       .update({ ...mudanca, description: descricao })
-      .eq("id", livro.id);
-    if (notice.check(error, "salvar as alterações")) return;
+      .eq("id", livro.id)
+      .select("id");
+    if (notice.check(error ?? nenhumaLinha(gravadas), "salvar as alterações")) return;
 
     patch(livro.id, mudanca);
     setDescricoes((v) => ({ ...v, [livro.id]: descricao }));
@@ -706,10 +720,12 @@ export default function LeituraPage() {
       finished_on: status === "done" ? (livro.finished_on ?? hoje) : null,
       started_on: naoComecou ? livro.started_on : (livro.started_on ?? hoje),
     };
-    const { error } = await supabase
+    const { data: gravadas, error: falha } = await supabase
       .from("books")
       .update(mudanca)
-      .eq("id", livro.id);
+      .eq("id", livro.id)
+      .select("id");
+    const error = falha ?? nenhumaLinha(gravadas);
 
     /*
      * 23514 é violação de check constraint.
@@ -737,12 +753,13 @@ export default function LeituraPage() {
       setEnviandoCapa(false);
       return notice.show(erro);
     }
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("books")
       .update({ cover_url: url })
-      .eq("id", livro.id);
+      .eq("id", livro.id)
+      .select("id");
     setEnviandoCapa(false);
-    if (!notice.check(error, "gravar a capa"))
+    if (!notice.check(error ?? nenhumaLinha(gravadas), "gravar a capa"))
       patch(livro.id, { cover_url: url ?? null });
   };
 
@@ -754,12 +771,13 @@ export default function LeituraPage() {
       return notice.show(SESSION_EXPIRED);
     }
     await apagarCapa(supabase, uid, livro.id);
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("books")
       .update({ cover_url: null })
-      .eq("id", livro.id);
+      .eq("id", livro.id)
+      .select("id");
     setEnviandoCapa(false);
-    if (!notice.check(error, "remover a capa"))
+    if (!notice.check(error ?? nenhumaLinha(gravadas), "remover a capa"))
       patch(livro.id, { cover_url: null });
   };
 
@@ -805,11 +823,13 @@ export default function LeituraPage() {
           mudanca.status = "reading";
           mudanca.finished_on = null;
         }
-        const { error: erroLivro } = await supabase
+        const { data: gravadas, error: erroLivro } = await supabase
           .from("books")
           .update(mudanca)
-          .eq("id", livro.id);
-        if (!notice.check(erroLivro, "voltar a página")) patch(livro.id, mudanca);
+          .eq("id", livro.id)
+          .select("id");
+        if (!notice.check(erroLivro ?? nenhumaLinha(gravadas), "voltar a página"))
+          patch(livro.id, mudanca);
       },
       { titulo: "Apagar marcação", rotulo: "Apagar" }
     );

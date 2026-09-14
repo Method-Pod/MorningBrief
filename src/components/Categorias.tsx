@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { NADA_GRAVADO } from "@/lib/erros";
 import { BILL_CATEGORIES, type BillCategory } from "@/lib/types";
 import { Button, Input, Modal, cx } from "./ui";
 
@@ -144,14 +145,23 @@ export function GerenciarCategorias({
       return setErro("Já existe uma categoria com esse nome.");
 
     setOcupado(true);
-    const { error } = await supabase
+    /* `select("id")` aqui: se a categoria não for encontrada, a renomeação
+       não aconteceu — e seguir adiante renomearia as contas para um nome que
+       não existe na lista, fazendo-as sumir dos filtros e dos gráficos. */
+    const { data: renomeadas, error } = await supabase
       .from(TABELA)
       .update({ name })
-      .eq("name", antigo);
-    if (error) {
+      .eq("name", antigo)
+      .select("id");
+    if (error || !renomeadas?.length) {
       setOcupado(false);
-      return setErro(error.message);
+      return setErro(error ? error.message : NADA_GRAVADO);
     }
+    /*
+     * Aqui NÃO se confere quantas linhas saíram, e é de propósito: o filtro é
+     * por categoria, não por id, e zero contas usando a categoria é resultado
+     * legítimo — renomear uma categoria que ninguém usou ainda não é falha.
+     */
     const { error: erroContas } = await supabase
       .from("bills")
       .update({ category: name })

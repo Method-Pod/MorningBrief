@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { NADA_GRAVADO } from "@/lib/erros";
+import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
 import {
   FREQUENCY_LABEL,
   PRIORITY_LABEL,
@@ -201,14 +201,15 @@ export default function RecorrentesPage() {
     setRows((v) =>
       v.map((x) => (x.id === r.id ? { ...x, active: !x.active } : x))
     );
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("recurring_tasks")
       .update({ active: !r.active })
-      .eq("id", r.id);
+      .eq("id", r.id)
+      .select("id");
     /* Recarrega só quando falhou, para desfazer. Recarregar sempre jogaria a
        tabela inteira de volta pela rede e faria a linha piscar — apagando o
        efeito da troca otimista que acabou de acontecer acima. */
-    if (notice.check(error, r.active ? "pausar a recorrência" : "ativar a recorrência"))
+    if (notice.check(error ?? nenhumaLinha(gravadas), r.active ? "pausar a recorrência" : "ativar a recorrência"))
       load();
   };
 

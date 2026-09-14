@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { Clima } from "@/components/Clima";
 import { createClient } from "@/lib/supabase/client";
+import { nenhumaLinha } from "@/lib/erros";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
@@ -310,16 +311,17 @@ export default function HomePage() {
     setTasks((v) =>
       v.map((x) => (x.id === t.id ? { ...x, status: done ? "todo" : "done" } : x))
     );
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("tasks")
       .update({
         status: done ? "todo" : "done",
         completed_at: done ? null : new Date().toISOString(),
       })
-      .eq("id", t.id);
+      .eq("id", t.id)
+      .select("id");
     // A tela já foi atualizada de forma otimista; só recarrega se falhou,
     // para desfazer. Recarregar sempre custava uma busca completa por clique.
-    if (notice.check(error, done ? "reabrir a tarefa" : "concluir a tarefa"))
+    if (notice.check(error ?? nenhumaLinha(gravadas), done ? "reabrir a tarefa" : "concluir a tarefa"))
       load();
   };
 

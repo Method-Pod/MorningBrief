@@ -46,7 +46,7 @@ import {
   type AulaDaPlaylist,
 } from "@/lib/aulas";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
-import { NADA_GRAVADO, recadoDeErro } from "@/lib/erros";
+import { NADA_GRAVADO, nenhumaLinha, recadoDeErro } from "@/lib/erros";
 import { Carrossel } from "@/components/Carrossel";
 import {
   CampoAssunto,
@@ -447,9 +447,9 @@ export default function AulasPage() {
     /* Otimista: marcar aula é o gesto do dia, e esperar a ida de rede a cada
        clique tornaria a lista mais lenta que o hábito que ela acompanha. */
     patch(l.id, mudanca);
-    const { error } = await supabase.from("lessons").update(mudanca).eq("id", l.id);
+    const { data: gravadas, error } = await supabase.from("lessons").update(mudanca).eq("id", l.id).select("id");
     setMarcando(null);
-    if (notice.check(error, "marcar a aula")) load();
+    if (notice.check(error ?? nenhumaLinha(gravadas), "marcar a aula")) load();
   };
 
   const gravarMinuto = async (l: Lesson) => {
@@ -464,12 +464,13 @@ export default function AulasPage() {
     if (teto && n > teto)
       return notice.show(`A aula tem ${duracaoExata(total)}.`);
 
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("lessons")
       .update({ em_minuto: Math.round(n) })
-      .eq("id", l.id);
+      .eq("id", l.id)
+      .select("id");
     setMinutoEmEdicao((r) => ({ ...r, [l.id]: "" }));
-    if (!notice.check(error, "gravar o minuto"))
+    if (!notice.check(error ?? nenhumaLinha(gravadas), "gravar o minuto"))
       patch(l.id, { em_minuto: Math.round(n) });
   };
 
@@ -731,11 +732,12 @@ export default function AulasPage() {
     setCursos((v) =>
       v.map((x) => (x.id === c.id ? { ...x, aulas_feitas: feitas } : x))
     );
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("courses")
       .update({ aulas_feitas: feitas })
-      .eq("id", c.id);
-    if (notice.check(error, "atualizar o curso")) load();
+      .eq("id", c.id)
+      .select("id");
+    if (notice.check(error ?? nenhumaLinha(gravadas), "atualizar o curso")) load();
   };
 
   /* ------------------------------ meta ------------------------------ */

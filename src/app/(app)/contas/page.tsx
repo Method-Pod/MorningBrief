@@ -27,7 +27,7 @@ import {
 } from "@/lib/limpeza";
 import { sugerirCategoria } from "@/lib/categoriaSugerida";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { NADA_GRAVADO } from "@/lib/erros";
+import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
 import {
   ehAbatida,
   jaFechou,
@@ -548,17 +548,18 @@ export default function ContasPage() {
         x.id === b.id ? { ...x, status: proximo, ...abatimento } : x
       )
     );
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("bills")
       .update({
         status: proximo,
         paid_at: proximo === "paid" ? new Date().toISOString() : null,
         ...abatimento,
       })
-      .eq("id", b.id);
+      .eq("id", b.id)
+      .select("id");
     if (
       notice.check(
-        error,
+        error ?? nenhumaLinha(gravadas),
         proximo === "paid" ? "marcar como paga" : "reabrir a conta"
       )
     )
@@ -617,16 +618,17 @@ export default function ContasPage() {
     if (!abatendo) return;
     setEmLote(true);
     const quitou = novoTotalPago >= Number(abatendo.amount) - 0.001;
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("bills")
       .update({
         paid_amount: novoTotalPago,
         status: quitou ? "paid" : "pending",
         paid_at: quitou ? new Date().toISOString() : null,
       })
-      .eq("id", abatendo.id);
+      .eq("id", abatendo.id)
+      .select("id");
     setEmLote(false);
-    if (notice.check(error, "abater o pagamento")) return;
+    if (notice.check(error ?? nenhumaLinha(gravadas), "abater o pagamento")) return;
     setAbatendo(null);
     load();
   };

@@ -15,7 +15,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { NADA_GRAVADO } from "@/lib/erros";
+import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
 import { type Habit, type HabitLog } from "@/lib/types";
 import { dataCurta, semanaDe, todayISO, ultimosDias } from "@/lib/format";
 import {
@@ -213,11 +213,12 @@ export default function HabitosPage() {
     setHabits((v) =>
       v.map((x) => (x.id === h.id ? { ...x, active: !x.active } : x))
     );
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("habits")
       .update({ active: !h.active })
-      .eq("id", h.id);
-    if (notice.check(error, h.active ? "pausar o hábito" : "retomar o hábito"))
+      .eq("id", h.id)
+      .select("id");
+    if (notice.check(error ?? nenhumaLinha(gravadas), h.active ? "pausar o hábito" : "retomar o hábito"))
       load();
   };
 

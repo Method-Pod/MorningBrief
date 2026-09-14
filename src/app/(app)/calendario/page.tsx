@@ -252,7 +252,9 @@ export default function CalendarioPage() {
       location: form.location.trim(),
     };
 
-    let error;
+    /* Tipado porque a falha pode vir do Supabase ou de uma gravação que não
+       alcançou linha nenhuma, e as duas terminam na mesma caixa de aviso. */
+    let error: { message: string } | null | undefined;
     if (editing) {
       /*
        * `select("id")` para saber se gravou de verdade.
@@ -331,10 +333,16 @@ export default function CalendarioPage() {
                       ? null
                       : new Date(novoInicio.getTime() + duracao).toISOString(),
                 })
-                .eq("id", irma.id);
+                .eq("id", irma.id)
+                .select("id");
             })
           );
           error = resultados.find((r) => r.error)?.error ?? error;
+          /* Sem erro e sem linha é o 204 silencioso do PostgREST: alguma
+             ocorrência da série não estava mais lá, e "alterado em N" mentiria
+             sobre quantas foram. */
+          if (!error && resultados.some((r) => !r.data?.length))
+            error = { message: NADA_GRAVADO };
           if (!error && irmas?.length)
             notice.show(
               `Alterado em ${irmas.length + 1} ocorrências da repetição.`

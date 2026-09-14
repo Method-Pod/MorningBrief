@@ -17,7 +17,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
-import { NADA_GRAVADO } from "@/lib/erros";
+import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
 import {
   NOTE_COLORS,
   type Note,
@@ -162,13 +162,14 @@ export default function AnotacoesPage() {
     setRows((r) =>
       r.map((x) => (x.id === n.id ? { ...x, pinned: !x.pinned } : x))
     );
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("notes")
       .update({ pinned: !n.pinned })
-      .eq("id", n.id);
+      .eq("id", n.id)
+      .select("id");
     /* Recarrega só quando falhou, para desfazer — e também porque fixar muda a
        ordem, que a troca local não reordena. */
-    if (notice.check(error, n.pinned ? "desafixar a nota" : "fixar a nota"))
+    if (notice.check(error ?? nenhumaLinha(gravadas), n.pinned ? "desafixar a nota" : "fixar a nota"))
       load();
     else setRows((r) => ordenar(r));
   };

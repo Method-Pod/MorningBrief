@@ -66,3 +66,27 @@ export function recadoDeErro(
  */
 export const NADA_GRAVADO =
   "Nada foi gravado: o item não foi encontrado. Recarregue a página e tente de novo.";
+
+/**
+ * O mesmo aviso, na forma que `notice.check` monta a frase.
+ *
+ * `check` escreve "Não foi possível ${quando}: ${mensagem}", então aqui a
+ * mensagem entra sem o começo — senão sairia "Não foi possível marcar como
+ * paga: Nada foi gravado: o item não foi encontrado", com dois começos.
+ *
+ * Uso:
+ *
+ *     const { data, error } = await supabase
+ *       .from("bills").update({...}).eq("id", b.id).select("id");
+ *     if (notice.check(error ?? nenhumaLinha(data), "marcar como paga")) load();
+ *
+ * O `.select("id")` é obrigatório: sem ele o PostgREST responde 204 e `data`
+ * vem nulo mesmo quando a gravação deu certo, e esta função acusaria falha
+ * em toda escrita.
+ */
+export const nenhumaLinha = (
+  data: unknown[] | null | undefined
+): { message: string; code?: string } | null =>
+  data && data.length
+    ? null
+    : { message: "o item não foi encontrado. Recarregue a página e tente de novo." };

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, CreditCard, Pencil, Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { NADA_GRAVADO } from "@/lib/erros";
 import { useEstadoCacheado, temCache } from "@/lib/cachePagina";
 import { CORES_HEX, NOTE_COLORS, type Cartao } from "@/lib/types";
 import { brl, valorDigitado } from "@/lib/format";
@@ -136,11 +137,15 @@ export default function CartoesPage() {
     let falha: { code?: string; message?: string } | null = null;
 
     if (editando) {
-      const { error } = await supabase
+      /* `select("id")` porque o PostgREST responde 204 sem erro quando o `eq`
+         não casa com nada — o formulário fecharia dizendo "salvo" e o cartão
+         voltaria como estava no próximo carregamento. */
+      const { data: gravadas, error } = await supabase
         .from("cartoes")
         .update(campos)
-        .eq("id", editando.id);
-      falha = error;
+        .eq("id", editando.id)
+        .select("id");
+      falha = error ?? (gravadas?.length ? null : { message: NADA_GRAVADO });
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {

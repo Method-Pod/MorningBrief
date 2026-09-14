@@ -112,3 +112,27 @@ test("rotuloDeLink mostra o dominio", () => {
   assert.equal(rotuloDeLink("https://www.google.com/algo/muito/longo"), "google.com");
   assert.equal(rotuloDeLink("drive.google.com/x"), "drive.google.com");
 });
+
+/* --------------------------- gravou ou não? --------------------------- */
+
+const { nenhumaLinha, NADA_GRAVADO } = await import("../src/lib/erros.ts");
+
+test("nenhumaLinha acusa a gravacao que nao alcancou linha nenhuma", () => {
+  /* O PostgREST responde 204 sem erro quando o filtro nao casa com nada, e
+     `data` volta vazio. Sem isto, a tela fecharia dizendo "salvo". */
+  assert.ok(nenhumaLinha([]), "lista vazia e falha");
+  assert.ok(nenhumaLinha(null), "nulo e falha");
+  assert.ok(nenhumaLinha(undefined), "indefinido e falha");
+  assert.equal(nenhumaLinha([{ id: "1" }]), null, "uma linha e sucesso");
+  assert.equal(nenhumaLinha([{ id: "1" }, { id: "2" }]), null);
+});
+
+test("a mensagem entra na frase que notice.check monta", () => {
+  /* `check` escreve "Nao foi possivel X: <mensagem>", entao a mensagem nao
+     pode ter comeco proprio — sairia com dois comecos. */
+  const m = nenhumaLinha([]).message;
+  assert.ok(m.length > 0);
+  assert.equal(m[0], m[0].toLowerCase(), "comeca em minuscula, e continuacao");
+  assert.ok(!m.startsWith("Nada foi gravado"), "esse comeco e o do NADA_GRAVADO");
+  assert.ok(NADA_GRAVADO.startsWith("Nada foi gravado"));
+});

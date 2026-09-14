@@ -16,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   FREQUENCY_LABEL,
@@ -493,6 +494,14 @@ export default function DemandasPage() {
           .from("task_items")
           .update({ title: x.item.title, done: x.item.done })
           .eq("id", x.id)
+          /* `select("id")` para o item que sumiu não passar por gravado: o
+             PostgREST responde 204 sem erro quando o `eq` não casa. */
+          .select("id")
+          .then((r) =>
+            r.error || r.data?.length
+              ? r
+              : { error: { message: NADA_GRAVADO }, data: null }
+          )
       ),
       novos.length
         ? supabase.from("task_items").insert(novos)
@@ -541,23 +550,25 @@ export default function DemandasPage() {
         i.id === item.id ? { ...i, done: novo } : i
       ),
     }));
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("task_items")
       .update({ done: novo })
-      .eq("id", item.id);
+      .eq("id", item.id)
+      .select("id");
     setMarcando(null);
-    if (notice.check(error, "marcar o item")) load();
+    if (notice.check(error ?? nenhumaLinha(gravadas), "marcar o item")) load();
   };
 
   /** Marca todos os itens da demanda como feitos. */
   const concluirItens = async (taskId: string) => {
     const abertos = (itens[taskId] ?? []).filter((i) => !i.done);
     if (!abertos.length) return true;
-    const { error } = await supabase
+    const { data: gravadas, error } = await supabase
       .from("task_items")
       .update({ done: true })
-      .in("id", abertos.map((i) => i.id));
-    return !notice.check(error, "concluir os itens");
+      .in("id", abertos.map((i) => i.id))
+      .select("id");
+    return !notice.check(error ?? nenhumaLinha(gravadas), "concluir os itens");
   };
 
   /**
