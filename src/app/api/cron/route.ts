@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { chamadaDoCron } from "@/lib/segredoCron";
 import {
   limparAulasAssistidas,
   limparConcluidas,
@@ -44,30 +45,6 @@ function hojeEmSaoPaulo(): string {
 }
 
 /**
- * Confere se a chamada é do cron.
- *
- * O Vercel manda `Authorization: Bearer <CRON_SECRET>`. Sem essa checagem,
- * qualquer pessoa que descobrisse a URL dispararia a rotina — inclusive as
- * partes que apagam.
- *
- * Comparação de tamanho constante: comparar com `===` vaza, pelo tempo de
- * resposta, quantos caracteres iniciais estão certos.
- */
-function autorizado(req: Request): boolean {
-  const segredo = process.env.CRON_SECRET;
-  if (!segredo) return false;
-
-  const enviado = req.headers.get("authorization") ?? "";
-  const esperado = `Bearer ${segredo}`;
-  if (enviado.length !== esperado.length) return false;
-
-  let diferenca = 0;
-  for (let i = 0; i < esperado.length; i++)
-    diferenca |= enviado.charCodeAt(i) ^ esperado.charCodeAt(i);
-  return diferenca === 0;
-}
-
-/**
  * Os usuários que têm dados a manter.
  *
  * Tenta a Admin API primeiro, que é o caminho direto. Se ela recusar a chave,
@@ -93,16 +70,24 @@ async function listarUsuarios(
     /* cai na reserva abaixo */
   }
 
+  /* As três consultas juntas: são tabelas diferentes e nenhuma depende do
+     resultado da outra. Em fila, eram três idas ao banco antes de a
+     manutenção começar. */
+  const listas = await Promise.all(
+    ["bills", "recurring_tasks", "events"].map((tabela) =>
+      supabase.from(tabela).select("user_id")
+    )
+  );
+
   const ids = new Set<string>();
-  for (const tabela of ["bills", "recurring_tasks", "events"]) {
-    const { data } = await supabase.from(tabela).select("user_id");
+  for (const { data } of listas)
     ((data as { user_id: string }[]) ?? []).forEach((r) => ids.add(r.user_id));
-  }
   return [...ids].map((id) => ({ id }));
 }
 
 export async function GET(req: Request) {
-  if (!autorizado(req))
+  /* A trava mora em lib/segredoCron, para ser testada sem subir o Next. */
+  if (!chamadaDoCron(req))
     return NextResponse.json({ erro: "não autorizado" }, { status: 401 });
 
   const hoje = hojeEmSaoPaulo();

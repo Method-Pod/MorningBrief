@@ -78,7 +78,28 @@ function vale(m: MatchLT): boolean {
   return true;
 }
 
+/**
+ * Teto do corpo da requisição, antes de ler.
+ *
+ * Route handler do Next não tem limite de tamanho de corpo — quem manda 200 MB
+ * faz o servidor guardar 200 MB na memória antes de a primeira linha de código
+ * rodar. A rota exige sessão, então isto não é porta aberta para a internet;
+ * é a diferença entre uma aba enlouquecida derrubar a função e não derrubar.
+ *
+ * O teto é folgado de propósito. Quem manda o texto é a tela, e ela manda a
+ * anotação inteira: quem corta em 20 000 caracteres e avisa "cortei" é o
+ * código abaixo, não este guarda. Recusar antes tiraria o aviso e deixaria a
+ * anotação longa sem revisão nenhuma, que é pior. Dois megabytes são umas
+ * mil páginas de texto — nenhuma anotação chega perto, e nenhum corpo
+ * absurdo passa.
+ */
+const TETO_CORPO = 2_000_000;
+
 export async function POST(req: Request) {
+  const tamanho = Number(req.headers.get("content-length") ?? 0);
+  if (Number.isFinite(tamanho) && tamanho > TETO_CORPO)
+    return NextResponse.json({ erro: "texto-grande-demais" }, { status: 413 });
+
   let texto = "";
   try {
     const corpo = (await req.json()) as { texto?: unknown };

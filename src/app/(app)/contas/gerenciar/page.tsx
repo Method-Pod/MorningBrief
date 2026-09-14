@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
+import { NADA_GRAVADO } from "@/lib/erros";
 import { mesesAdiante } from "@/components/ContasExtras";
 import { ehAbatida, restanteDe, type Bill } from "@/lib/types";
 import { brl, dataCurta, rotuloMes, valorDigitado } from "@/lib/format";
@@ -604,32 +605,55 @@ function Editor({
      * mês depende da data de cada um: dia 31 tem de virar 28 em fevereiro, e 29
      * em ano bissexto. Um update único não calcula isso por linha.
      */
-    const falhas: string[] = [];
-    for (const b of alvos) {
-      const ehOEditado = b.id === conta.id;
-      const proprios = ehOEditado
-        ? {
-            due_date: vencimento,
-            status,
-            paid_amount: pago,
-            paid_at:
-              status === "paid" ? (conta.paid_at ?? new Date().toISOString()) : null,
-          }
-        : {
-            /*
-             * O dia sai do vencimento escolhido, e só o dia: cada mês guarda o
-             * seu. Havia um campo "Dia do mês" separado aqui, e ele disputava a
-             * mesma coluna com o vencimento — mudar o dia movia os outros meses
-             * e deixava justamente o lançamento aberto no editor para trás.
-             */
-            due_date: trocarDia(b.due_date, Number(vencimento.slice(8, 10))),
-          };
+    /*
+     * As gravações vão juntas, e não uma esperando a outra.
+     *
+     * Uma série de doze meses eram doze idas ao banco em fila: com 120ms de
+     * ida e volta, um segundo e meio de formulário travado para gravar o que
+     * são doze escritas independentes. Elas não dependem umas das outras —
+     * cada uma mexe numa linha só —, então esperam em paralelo.
+     */
+    const resultados = await Promise.all(
+      alvos.map((b) => {
+        const ehOEditado = b.id === conta.id;
+        const proprios = ehOEditado
+          ? {
+              due_date: vencimento,
+              status,
+              paid_amount: pago,
+              paid_at:
+                status === "paid"
+                  ? (conta.paid_at ?? new Date().toISOString())
+                  : null,
+            }
+          : {
+              /*
+               * O dia sai do vencimento escolhido, e só o dia: cada mês guarda
+               * o seu. Havia um campo "Dia do mês" separado aqui, e ele
+               * disputava a mesma coluna com o vencimento — mudar o dia movia
+               * os outros meses e deixava justamente o lançamento aberto no
+               * editor para trás.
+               */
+              due_date: trocarDia(b.due_date, Number(vencimento.slice(8, 10))),
+            };
 
-      const { error } = await supabase
-        .from("bills")
-        .update({ ...comuns, ...proprios })
-        .eq("id", b.id);
+        /* `select("id")` porque `.update()` responde 204 sem erro quando o
+           `eq` não casa com nada. Sem pedir a linha de volta, uma gravação
+           que não aconteceu fecharia o formulário como se tivesse dado
+           certo, e o valor antigo voltaria no próximo carregamento sem
+           nenhuma explicação. Ver NADA_GRAVADO em lib/erros. */
+        return supabase
+          .from("bills")
+          .update({ ...comuns, ...proprios })
+          .eq("id", b.id)
+          .select("id");
+      })
+    );
+
+    const falhas: string[] = [];
+    for (const { data, error } of resultados) {
       if (error) falhas.push(error.message);
+      else if (!data?.length) falhas.push(NADA_GRAVADO);
     }
 
     setOcupado(false);

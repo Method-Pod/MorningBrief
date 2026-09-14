@@ -53,7 +53,7 @@ const REGRAS: Regra[] = [
      * "ele é mau" está certo.
      */
     procurar:
-      /\b(?:passar|passei|passou|passa|passando|passamos|dormir|durmo|dorme|dormi|dormiu|sentir|sinto|sente|senti|ficar|fico|fica|fiquei|ficou|ir|vai|foi|indo|sair|saiu|saí|acabar|acabou|cheirar|cheira|comer|comi|come|ouvir|ouço|ouve|ouvi|ver|vejo|vê|vi|falar|falo|fala|falei|escrever|escrevo|escreve|escrevi|cantar|canta|dirigir|dirige|jogar|joga|começar|começou|terminar|terminou|entender|entendi|entende|lembrar|lembro|lembra|lembrei)\s+(mau)\b/dgiu,
+      /\b(?:passar|passei|passou|passa|passando|passamos|dormir|durmo|dorme|dormi|dormiu|sentir|sinto|sente|senti|ficar|fico|fica|fiquei|ficou|ir|vai|foi|indo|sair|saiu|saí|acabar|acabou|cheirar|cheira|comer|comi|come|ouvir|ouço|ouve|ouvi|ver|vejo|vê|vi|falar|falo|fala|falei|escrever|escrevo|escreve|escrevi|cantar|canta|dirigir|dirige|jogar|joga|começar|começou|terminar|terminou|entender|entendi|entende|lembrar|lembro|lembra|lembrei|acordar|acordo|acorda|acordei|acordou|dormia|dormiam|andar|ando|anda|andei)\s+(mau)\b/dgiu,
     trocar: () => ["mal"],
     motivo: "Depois de verbo é «mal» (advérbio). «Mau» só qualifica alguém.",
   },
@@ -90,7 +90,7 @@ const REGRAS: Regra[] = [
      * quando mais falta; a regra cobre a folga.
      */
     procurar:
-      /\b(mais)\s+(?=(?:eu|tu|ele|ela|eles|elas|nós|n[óo]s|voc[êe]s?|a gente|isso|isto|aquilo|n[ãa]o|nunca|agora|hoje|ontem|amanh[ãa]|depois|quando|como|se)\b)/dgiu,
+      /\b(mais)\s+(?=(?:eu|tu|ele|ela|eles|elas|nós|n[óo]s|voc[êe]s?|a gente|agente|isso|isto|aquilo|n[ãa]o|nunca|agora|hoje|ontem|amanh[ãa]|depois|quando|como|se)\b)/dgiu,
     trocar: () => ["mas"],
     motivo: "«mas» é oposição; «mais» é quantidade.",
   },
@@ -104,16 +104,42 @@ const REGRAS: Regra[] = [
   /* ----------------------------- os porquês ----------------------------- */
 
   {
-    /* No fim da frase, antes de "?" ou ".", é a forma tônica: "por quê". */
-    procurar: /\b(por\s+que|porque)(?=\s*[?.!]|\s*$)/dgiu,
+    /*
+     * No fim da frase, antes de "?" ou ".", é a forma tônica: "por quê".
+     *
+     * Com artigo antes, não: aí é o substantivo, e quem manda é a regra
+     * seguinte — «Quero saber o porquê.», não «o por quê». As duas casavam
+     * o mesmo trecho e a lista mostrava duas correções brigando pela mesma
+     * palavra, com a errada por cima. Este olhar para trás resolve na
+     * origem, e o corte de sobreposição no fim do arquivo é a rede.
+     */
+    procurar:
+      /(?<!\b(?:o|um|do|no|ao|esse|este|aquele|seu|meu|nosso)\s)\b(por\s+que|porque)(?=\s*[?.!]|\s*$)/dgiu,
     trocar: () => ["por quê"],
     motivo: "No fim da frase é «por quê», com acento.",
   },
   {
-    /* Com artigo ou preposição antes, virou substantivo: "o porquê". */
+    /*
+     * Com artigo antes, virou substantivo: "o porquê".
+     *
+     * O que vem DEPOIS é o que decide, e a primeira versão não olhava para
+     * isso — media só o artigo antes. Medido, ela estragava texto certo:
+     * «Escolhi aquele porque eu gosto dele» virava «aquele porquê», e
+     * «Peguei o porque estava barato» virava «o porquê». Nos dois, o artigo
+     * pertence à frase anterior ("escolhi aquele", "peguei o") e o "porque"
+     * é conjunção — o contrário do que a regra concluía.
+     *
+     * Agora o substantivo tem de se comportar como substantivo: ou a frase
+     * acaba ali («não sei o porquê.»), ou vem a preposição que ele pede
+     * («o porquê disso», «o porquê da briga»). Conjunção não aparece em
+     * nenhuma das duas posições, então o que passa é só o caso certo.
+     *
+     * Só determinante no singular: sem plural na lista, não há como sugerir
+     * "porquê" onde cabia "porquês".
+     */
     procurar:
-      /\b(?:o|um|os|uns|do|dos|no|nos|ao|aos|esse|este|aquele|seu|meu|nosso)\s+(por\s*que|porque)\b/dgiu,
-    trocar: (a) => [/s$/i.test(a) ? "porquês" : "porquê"],
+      /\b(?:o|um|do|no|ao|esse|este|aquele|seu|meu|nosso)\s+(por\s*que|porque)(?=\s*[.,;:!?]|\s*$|\s+(?:de|do|da|dos|das|disso|disto|daquilo|dele|dela|deles|delas)\b)/dgiu,
+    trocar: () => ["porquê"],
     motivo: "Com artigo antes é substantivo: «o porquê».",
   },
   {
@@ -123,8 +149,15 @@ const REGRAS: Regra[] = [
      * depois deles "porque" junto seria resposta a uma pergunta que ninguém
      * fez.
      */
+    /*
+     * `dizer` e `contar` saíram da lista, e por medição: «Ele disse porque
+     * estava cansado» e «Ela contou porque não veio» são frases corretas —
+     * ali o "porque" é a causa do que foi dito, não uma pergunta indireta.
+     * Os dois verbos aceitam as duas leituras, e regra que não consegue
+     * escolher não deve escolher. Os que ficaram só aceitam pergunta.
+     */
     procurar:
-      /\b(?:sei|sabe|sabem|sabia|saber|entendo|entende|entendi|entender|explicar|explica|explique|expliquei|pergunto|perguntar|perguntou|imagino|imagina|descobrir|descobri|descobriu|contar|conta|contou|dizer|diga|disse)\s+(porque)\b/dgiu,
+      /\b(?:sei|sabe|sabem|sabia|saber|entendo|entende|entendi|entender|explicar|explica|explique|expliquei|pergunto|perguntar|perguntou|imagino|imagina|descobrir|descobri|descobriu)\s+(porque)\b/dgiu,
     trocar: () => ["por que"],
     motivo: "Pergunta indireta pede «por que», separado.",
   },
@@ -151,9 +184,23 @@ const REGRAS: Regra[] = [
     motivo: "Antes de verbo no infinitivo é «para eu», não «para mim».",
   },
   {
-    /* "onde" é lugar parado; com verbo de movimento é "aonde". */
+    /*
+     * "onde" é lugar parado; com verbo de movimento é "aonde".
+     *
+     * Duas correções de medição aqui.
+     *
+     * A primeira é o sujeito no meio: «Onde você vai?» é a forma que se
+     * escreve de verdade, e a regra antiga, que exigia o verbo colado,
+     * passava batido nela. Agora um pronome cabe entre os dois.
+     *
+     * A segunda é o oposto — a regra antiga marcava o que estava certo.
+     * «Onde vou guardar as chaves?» está correto com "onde": ali "vou" não
+     * é ir a lugar nenhum, é auxiliar de "guardar". Trocar por "aonde"
+     * estragava a frase. O infinitivo logo depois é o sinal disso, e diante
+     * dele a regra se cala.
+     */
     procurar:
-      /\b(onde)\s+(?=(?:vai|vou|vamos|v[ãa]o|foi|fui|fomos|ir|irei|iremos|chegar|chega|cheguei|chegou|levar|leva|levou)\b)/dgiu,
+      /\b(onde)\s+(?:(?:eu|tu|voc[êe]s?|ele|ela|eles|elas|n[óo]s|a gente)\s+)?(?=(?:vai|vou|vamos|v[ãa]o|foi|fui|fomos|ir|irei|iremos|chegar|chega|cheguei|chegou|levar|leva|levou)\b(?!\s+(?:a|ao|à|para|pra|no|na|em)?\s*[a-zà-ú]{3,}(?:ar|er|ir)\b))/dgiu,
     trocar: () => ["aonde"],
     motivo: "Com verbo de movimento é «aonde» (a + onde).",
   },
@@ -166,12 +213,28 @@ const REGRAS: Regra[] = [
   },
 ];
 
+/** Duas faixas que se tocam. */
+const encosta = (
+  a: { inicio: number; tamanho: number },
+  b: { inicio: number; tamanho: number }
+) => a.inicio < b.inicio + b.tamanho && b.inicio < a.inicio + a.tamanho;
+
 /**
  * Passa as regras pelo texto.
  *
- * Sem tentar ser esperto com sobreposição entre as próprias regras: elas
- * foram escritas para não competir pelo mesmo trecho, e quem resolve o
- * encontro com o LanguageTool é quem chama.
+ * Duas regras nunca saem daqui apontando o mesmo trecho. Elas foram escritas
+ * para não competir, mas "foram escritas para" não é garantia: medido, «Quero
+ * saber o porque.» casava a do fim de frase e a do substantivo ao mesmo
+ * tempo, e a lista mostrava duas correções para a mesma palavra — a de cima
+ * errada, e o botão da de baixo sem efeito, porque o texto já não era o que
+ * ela esperava. Duas linhas brigando pela mesma palavra é sempre defeito, e
+ * o corte abaixo garante que não apareça, venha de onde vier.
+ *
+ * Fica a primeira por posição. Regra mais específica que outra deve vir antes
+ * na lista, ou excluir a vizinha por conta própria, como faz a do fim de
+ * frase.
+ *
+ * O encontro com o LanguageTool é resolvido por `juntar`, separadamente.
  */
 export function acharClassicos(texto: string): AchadoLocal[] {
   const achados: AchadoLocal[] = [];
@@ -196,14 +259,13 @@ export function acharClassicos(texto: string): AchadoLocal[] {
     }
   }
 
-  return achados.sort((a, b) => a.inicio - b.inicio);
-}
+  achados.sort((a, b) => a.inicio - b.inicio || b.tamanho - a.tamanho);
 
-/** Duas faixas que se tocam. */
-const encosta = (
-  a: { inicio: number; tamanho: number },
-  b: { inicio: number; tamanho: number }
-) => a.inicio < b.inicio + b.tamanho && b.inicio < a.inicio + a.tamanho;
+  const semChoque: AchadoLocal[] = [];
+  for (const a of achados)
+    if (!semChoque.some((b) => encosta(a, b))) semChoque.push(a);
+  return semChoque;
+}
 
 /**
  * Junta os dois corretores, com o LanguageTool ganhando os empates.

@@ -175,82 +175,96 @@ export async function reporRecorrentesPerdidas(
   const regras = (data as RecurringTask[]) ?? [];
   if (!regras.length) return 0;
 
-  let criadas = 0;
+  /*
+   * Uma regra não espera a outra.
+   *
+   * Cada regra mexe só nas próprias linhas — a reivindicação é na linha dela,
+   * as demandas nascem com o `origin_id` dela —, então não há ordem a
+   * respeitar entre regras. Em fila, quinze recorrências eram quinze idas ao
+   * banco em sequência a cada abertura do Início; a ordem interna de cada
+   * regra (reivindicar, depois inserir) continua como estava, que é o que
+   * garante que duas abas não criem a mesma demanda duas vezes.
+   */
+  const porRegra = await Promise.all(regras.map((r) => umaRegra(supabase, r, hoje)));
+  return porRegra.reduce((s, n) => s + n, 0);
+}
 
-  for (const r of regras) {
-    const datas = datasPendentes(r, hoje);
-    if (!datas.length) continue;
+/** Repõe o que uma regra perdeu. Devolve quantas demandas nasceram. */
+async function umaRegra(
+  supabase: SupabaseClient,
+  r: RecurringTask,
+  hoje: string
+): Promise<number> {
+  const datas = datasPendentes(r, hoje);
+  if (!datas.length) return 0;
 
-    /* Compare-and-swap na regra antes de inserir. */
-    const alvo = datas[datas.length - 1];
-    let claim = supabase
+  /* Compare-and-swap na regra antes de inserir. */
+  const alvo = datas[datas.length - 1];
+  let claim = supabase
+    .from("recurring_tasks")
+    .update({ last_run_on: alvo })
+    .eq("id", r.id);
+  claim =
+    r.last_run_on === null
+      ? claim.is("last_run_on", null)
+      : claim.eq("last_run_on", r.last_run_on);
+
+  const { data: ganhou } = await claim.select("id");
+  if (!ganhou || !ganhou.length) return 0;
+
+  const { data: criadasAgora, error: erroInsert } = await supabase
+    .from("tasks")
+    .insert(
+      datas.map((d) => ({
+        user_id: r.user_id,
+        title: r.title,
+        description: r.description,
+        client: r.client,
+        priority: r.priority,
+        status: "todo",
+        due_date: d,
+        origin_id: r.id,
+        /* Só quando existem: numa base sem LINK-NA-DEMANDA.sql, mandar a
+           coluna derrubaria toda a geração automática — inclusive das
+           regras que não têm link. */
+        ...(r.links?.length ? { links: r.links } : {}),
+      }))
+    )
+    .select("id");
+
+  if (erroInsert) {
+    /* 23505 = tasks_origin_day_uniq: a demanda daquele dia já existe. */
+    if (erroInsert.code === "23505") return 0;
+    /* Devolve a reivindicação para a próxima passada tentar de novo. */
+    await supabase
       .from("recurring_tasks")
-      .update({ last_run_on: alvo })
+      .update({ last_run_on: r.last_run_on })
       .eq("id", r.id);
-    claim =
-      r.last_run_on === null
-        ? claim.is("last_run_on", null)
-        : claim.eq("last_run_on", r.last_run_on);
-
-    const { data: ganhou } = await claim.select("id");
-    if (!ganhou || !ganhou.length) continue;
-
-    const { data: criadasAgora, error: erroInsert } = await supabase
-      .from("tasks")
-      .insert(
-        datas.map((d) => ({
-          user_id: r.user_id,
-          title: r.title,
-          description: r.description,
-          client: r.client,
-          priority: r.priority,
-          status: "todo",
-          due_date: d,
-          origin_id: r.id,
-          /* Só quando existem: numa base sem LINK-NA-DEMANDA.sql, mandar a
-             coluna derrubaria toda a geração automática — inclusive das
-             regras que não têm link. */
-          ...(r.links?.length ? { links: r.links } : {}),
-        }))
-      )
-      .select("id");
-
-    if (erroInsert) {
-      /* 23505 = tasks_origin_day_uniq: a demanda daquele dia já existe. */
-      if (erroInsert.code === "23505") continue;
-      /* Devolve a reivindicação para a próxima passada tentar de novo. */
-      await supabase
-        .from("recurring_tasks")
-        .update({ last_run_on: r.last_run_on })
-        .eq("id", r.id);
-      continue;
-    }
-
-    /*
-     * Cada ocorrência nasce com os itens do modelo, desmarcados.
-     *
-     * É o que faz o checklist valer a pena numa recorrente diária: os cinco
-     * cortes já estão lá toda manhã, sem ninguém digitar. Falha aqui não
-     * desfaz a demanda — ela existe e vale mais sem checklist do que não
-     * existir; e `checklist` é nulo em regra criada antes da migração.
-     */
-    const modelo = r.checklist ?? [];
-    if (modelo.length && criadasAgora?.length)
-      await supabase.from("task_items").insert(
-        (criadasAgora as { id: string }[]).flatMap((t) =>
-          modelo.map((title, i) => ({
-            user_id: r.user_id,
-            task_id: t.id,
-            title,
-            position: i,
-          }))
-        )
-      );
-
-    criadas += datas.length;
+    return 0;
   }
 
-  return criadas;
+  /*
+   * Cada ocorrência nasce com os itens do modelo, desmarcados.
+   *
+   * É o que faz o checklist valer a pena numa recorrente diária: os cinco
+   * cortes já estão lá toda manhã, sem ninguém digitar. Falha aqui não
+   * desfaz a demanda — ela existe e vale mais sem checklist do que não
+   * existir; e `checklist` é nulo em regra criada antes da migração.
+   */
+  const modelo = r.checklist ?? [];
+  if (modelo.length && criadasAgora?.length)
+    await supabase.from("task_items").insert(
+      (criadasAgora as { id: string }[]).flatMap((t) =>
+        modelo.map((title, i) => ({
+          user_id: r.user_id,
+          task_id: t.id,
+          title,
+          position: i,
+        }))
+      )
+    );
+
+  return datas.length;
 }
 
 /**

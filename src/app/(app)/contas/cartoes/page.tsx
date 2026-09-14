@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { useEstadoCacheado, temCache } from "@/lib/cachePagina";
 import { CORES_HEX, NOTE_COLORS, type Cartao } from "@/lib/types";
-import { brl } from "@/lib/format";
+import { brl, valorDigitado } from "@/lib/format";
 import {
   Button,
   Card,
@@ -115,7 +115,21 @@ export default function CartoesPage() {
       bandeira: form.bandeira.trim(),
       fecha_dia: diaValido(form.fecha_dia),
       vence_dia: diaValido(form.vence_dia),
-      limite: form.limite.trim() ? Number(form.limite) : null,
+      /*
+       * `valorDigitado` e nao `Number`.
+       *
+       * O campo e de dinheiro e aceita o que se escreve: "5.000" e
+       * "5.000,00". `Number("5.000")` da 5 — cinco reais de limite —, e
+       * `Number("5000,00")` da NaN, que o banco recusa. O mesmo conserto
+       * que ja foi feito nos outros campos de valor.
+       */
+      limite: (() => {
+        if (!form.limite.trim()) return null;
+        const n = valorDigitado(form.limite);
+        /* Texto sem numero nenhum vira nulo, e nao NaN: NaN no corpo do
+           insert vira `null` no JSON de qualquer jeito, mas por acidente. */
+        return Number.isFinite(n) ? n : null;
+      })(),
       cor: form.cor,
     };
 

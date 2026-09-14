@@ -30,7 +30,7 @@ import {
   type Lesson,
   type Subject,
 } from "@/lib/types";
-import { dataCurta, semanaDe, todayISO } from "@/lib/format";
+import { dataCurta, localDay, semanaDe, todayISO } from "@/lib/format";
 import { DIAS_RETENCAO_AULAS } from "@/lib/limpeza";
 import {
   dadosDoLink,
@@ -912,8 +912,17 @@ export default function AulasPage() {
    */
   const naSemana = React.useMemo(() => {
     const dias = new Set(semanaDe(todayISO()));
+    /*
+     * `localDay` e nao `slice(0, 10)`.
+     *
+     * `feita_em` e timestamptz, e o banco devolve em UTC. Uma aula marcada
+     * as 21h30 de domingo em Sao Paulo fica gravada como 00h30 de segunda em
+     * UTC: cortando a string, ela caia na semana seguinte e a meta da semana
+     * perdia a aula — na noite de domingo, que e quando mais se corre atras
+     * dela. Ver `localDay` em lib/format.
+     */
     return rows.filter(
-      (l) => l.feita && l.feita_em && dias.has(l.feita_em.slice(0, 10))
+      (l) => l.feita && l.feita_em && dias.has(localDay(l.feita_em))
     ).length;
   }, [rows]);
 
@@ -1486,7 +1495,7 @@ export default function AulasPage() {
                         {l.feita && l.feita_em && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-pos/12 px-2 py-0.5 text-[10px] font-semibold text-pos">
                             <Check size={9} strokeWidth={3} />
-                            visto {dataCurta(l.feita_em.slice(0, 10))}
+                            visto {dataCurta(localDay(l.feita_em))}
                           </span>
                         )}
 

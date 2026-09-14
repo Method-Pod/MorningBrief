@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --import ./testes/apoio/registrar.mjs --test --test-reporter=spec \"testes/*.test.mjs\""
   },
   "dependencies": {
     "@supabase/ssr": "^0.6.1",

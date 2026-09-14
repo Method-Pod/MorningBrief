@@ -72,8 +72,19 @@ const REGRAS: { padrao: RegExp; categoria: string }[] = [
     categoria: "Supermercado",
   },
   {
+    /*
+     * "DAS" em caixa alta, e sem a flag `i`, porque aqui a caixa é a única
+     * coisa que distingue o boleto do MEI da preposição mais comum da
+     * língua. Na lista de baixo, que ignora caixa, ele casava com "Compra
+     * **das** fraldas" e mandava a conta para Impostos — palpite errado que
+     * some no meio da tela e sai no gráfico do mês como imposto.
+     */
+    padrao: /\bDAS\b/,
+    categoria: "Impostos",
+  },
+  {
     padrao:
-      /\b(imposto|das|mei|simples nacional|inss|irpf|darf|contador|contabilidade)s?\b/i,
+      /\b(imposto|mei|simples nacional|inss|irpf|darf|contador|contabilidade)s?\b/i,
     categoria: "Impostos",
   },
   {

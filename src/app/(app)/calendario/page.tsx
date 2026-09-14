@@ -307,28 +307,34 @@ export default function CalendarioPage() {
            * Uma requisição por ocorrência, e não um update em lote, porque cada
            * start_at novo depende da data que aquela linha já tem: só a hora
            * muda. Um update único não calcularia isso por linha.
+           *
+           * Em paralelo, e não uma esperando a outra: uma repetição semanal
+           * na janela de dois meses tem umas nove ocorrências, e em fila isso
+           * era quase um segundo de "Salvando..." para nove escritas que não
+           * dependem umas das outras. Antes o laço parava no primeiro erro e
+           * deixava a série metade trocada e metade não; agora todas são
+           * tentadas e o primeiro erro é o que aparece.
            */
-          for (const irma of (irmas as { id: string; start_at: string }[]) ?? []) {
-            const dia = localDay(irma.start_at);
-            const novoInicio = new Date(
-              `${dia}T${form.all_day ? "00:00" : form.time || "00:00"}:00`
-            );
-            const { error: erroUpdate } = await supabase
-              .from("events")
-              .update({
-                ...comuns,
-                start_at: novoInicio.toISOString(),
-                end_at:
-                  duracao === null
-                    ? null
-                    : new Date(novoInicio.getTime() + duracao).toISOString(),
-              })
-              .eq("id", irma.id);
-            if (erroUpdate) {
-              error = erroUpdate;
-              break;
-            }
-          }
+          const resultados = await Promise.all(
+            ((irmas as { id: string; start_at: string }[]) ?? []).map((irma) => {
+              const dia = localDay(irma.start_at);
+              const novoInicio = new Date(
+                `${dia}T${form.all_day ? "00:00" : form.time || "00:00"}:00`
+              );
+              return supabase
+                .from("events")
+                .update({
+                  ...comuns,
+                  start_at: novoInicio.toISOString(),
+                  end_at:
+                    duracao === null
+                      ? null
+                      : new Date(novoInicio.getTime() + duracao).toISOString(),
+                })
+                .eq("id", irma.id);
+            })
+          );
+          error = resultados.find((r) => r.error)?.error ?? error;
           if (!error && irmas?.length)
             notice.show(
               `Alterado em ${irmas.length + 1} ocorrências da repetição.`

@@ -43,9 +43,20 @@ const FMT_DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
+/**
+ * Data e hora de um instante ISO.
+ *
+ * O guarda de data invalida nao e zelo: `Intl.format` levanta RangeError com
+ * `Invalid Date`, e isso acontece **dentro do render**. Um unico timestamp
+ * torto — de uma linha antiga, de uma migracao pela metade — derrubaria a
+ * arvore inteira do React e a tela ficaria branca, sem nada na tela que
+ * dissesse de onde veio.
+ */
 export const dateTimeBR = (iso: string | null | undefined) => {
   if (!iso) return "—";
-  return FMT_DATA_HORA.format(new Date(iso));
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return FMT_DATA_HORA.format(d);
 };
 
 /**
@@ -144,10 +155,12 @@ const FMT_HORA = new Intl.DateTimeFormat("pt-BR", {
   minute: "2-digit",
 });
 
-/** Hora local HH:MM de um timestamptz. */
+/** Hora local HH:MM de um timestamptz. Mesmo guarda de `dateTimeBR`. */
 export const localTime = (iso: string | null | undefined) => {
   if (!iso) return "";
-  return FMT_HORA.format(new Date(iso));
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return FMT_HORA.format(d);
 };
 
 const MES_ABREV = [
