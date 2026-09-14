@@ -327,15 +327,16 @@ export default function HomePage() {
   /**
    * As contas que já fecharam e ainda esperam um valor.
    *
-   * Só as em aberto: uma conta marcada como paga com valor zero é coisa
-   * resolvida de outro jeito, e cobrar por ela seria cobrar por nada.
+   * Paga também entra, e isso é de propósito. A primeira versão cobrava só as
+   * em aberto, pelo raciocínio de que conta paga é assunto encerrado. Está
+   * errado para fatura de valor variável: quem paga a fatura e marca como
+   * paga antes de lançar o número tem uma conta **mais** incompleta que a
+   * outra, não menos — o dinheiro já saiu e ninguém sabe quanto foi. O total
+   * do mês fica mentindo em R$ 0,00, e o lembrete, que era o que faria a
+   * pessoa corrigir, não aparecia justamente no caso em que mais falta.
    */
   const aCobrar = React.useMemo(
-    () =>
-      bills.filter(
-        (b) =>
-          b.status === "pending" && semValorAinda(b) && jaFechou(b, today)
-      ),
+    () => bills.filter((b) => semValorAinda(b) && jaFechou(b, today)),
     [bills, today]
   );
 
@@ -987,9 +988,18 @@ function ValorDaFatura({
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2.5 rounded-[14px] bg-warn/12 px-4 py-3 text-[12.5px] font-medium text-warn">
       <CreditCard size={15} className="shrink-0" />
+      {/* "quanto foi" na paga, "quanto ficou" na que ainda vence: a primeira
+          já aconteceu, e perguntar no futuro soaria como se o app não
+          soubesse que ela foi paga. */}
       <span className="min-w-0">
-        A fatura de <b>{conta.description}</b> fechou
-        {fechou && ` em ${dataCurta(fechou)}`}. Quanto ficou?
+        A fatura de <b>{conta.description}</b>{" "}
+        {conta.status === "paid" ? (
+          <>foi paga e ainda não tem valor. Quanto foi?</>
+        ) : (
+          <>
+            fechou{fechou && ` em ${dataCurta(fechou)}`}. Quanto ficou?
+          </>
+        )}
       </span>
       <div className="ml-auto flex items-center gap-2">
         <input
