@@ -1277,7 +1277,23 @@ export default function ContasPage() {
       </Card>
 
       {/* -------------------- calendário + contas fixas -------------------- */}
-      <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+      {/*
+        Três faixas quando há cartão, duas quando não há.
+
+        "Contas fixas" sozinha na coluna larga ficava com meia tela de espaço
+        vazio à direita de cada linha — o botão "Lançar próximo mês" chegava a
+        ficar a mais de 800px do nome da conta, e o olho perdia a ligação
+        entre os dois. Com os cartões ao lado, a coluna encolhe para uma
+        largura de leitura e o espaço passa a ter conteúdo.
+      */}
+      <div
+        className={cx(
+          "mt-4 grid gap-4",
+          cartoes.length > 0
+            ? "xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_minmax(0,352px)]"
+            : "xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]"
+        )}
+      >
         <Card>
           <Cabeca titulo="Calendário de pagamentos" sub="Clique num dia para filtrar" />
           <div className="px-[18px] pb-[18px] pt-3">

@@ -62,8 +62,12 @@ export function QuadroCartoes({
             <span className="block truncate text-[13px] font-semibold">
               {cartao.nome}
             </span>
+            {/* "fecha 8 · vence 15" e não "fecha dia 8 · vence dia 15": a
+                palavra "dia" aparecia duas vezes e custava os 40px que
+                faltavam para a linha caber quando o campo de valor está
+                aberto — medido, era ela que cortava o "vence". */}
             <span className="block truncate text-[11px] text-fg-mute">
-              fecha dia {cartao.fecha_dia} · vence dia {cartao.vence_dia}
+              fecha {cartao.fecha_dia} · vence {cartao.vence_dia}
             </span>
           </span>
           <Estado conta={conta} onLancar={onLancar} />
