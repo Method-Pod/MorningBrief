@@ -43,7 +43,14 @@ import {
 } from "@/components/Categorias";
 import { AbaterModal, ProgressoAbatida } from "@/components/ContasLote";
 import { QuadroCartoes } from "@/components/QuadroCartoes";
-import { brl, dataCurta, daysUntil, rotuloMes, todayISO } from "@/lib/format";
+import {
+  brl,
+  dataCurta,
+  daysUntil,
+  rotuloMes,
+  todayISO,
+  valorDigitado,
+} from "@/lib/format";
 import {
   EditorParcelas,
   MAX_PARCELAS,
@@ -258,9 +265,7 @@ export default function ContasPage() {
     e.preventDefault();
     setErr("");
     const desc = form.description.trim();
-    const valor = parseFloat(
-      String(form.amount).replace(/\./g, "").replace(",", ".")
-    );
+    const valor = valorDigitado(form.amount);
     if (!desc) return setErr("Informe a descrição.");
     /*
      * Conta de valor variável pode nascer sem valor — é o ponto dela.
@@ -339,9 +344,7 @@ export default function ContasPage() {
                   valor,
                   Math.max(
                     0,
-                    parseFloat(
-                      String(form.paid_amount).replace(/\./g, "").replace(",", ".")
-                    ) || 0
+                    valorDigitado(form.paid_amount) || 0
                   )
                 )
               : null,
@@ -804,9 +807,7 @@ export default function ContasPage() {
   ) => {
     if (modo === "iguais") return setForm({ ...form, modoParcelas: "iguais" });
 
-    const valor = parseFloat(
-      String(form.amount).replace(/\./g, "").replace(",", ".")
-    );
+    const valor = valorDigitado(form.amount);
     const de = Number(form.installment_no);
     const total = Number(form.installment_total);
     if (
@@ -849,9 +850,7 @@ export default function ContasPage() {
     const alvo = Number(form.installment_total) - Number(form.installment_no) + 1;
     if (alvo < 1 || alvo === form.parcelas.length) return;
 
-    const valor = parseFloat(
-      String(form.amount).replace(/\./g, "").replace(",", ".")
-    );
+    const valor = valorDigitado(form.amount);
     if (!Number.isFinite(valor) || valor <= 0) return;
     const base = parcelasIguais({
       primeiroVencimento: form.due_date,
@@ -878,7 +877,7 @@ export default function ContasPage() {
     if (!form.parcelado) return null;
     const total = Number(form.installment_total);
     const de = Number(form.installment_no);
-    const v = parseFloat(String(form.amount).replace(/\./g, "").replace(",", "."));
+    const v = valorDigitado(form.amount);
     const quantas = total - de + 1;
     if (
       !Number.isFinite(total) ||

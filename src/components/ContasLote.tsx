@@ -4,7 +4,7 @@ import * as React from "react";
 
 
 import type { Bill } from "@/lib/types";
-import { brl } from "@/lib/format";
+import { brl, valorDigitado } from "@/lib/format";
 import { Button, Input, Modal, cx } from "./ui";
 
 /**
@@ -40,7 +40,7 @@ export function AbaterModal({
   const falta = Math.max(0, total - jaPago);
 
   const aplicar = () => {
-    const v = parseFloat(String(valor).replace(/\./g, "").replace(",", "."));
+    const v = valorDigitado(valor);
     setErro("");
     if (!Number.isFinite(v) || v <= 0) return setErro("Informe um valor maior que zero.");
     if (v > falta + 0.001)

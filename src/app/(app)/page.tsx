@@ -38,6 +38,7 @@ import {
   localDay,
   localTime,
   todayISO,
+  valorDigitado,
 } from "@/lib/format";
 import { textoDaNota } from "@/lib/notas";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
@@ -973,7 +974,7 @@ function ValorDaFatura({
   /* Aceita "1.234,56" e "1234.56": é o mesmo tratamento do formulário de
      contas, e quem digita não deveria ter de saber qual dos dois o campo
      espera. */
-  const valor = parseFloat(texto.replace(/\./g, "").replace(",", "."));
+  const valor = valorDigitado(texto);
   const vale = Number.isFinite(valor) && valor >= 0;
 
   const gravar = async () => {

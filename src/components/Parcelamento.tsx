@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { CalendarDays, RotateCcw } from "lucide-react";
-import { brl, dataCurta } from "@/lib/format";
+import { brl, dataCurta, valorDigitado } from "@/lib/format";
 import { mesesAdiante } from "./ContasExtras";
 import { Input, cx } from "./ui";
 
@@ -75,7 +75,7 @@ export function parcelasIguais({
 
 const paraCampo = (n: number) => n.toFixed(2).replace(".", ",");
 const paraNumero = (s: string) =>
-  parseFloat(String(s).replace(/\./g, "").replace(",", "."));
+  valorDigitado(s);
 
 /**
  * Lista de parcelas com data e valor editáveis, uma linha por parcela.

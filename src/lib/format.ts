@@ -48,6 +48,45 @@ export const dateTimeBR = (iso: string | null | undefined) => {
   return FMT_DATA_HORA.format(new Date(iso));
 };
 
+/**
+ * O número por trás do que foi digitado num campo de dinheiro.
+ *
+ * Existe porque a mesma conta estava escrita em dez lugares, e estava errada
+ * nos dez: `replace(/\./g, "")` apagava **todo** ponto antes de trocar a
+ * vírgula por ponto. Quem digitasse `1234.56` — o formato do teclado, do
+ * extrato do banco, de qualquer planilha em inglês — lançava
+ * **R$ 123.456,00**. Cem vezes o valor certo, sem aviso nenhum.
+ *
+ * A regra, na ordem:
+ *
+ * 1. **Tem vírgula** → é o formato daqui: ponto é milhar, vírgula é decimal.
+ *    `1.234,56` → 1234.56
+ * 2. **Só ponto, com exatamente 3 dígitos depois do último** → é milhar, que
+ *    é como se escreve mil e quinhentos aqui: `1.500` → 1500
+ * 3. **Só ponto, com qualquer outra quantidade de dígitos** → é decimal:
+ *    `1234.56` → 1234.56, `1234.5` → 1234.5
+ *
+ * Devolve `NaN` quando não sobra número, para quem chama decidir o que dizer.
+ */
+export const valorDigitado = (entrada: string | number): number => {
+  if (typeof entrada === "number") return entrada;
+
+  /* Fora o que não é número: "R$", espaço, espaço fino que vem de colagem. */
+  const cru = String(entrada)
+    .replace(/[^\d.,-]/g, "")
+    .trim();
+  if (!cru) return NaN;
+
+  if (cru.includes(",")) {
+    return parseFloat(cru.replace(/\./g, "").replace(",", "."));
+  }
+
+  const pedacos = cru.split(".");
+  const ehMilhar = pedacos.length > 1 && pedacos[pedacos.length - 1].length === 3;
+
+  return parseFloat(ehMilhar ? pedacos.join("") : cru);
+};
+
 /** Data local de hoje em ISO (YYYY-MM-DD), sem converter para UTC. */
 export const todayISO = () => {
   const d = new Date();

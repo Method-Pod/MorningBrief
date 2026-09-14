@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Check } from "lucide-react";
-import { brl } from "@/lib/format";
+import { brl, valorDigitado } from "@/lib/format";
 import {
   CORES_HEX,
   semValorAinda,
@@ -131,7 +131,7 @@ function Estado({
 
   /* Aceita "1.234,56" e "1234.56", como o formulário de contas: quem digita
      não deveria ter de saber qual dos dois o campo espera. */
-  const valor = parseFloat(texto.replace(/\./g, "").replace(",", "."));
+  const valor = valorDigitado(texto);
   const vale = Number.isFinite(valor) && valor >= 0;
 
   const lancar = async () => {

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { mesesAdiante } from "@/components/ContasExtras";
 import { ehAbatida, restanteDe, type Bill } from "@/lib/types";
-import { brl, dataCurta, rotuloMes } from "@/lib/format";
+import { brl, dataCurta, rotuloMes, valorDigitado } from "@/lib/format";
 import { useCategorias } from "@/components/Categorias";
 import {
   Button,
@@ -507,7 +507,7 @@ function LinhaSerie({
 
 const paraCampo = (n: number) => String(n).replace(".", ",");
 const paraNumero = (s: string) =>
-  parseFloat(String(s).replace(/\./g, "").replace(",", "."));
+  valorDigitado(s);
 
 function Editor({
   alvo,
