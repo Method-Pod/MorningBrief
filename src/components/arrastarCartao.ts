@@ -24,8 +24,55 @@ const SUAVIDADE = 0.18;
 /** Distância antes de virar arrasto, para não roubar clique nem rolagem. */
 const LIMIAR_PX = 6;
 
+/*
+ * A mola que traz o cartão de volta quando ele é solto fora de uma coluna.
+ *
+ * Amortecimento 1 e resposta 0,4s são os mesmos números que a Apple usa para
+ * reposicionar uma janela flutuante. Amortecimento 1 é o ponto exato em que a
+ * mola para sem passar do alvo: o cartão volta para o lugar e fica, sem
+ * balançar. Balanço aqui mentiria — quicar é o que um objeto faz ao bater em
+ * algo, e voltar para a própria vaga não é bater em nada.
+ *
+ * Resposta não é duração: a mola não tem fim marcado, ela chega quando chega.
+ * 0,4s é a escala de tempo em que ela cobre a distância.
+ */
+const RESPOSTA_S = 0.4;
+const AMORTECIMENTO = 1;
+const W = (2 * Math.PI) / RESPOSTA_S;
+/** Teto da velocidade herdada: um arremesso violento não vira projétil. */
+const VEL_MAX = 3500;
+/** Perto o bastante e devagar o bastante para encerrar sem ninguém ver. */
+const PARADA_PX = 0.5;
+const PARADA_VEL = 12;
+/** Amostras de ponteiro mais velhas que isto não contam para a velocidade. */
+const JANELA_MS = 90;
+
 const trava = (v: number, min: number, max: number) =>
   Math.min(max, Math.max(min, v));
+
+/**
+ * Velocidade do ponteiro no instante em que o dedo soltou, em px/s.
+ *
+ * Tirada de um trecho curto do histórico, e não dos dois últimos eventos: o
+ * intervalo entre dois `pointermove` chega a ser de um quadro só, e dividir
+ * por um `dt` de 4ms transforma qualquer tremor de um pixel em mil px/s. A
+ * janela de 90ms é longa o bastante para o ruído se cancelar e curta o
+ * bastante para ainda ser "agora" — se pegasse o gesto inteiro, um arrasto que
+ * andou muito e parou no fim sairia rápido, quando a mão já estava parada.
+ */
+function velocidade(hist: { x: number; y: number; t: number }[]) {
+  const agora = performance.now();
+  const rec = hist.filter((p) => agora - p.t <= JANELA_MS);
+  if (rec.length < 2) return { vx: 0, vy: 0 };
+  const a = rec[0];
+  const b = rec[rec.length - 1];
+  const dt = (b.t - a.t) / 1000;
+  if (dt <= 0) return { vx: 0, vy: 0 };
+  return {
+    vx: trava((b.x - a.x) / dt, -VEL_MAX, VEL_MAX),
+    vy: trava((b.y - a.y) / dt, -VEL_MAX, VEL_MAX),
+  };
+}
 
 type Opcoes<T> = {
   /** Onde o cartão foi solto, ou nada se caiu fora de uma coluna. */
@@ -51,6 +98,10 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
     alvo: HTMLElement | null;
     ativo: boolean;
     quadro: number | null;
+    /* Últimos pontos do ponteiro, para saber a velocidade ao soltar. */
+    hist: { x: number; y: number; t: number }[];
+    /* Durante o voo de volta o gesto já acabou, mas o estado ainda vive. */
+    voltando: boolean;
   } | null>(null);
 
   const limpar = React.useCallback(() => {
@@ -83,6 +134,12 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
 
       e.dx = ev.clientX - e.x0;
       e.dy = ev.clientY - e.y0;
+
+      /* Fila curta: só o que couber na janela de velocidade interessa, e
+         guardar o gesto inteiro seria memória crescendo sem uso. */
+      const agora = performance.now();
+      e.hist.push({ x: ev.clientX, y: ev.clientY, t: agora });
+      while (e.hist.length > 1 && agora - e.hist[0].t > JANELA_MS) e.hist.shift();
 
       /* Só vira arrasto depois do limiar. Antes disso o gesto ainda pode ser um
          clique num botão do cartão, ou o começo de uma rolagem. */
@@ -133,6 +190,94 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
     [desenhar]
   );
 
+  /**
+   * Devolve a cópia à vaga de origem, continuando na velocidade da mão.
+   *
+   * Soltar o cartão fora de qualquer coluna apagava a cópia no mesmo quadro:
+   * ela sumia debaixo do cursor e o original reacendia do outro lado da tela.
+   * Nada indicava que o gesto tinha sido recusado — parecia defeito, e a
+   * pergunta seguinte era sempre "apagou?".
+   *
+   * Aqui a cópia volta, e volta partindo da velocidade que o ponteiro tinha no
+   * instante da soltura, e não do repouso. É essa continuidade que faz a volta
+   * parecer o mesmo movimento, e não uma animação que começou depois: sem ela
+   * há uma emenda visível entre arrastar e animar, o quadro em que a mão ia a
+   * 800px/s e o cartão recomeça em zero.
+   *
+   * X e Y têm molas separadas de propósito. Uma mola só, aplicada à distância
+   * em linha reta, amarra os dois eixos ao mesmo tempo de chegada — e quando o
+   * arremesso foi muito mais forte na horizontal que na vertical, o eixo lento
+   * é arrastado pelo rápido e a curva sai torta.
+   */
+  const voltarParaOrigem = React.useCallback(() => {
+    const e = estado.current;
+    if (!e?.clone) {
+      limpar();
+      return;
+    }
+
+    e.voltando = true;
+    if (e.quadro !== null) cancelAnimationFrame(e.quadro);
+    if (e.alvo) {
+      delete e.alvo.dataset.alvo;
+      e.alvo = null;
+    }
+    /* O gesto acabou: o cursor volta a ser cursor agora, não quando o cartão
+       pousar. Só o esmaecido do original espera o pouso, senão apareceriam
+       dois cartões ao mesmo tempo. */
+    delete document.body.dataset.arrastandoCartao;
+    document.body.style.removeProperty("cursor");
+
+    const { vx, vy } = velocidade(e.hist);
+    let x = e.dx;
+    let y = e.dy;
+    let velX = vx;
+    let velY = vy;
+    let anterior = performance.now();
+
+    const k = W * W;
+    const c = 2 * AMORTECIMENTO * W;
+
+    const passo = () => {
+      const st = estado.current;
+      if (!st?.clone) return;
+
+      const agora = performance.now();
+      /*
+       * Passo de tempo limitado a ~30fps.
+       *
+       * Em aba escondida o navegador para de entregar quadros; ao voltar, o
+       * primeiro `dt` vale o tempo todo que passou. Integrar mola com um passo
+       * desses não desacelera — diverge, e o cartão é cuspido para fora da
+       * tela. O teto troca a exatidão do intervalo pela garantia de que a
+       * conta nunca explode.
+       */
+      const dt = Math.min((agora - anterior) / 1000, 1 / 30);
+      anterior = agora;
+
+      velX += (-k * x - c * velX) * dt;
+      velY += (-k * y - c * velY) * dt;
+      x += velX * dt;
+      y += velY * dt;
+      st.grau += (0 - st.grau) * 0.2;
+
+      const chegou =
+        Math.abs(x) < PARADA_PX &&
+        Math.abs(y) < PARADA_PX &&
+        Math.hypot(velX, velY) < PARADA_VEL;
+
+      if (chegou) {
+        limpar();
+        return;
+      }
+
+      st.clone.style.transform = `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) rotate(${st.grau.toFixed(2)}deg) scale(1.03)`;
+      st.quadro = requestAnimationFrame(passo);
+    };
+
+    e.quadro = requestAnimationFrame(passo);
+  }, [limpar]);
+
   const soltar = React.useCallback(
     (ev: PointerEvent) => {
       const e = estado.current;
@@ -144,14 +289,35 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
       window.removeEventListener("pointermove", mover);
       window.removeEventListener("pointerup", soltar);
       window.removeEventListener("pointercancel", cancelar);
-      limpar();
 
-      /* Sem `ativo`, o ponteiro nem passou do limiar: foi um clique, e quem
-         cuida dele são os próprios botões do cartão. */
-      if (arrastou && coluna) onSoltar(item, coluna);
+      if (arrastou && coluna) {
+        /*
+         * Acertou a coluna: some na hora, sem voo.
+         *
+         * Aqui a cópia não tem para onde voar — o cartão de verdade já vai
+         * nascer na coluna nova no render que `onSoltar` dispara. Um voo até
+         * lá só atrasaria o resultado do gesto, e §1 da referência é clara:
+         * atraso no caminho da resposta é regressão. A volta existe para o
+         * caso em que não há resultado nenhum.
+         */
+        limpar();
+        onSoltar(item, coluna);
+      } else if (arrastou) {
+        /* Quem pede menos movimento não quer ver o voo: some direto. */
+        const parado = window.matchMedia?.(
+          "(prefers-reduced-motion: reduce)"
+        )?.matches;
+        if (parado) limpar();
+        else voltarParaOrigem();
+      } else {
+        /* Sem `ativo`, o ponteiro nem passou do limiar: foi um clique, e quem
+           cuida dele são os próprios botões do cartão. */
+        limpar();
+      }
+
       ev.preventDefault?.();
     },
-    [limpar, mover, onSoltar]
+    [limpar, mover, onSoltar, voltarParaOrigem]
   );
 
   const cancelar = React.useCallback(() => {
@@ -181,6 +347,18 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
       if ((ev.target as HTMLElement).closest("button, a, input, select, textarea"))
         return;
 
+      /*
+       * Um voo de volta em andamento é encerrado agora.
+       *
+       * Sem isto, pegar outro cartão enquanto o anterior ainda voltava trocava
+       * `estado.current` debaixo do laço que estava rodando, e o quadro
+       * seguinte da mola passava a escrever no cartão novo: ele saltava para a
+       * posição do antigo. A cópia velha some no mesmo instante em que o gesto
+       * novo começa — o gesto que chega tem prioridade sobre a animação que
+       * está saindo, nunca o contrário.
+       */
+      if (estado.current?.voltando) limpar();
+
       const origem = ev.currentTarget;
       const r = origem.getBoundingClientRect();
 
@@ -201,13 +379,15 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
         alvo: null,
         ativo: false,
         quadro: null,
+        hist: [{ x: ev.clientX, y: ev.clientY, t: performance.now() }],
+        voltando: false,
       };
 
       window.addEventListener("pointermove", mover);
       window.addEventListener("pointerup", soltar);
       window.addEventListener("pointercancel", cancelar);
     },
-    [cancelar, mover, soltar]
+    [cancelar, limpar, mover, soltar]
   );
 
   /* Solta tudo se o componente sair no meio do gesto. */

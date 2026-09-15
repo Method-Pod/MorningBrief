@@ -186,6 +186,27 @@ body {
   background: var(--a-bg);
   color: var(--color-fg);
   -webkit-font-smoothing: antialiased;
+  /*
+   * Deixa a fonte trocar de desenho conforme o tamanho.
+   *
+   * Uma fonte variavel com eixo optico nao e a mesma letra ampliada: no corpo
+   * de 12px ela vem com haste mais grossa e contraste menor para aguentar o
+   * tamanho, e no titulo de 30px vem mais fina e fechada. O navegador so faz
+   * essa troca se mandarem -- o padrao e `none`, que congela um desenho so
+   * para a escala inteira. Sem eixo optico na fonte, nao faz nada.
+   */
+  font-optical-sizing: auto;
+  /*
+   * Impede o Safari de inflar texto sozinho ao girar o telefone.
+   *
+   * O ajuste automatico multiplica o corpo de algumas caixas e nao de outras,
+   * entao a hierarquia que foi medida aqui -- tamanho, peso e entrelinha como
+   * um conjunto -- chega quebrada no aparelho. 100% nao impede ninguem de
+   * aumentar a letra nas preferencias: impede o navegador de fazer isso a
+   * revelia, so em parte da tela.
+   */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 /* ---------- scrollbar ---------- */
@@ -322,6 +343,59 @@ textarea::placeholder {
   /* O modal aparece sobre um fundo escurecido, então um pouco mais de tempo
      aqui é percebido como suavidade, não como demora. */
   animation: pop 0.21s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/*
+ * Abertura ancorada: cresce a partir de quem a abriu.
+ *
+ * Separado de `pop` porque falta aqui o deslize de 10px que o modal tem. O
+ * modal aparece no meio da tela, sem origem nenhuma na pagina, e o deslize e
+ * o que da a ele um sentido de chegada. O menu tem origem: o botao de tres
+ * pontos que foi apertado. Somar deslize a isso empurra a caixa para um lado
+ * qualquer e desmente a origem -- a caixa passa a vir "de algum lugar" em vez
+ * de vir DALI.
+ *
+ * Quem diz de onde e o `transform-origin`, escrito no style pelo proprio
+ * componente, que e o unico que sabe onde o botao estava.
+ */
+/*
+ * Entrada da gaveta: pela borda de onde ela vem.
+ *
+ * A gaveta usava `rise`, que sobe 6px -- a mesma entrada do conteudo de
+ * pagina. Mas a gaveta esta colada na borda esquerda da tela e e de la que
+ * ela vem; subir e um caminho que nao corresponde a lugar nenhum. Entrar por
+ * um lado e sair por outro e o que faz uma interface parecer montada em
+ * pedacos: a pessoa perde o mapa de onde as coisas ficam quando estao
+ * fechadas.
+ *
+ * Deslocamento pela propria largura, sem esmaecer: painel solido que desliza
+ * le como objeto, painel que aparece transparente le como fantasma. O fundo
+ * escurecido atras ja e quem faz a separacao.
+ */
+@keyframes desliza-esq {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+.desliza-esq {
+  animation: desliza-esq 0.26s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@keyframes brota {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.brota {
+  animation: brota 0.16s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 
 @keyframes fade {
@@ -466,12 +540,91 @@ textarea::placeholder {
     background-color 0.16s ease-out;
 }
 
+/*
+ * Movimento reduzido: mais suave, nao ausente.
+ *
+ * Este bloco zerava toda animacao e toda transicao em 0.01ms. Isso cumpre a
+ * letra da preferencia e perde o sentido dela. Quem liga "reduzir movimento"
+ * esta pedindo menos DESLOCAMENTO na tela -- o que embrulha o estomago e
+ * dispara enxaqueca e vertigem e coisa que desliza, salta e balanca. Nao esta
+ * pedindo que a interface passe a piscar entre estados.
+ *
+ * Com tudo em 0.01ms o app perde o retorno: o menu aparece pronto, o cartao
+ * troca de cor num quadro, e some a pista de que algo respondeu ao clique.
+ * Justamente quem precisa de menos movimento fica com MENOS informacao.
+ *
+ * A regra aqui separa as duas coisas: o que desloca sai, o que so muda de cor
+ * ou de opacidade fica. Mesma informacao, sem o balanco.
+ */
 @media (prefers-reduced-motion: reduce) {
+  /* As entradas viram esmaecimento puro -- mesma duracao, sem o deslize. */
+  .rise,
+  .entra,
+  .pop,
+  .brota,
+  .desliza-esq {
+    animation-name: fade;
+  }
+  .pop-sai {
+    animation-name: fade-sai;
+  }
+
+  /* Cascata e escalonamento no tempo, que tambem e movimento: todos de uma vez. */
+  .entra {
+    animation-delay: 0ms;
+  }
+
+  /* Levantar no hover e deslocamento; a sombra sozinha ja diz "isto responde". */
+  .levanta:hover {
+    transform: none;
+  }
+
+  /* Giro continuo e o pior caso: nao da para parar sem perder o "carregando",
+     entao gira devagar o bastante para nao puxar o olho. */
+  .girar-lento {
+    animation-duration: 3s;
+  }
+
+  /*
+   * Transicoes: some o que move, fica o que tinge.
+   *
+   * Restringir `transition-property` em vez de zerar a duracao. `transform`
+   * fora da lista chega direto ao valor final, sem quadro intermediario; cor,
+   * opacidade e sombra continuam atravessando os seus 170ms.
+   *
+   * `filter` esta na lista, e foi um esquecimento pego no navegador: o botao
+   * de entrar clareia no hover com `brightness`, e sem `filter` aqui ele
+   * passou a saltar de tom em vez de acender. Brilho nao desloca nada -- e
+   * tinta, como cor e opacidade, e some junto com elas seria tirar retorno de
+   * quem ja tem menos.
+   *
+   * Nao entram, e cada ausencia e deliberada: `transform`, `translate`,
+   * `rotate` e `scale` sao deslocamento puro; `width`, `height` e `inset`
+   * empurram o resto da pagina junto -- e a largura da barra lateral, que
+   * anima ao encolher, e exatamente o caso que essa preferencia pede para
+   * parar de ver.
+   */
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+    transition-property: color, background-color, border-color, outline-color,
+      opacity, box-shadow, filter, backdrop-filter, fill, stroke !important;
+  }
+}
+
+/*
+ * Mais contraste: o cartao ganha borda.
+ *
+ * O cartao se distingue do fundo por uma sombra de 5% de alfa e nada mais.
+ * Em tela ao sol, em monitor mal calibrado ou para quem tem baixa visao, essa
+ * sombra simplesmente nao existe -- e a interface vira um campo branco sem
+ * divisao nenhuma. Com `prefers-contrast: more` a separacao passa a ser dita
+ * por uma linha, que nao depende de enxergar 5% de cinza.
+ */
+@media (prefers-contrast: more) {
+  .card,
+  .surface {
+    border: 1px solid var(--color-fg-dim);
   }
 }
 

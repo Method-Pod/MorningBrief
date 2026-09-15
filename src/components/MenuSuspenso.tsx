@@ -60,8 +60,31 @@ export function MenuSuspenso({
     const r = b.getBoundingClientRect();
     const altura = itens.length * 36 + 16;
     const cabeAbaixo = window.innerHeight - r.bottom - FOLGA > altura;
+    const esquerda = Math.max(
+      FOLGA,
+      Math.min(r.right - LARGURA, window.innerWidth - LARGURA - FOLGA)
+    );
+    /*
+     * De onde a caixa cresce.
+     *
+     * Sem isto o menu escalava a partir do proprio centro, que e um ponto sem
+     * significado nenhum: a caixa brotava do nada perto do botao. Ancorando a
+     * origem no botao, o gesto fica legivel -- o menu SAI dali, e ao fechar
+     * volta para la. E a mesma regra de ida e volta pelo mesmo caminho que a
+     * gaveta e o modal ja seguem.
+     *
+     * O x e o centro do botao medido dentro da caixa, nao o canto: o `left`
+     * acima e grampeado na borda da tela, entao num botao perto do canto a
+     * caixa escorrega e o canto dela deixa de coincidir com ele. Travado no
+     * intervalo da largura para a origem nunca cair fora da propria caixa.
+     */
+    const origemX = Math.max(
+      0,
+      Math.min(r.left + r.width / 2 - esquerda, LARGURA)
+    );
     setLugar({
-      left: Math.max(FOLGA, Math.min(r.right - LARGURA, window.innerWidth - LARGURA - FOLGA)),
+      left: esquerda,
+      transformOrigin: `${origemX}px ${cabeAbaixo ? "0" : "100%"}`,
       ...(cabeAbaixo
         ? { top: r.bottom + FOLGA }
         : { bottom: window.innerHeight - r.top + FOLGA }),
@@ -122,7 +145,7 @@ export function MenuSuspenso({
           <div
             ref={caixa}
             role="menu"
-            className="pop fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-white p-1.5 shadow-[0_12px_32px_-8px_rgb(20_24_26/0.25)]"
+            className="brota fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-white p-1.5 shadow-[0_12px_32px_-8px_rgb(20_24_26/0.25)]"
             style={{ width: LARGURA, ...lugar }}
           >
             {itens.map((item, i) => (

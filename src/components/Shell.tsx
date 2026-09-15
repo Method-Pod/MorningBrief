@@ -318,7 +318,7 @@ export function Shell({
             className="absolute inset-0 bg-fg/35 fade"
             onClick={() => setOpen(false)}
           />
-          <aside className="relative flex h-full w-[262px] flex-col overflow-y-auto bg-white pt-6 pb-5 rise">
+          <aside className="relative flex h-full w-[262px] flex-col overflow-y-auto bg-white pt-6 pb-5 desliza-esq">
             <div className="mb-6 flex items-center justify-between pr-3">
               {wordmark}
               <button
