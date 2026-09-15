@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { ACCENT_KEYS } from "@/lib/accents";
 import { RegistroApp } from "@/components/RegistroApp";
 import "./globals.css";
 
@@ -106,9 +107,22 @@ export const viewport: Viewport = {
 /**
  * Aplica o accent salvo antes da primeira pintura. Sem isso a página abre no
  * azul padrão e pisca para a cor escolhida no primeiro frame de hidratação.
+ *
+ * A lista de válidos vem de `ACCENT_KEYS`, e não escrita à mão aqui.
+ *
+ * Escrita à mão foi o que deu errado: ela tinha os quatro accents originais e
+ * ficou para trás quando outros quatro entraram. A validação então recusava o
+ * valor salvo de quem tinha escolhido laranja, ciano, violeta ou rosa, o
+ * atributo não era aplicado, e a página abria azul e pulava para a cor certa
+ * depois da hidratação -- exatamente a piscada que este script existe para
+ * evitar, acontecendo só para metade das opções.
+ *
+ * Derivar da mesma constante que o seletor usa faz as duas listas não terem
+ * como divergir de novo: acrescentar uma cor em `lib/accents` já a ensina aqui.
  */
 const ACCENT_BOOT = `try{var a=localStorage.getItem('mb.accent');
-if(['red','blue','green','yellow'].indexOf(a)>-1)document.documentElement.dataset.accent=a}catch(e){}`;
+if(${JSON.stringify([...ACCENT_KEYS])}.indexOf(a)>-1)document.documentElement.dataset.accent=a}catch(e){}
+try{if(localStorage.getItem('mb.design')==='padrao')document.documentElement.dataset.design='padrao'}catch(e){}`;
 
 export default async function RootLayout({
   children,

@@ -2,26 +2,18 @@
 
 import * as React from "react";
 
-/*
- * A ordem segue a roda de cores, não a de criação: com oito opções, agrupar por
- * matiz faz a fileira de bolinhas ser lida de uma vez.
- */
-export const ACCENTS = [
-  { key: "red", hex: "#e72828", name: "Vermelho" },
-  { key: "orange", hex: "#e78e28", name: "Laranja" },
-  { key: "yellow", hex: "#e7e128", name: "Amarelo" },
-  { key: "green", hex: "#28e75e", name: "Verde" },
-  { key: "cyan", hex: "#28e7e1", name: "Ciano" },
-  { key: "blue", hex: "#287ee7", name: "Azul" },
-  { key: "violet", hex: "#7e28e7", name: "Violeta" },
-  { key: "pink", hex: "#e7288e", name: "Rosa" },
-] as const;
+import { ACCENTS, ehAccent, type AccentKey } from "@/lib/accents";
 
-export type AccentKey = (typeof ACCENTS)[number]["key"];
+/*
+ * A lista em si mora em `lib/accents`, que não é módulo de cliente: o layout
+ * raiz precisa das mesmas chaves para montar o script que roda antes da
+ * primeira pintura. Reexportada aqui para os pontos de uso não mudarem de
+ * endereço.
+ */
+export { ACCENTS, type AccentKey } from "@/lib/accents";
 
 const KEY = "mb.accent";
-const isAccent = (v: unknown): v is AccentKey =>
-  ACCENTS.some((a) => a.key === v);
+const isAccent = ehAccent;
 
 /*
  * Store minúscula fora do React.
