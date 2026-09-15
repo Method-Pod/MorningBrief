@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, SpellCheck2, X } from "lucide-react";
 import { cx } from "../ui";
 import type { Achado } from "./revisao";
+import { useBordasRolagem } from "../bordasRolagem";
 
 /**
  * A lista do que o corretor achou, com o conserto ao lado de cada coisa.
@@ -30,6 +31,9 @@ export function PainelRevisao({
   aoAplicarTodas: () => void;
   aoFechar: () => void;
 }) {
+  /* Esmaecido nas pontas da lista que rola, para o corte não mentir fim. */
+  const bordas = useBordasRolagem<HTMLUListElement>();
+
   /* Só oferece "aplicar todas" quando há mais de uma: com uma só, o botão de
      cima e o de baixo fazem a mesma coisa, e um deles é ruído. */
   const vale = achados.filter((a) => a.trocas[0]);
@@ -75,7 +79,7 @@ export function PainelRevisao({
           Nada a corrigir por aqui.
         </p>
       ) : (
-        <ul className="max-h-[320px] divide-y divide-line-soft overflow-y-auto overscroll-contain">
+        <ul {...bordas} className="max-h-[320px] divide-y divide-line-soft overflow-y-auto overscroll-contain">
           {achados.map((a) => (
             <li key={a.id} className="px-3.5 py-2.5">
               {/*

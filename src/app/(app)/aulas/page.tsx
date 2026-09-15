@@ -48,6 +48,7 @@ import {
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { NADA_GRAVADO, nenhumaLinha, recadoDeErro } from "@/lib/erros";
 import { Carrossel } from "@/components/Carrossel";
+import { useBordasRolagem } from "@/components/bordasRolagem";
 import {
   CampoAssunto,
   Etiqueta,
@@ -180,6 +181,9 @@ const cursoVazio = () => ({
 });
 
 export default function AulasPage() {
+  /* Esmaecido nas pontas da lista que rola, para o corte não mentir fim. */
+  const bordas = useBordasRolagem<HTMLUListElement>();
+
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = useEstadoCacheado<Lesson[]>("lessons", []);
   const [cursos, setCursos] = useEstadoCacheado<Course[]>("courses", []);
@@ -1999,7 +2003,7 @@ export default function AulasPage() {
                 />
               </Field>
 
-              <ul className="max-h-[38vh] divide-y divide-line-soft overflow-y-auto">
+              <ul {...bordas} className="max-h-[38vh] divide-y divide-line-soft overflow-y-auto">
                 {achados.map((a, i) => (
                   <li key={a.url} className="flex items-center gap-3 py-2">
                     <span className="w-5 shrink-0 text-right text-[10.5px] text-fg-mute tnum">

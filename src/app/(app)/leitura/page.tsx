@@ -25,6 +25,7 @@ import { dataCurta, todayISO, ultimosDias } from "@/lib/format";
 import { type LivroAchado } from "@/lib/livros";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { nenhumaLinha, recadoDeErro } from "@/lib/erros";
+import { useBordasRolagem } from "@/components/bordasRolagem";
 import {
   Badge,
   Button,
@@ -126,6 +127,9 @@ const manualVazio = () => ({
 });
 
 export default function LeituraPage() {
+  /* Esmaecido nas pontas da lista que rola, para o corte não mentir fim. */
+  const bordas = useBordasRolagem<HTMLUListElement>();
+
   const supabase = React.useMemo(() => createClient(), []);
   const [livros, setLivros] = useEstadoCacheado<BookLista[]>("books", []);
   const [sessoes, setSessoes] = useEstadoCacheado<ReadingSession[]>(
@@ -1866,7 +1870,7 @@ export default function LeituraPage() {
               )}
 
               {achados.length > 0 && (
-                <ul className="max-h-[44vh] divide-y divide-line-soft overflow-y-auto">
+                <ul {...bordas} className="max-h-[44vh] divide-y divide-line-soft overflow-y-auto">
                   {achados.map((a) => (
                     <li key={a.id}>
                       <button

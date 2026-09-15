@@ -5,6 +5,7 @@ import { CalendarDays, RotateCcw } from "lucide-react";
 import { brl, dataCurta, valorDigitado } from "@/lib/format";
 import { mesesAdiante } from "./ContasExtras";
 import { Input, cx } from "./ui";
+import { useBordasRolagem } from "./bordasRolagem";
 
 export type Parcela = { due_date: string; amount: number };
 
@@ -97,6 +98,9 @@ export function EditorParcelas({
   onChange: (p: Parcela[]) => void;
   onRecalcular: () => void;
 }) {
+  /* Esmaecido nas pontas da lista que rola, para o corte não mentir fim. */
+  const bordas = useBordasRolagem<HTMLUListElement>();
+
   const total = de + parcelas.length - 1;
   const soma = parcelas.reduce((t, p) => t + (Number(p.amount) || 0), 0);
 
@@ -169,7 +173,7 @@ export function EditorParcelas({
         </span>
       </div>
 
-      <ul className="-mx-2 flex max-h-[38vh] flex-col overflow-y-auto pr-0.5 sm:mx-0">
+      <ul {...bordas} className="-mx-2 flex max-h-[38vh] flex-col overflow-y-auto pr-0.5 sm:mx-0">
         {parcelas.map((p, i) => (
           <li
             key={i}

@@ -7,6 +7,7 @@ import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
 import { BILL_CATEGORIES, type BillCategory } from "@/lib/types";
 import { Button, Input, Modal, cx } from "./ui";
+import { useBordasRolagem } from "./bordasRolagem";
 
 /** A tabela vem de supabase/CATEGORIAS.sql. */
 const TABELA = "bill_categories";
@@ -90,6 +91,9 @@ export function GerenciarCategorias({
   usoPorNome: Record<string, number>;
   onMudou: () => void;
 }) {
+  /* Esmaecido nas pontas da lista que rola, para o corte não mentir fim. */
+  const bordas = useBordasRolagem<HTMLUListElement>();
+
   const [nova, setNova] = React.useState("");
   const [editando, setEditando] = React.useState<string | null>(null);
   const [rascunho, setRascunho] = React.useState("");
@@ -239,7 +243,7 @@ export function GerenciarCategorias({
             </Button>
           </div>
 
-          <ul className="flex max-h-[46vh] flex-col overflow-y-auto">
+          <ul {...bordas} className="flex max-h-[46vh] flex-col overflow-y-auto">
             {estado.nomes.map((name) => {
               const uso = usoPorNome[name] ?? 0;
               const emEdicao = editando === name;

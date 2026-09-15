@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, ListChecks, Plus, Trash2 } from "lucide-react";
 import { type TaskItem } from "@/lib/types";
 import { Button, Input, cx } from "./ui";
+import { useBordasRolagem } from "./bordasRolagem";
 
 /* ------------------------------ progresso ------------------------------ */
 
@@ -145,6 +146,9 @@ export function EditorChecklist({
   onChange: (itens: ItemEmEdicao[]) => void;
   rotuloVazio?: string;
 }) {
+  /* Esmaecido nas pontas da lista que rola, para o corte não mentir fim. */
+  const bordas = useBordasRolagem<HTMLUListElement>();
+
   const [novo, setNovo] = React.useState("");
 
   const adicionar = () => {
@@ -163,7 +167,7 @@ export function EditorChecklist({
       )}
 
       {itens.length > 0 ? (
-        <ul className="flex max-h-[34vh] flex-col overflow-y-auto">
+        <ul {...bordas} className="flex max-h-[34vh] flex-col overflow-y-auto">
           {itens.map((item, i) => (
             <li
               key={i}
