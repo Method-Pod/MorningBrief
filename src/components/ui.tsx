@@ -47,18 +47,19 @@ export function Button({
    * chega no instante do toque, antes de qualquer resposta do servidor, e diz
    * apenas "recebi", que e justamente o que falta saber ali.
    *
-   * A volta e mais lenta que a ida de proposito: apertar precisa ser imediato,
-   * soltar pode relaxar. 75ms para baixo, 150ms para cima.
+   * O afundar em si saiu daqui e virou regra de elemento em globals.css, para
+   * valer tambem nos 156 `<button>` escritos a mao nas telas. Ficou la e nao
+   * aqui porque um botao do design system e um botao solto de uma tela devem
+   * responder igual ao toque -- se respondessem diferente, o app ensinaria que
+   * alguns botoes "pegam" e outros nao, sem que nada na aparencia diga qual e
+   * qual.
    *
-   * A transicao nomeia `scale`, e nao `transform`. Parece a mesma coisa e nao
-   * e: no Tailwind 4 o utilitario `scale-*` escreve na propriedade `scale`,
-   * que e independente de `transform` desde que os navegadores a separaram.
-   * Com `transform` na lista a regra existia, o botao encolhia -- e encolhia
-   * de um quadro para o outro, porque o que mudava nao era o que estava sendo
-   * transicionado. Pego no navegador, nao na leitura.
+   * O que continua aqui e a transicao das cores e da sombra, que e propria
+   * deste componente: a variante `outline` levanta a sombra no hover, e sem
+   * `box-shadow` na lista ela saltava.
    */
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-[color,background-color,border-color,box-shadow,scale] duration-150 active:scale-[0.97] active:duration-75 disabled:opacity-45 disabled:pointer-events-none select-none";
+    "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-[color,background-color,border-color,box-shadow] duration-150 disabled:opacity-45 disabled:pointer-events-none select-none";
   const sizes = {
     sm: "h-8 px-3 text-xs",
     md: "h-10 px-4 text-sm",

@@ -165,6 +165,16 @@
    * de entrelinha curta (linha alta afasta demais duas linhas de titulo). Um
    * valor de tracking para a escala inteira esta errado em algum tamanho.
    */
+  /*
+   * Quanto o botao encolhe ao ser apertado.
+   *
+   * Variavel, e nao 0.97 escrito na regra, porque o modo padrao precisa poder
+   * zerar isto -- e zerar e `1`, nao `none`: `scale: none` e valido mas volta
+   * a ser o valor inicial de outra forma, e `1` deixa explicito que a conta
+   * continua acontecendo e o resultado e nao mexer.
+   */
+  --apertar: 0.97;
+
   --titulo-tam: 26px;
   --titulo-peso: 700;
   --titulo-tracking: -0.03em;
@@ -184,6 +194,7 @@
  * bagunca original nao seria devolver nada a ninguem.
  */
 :root[data-design="padrao"] {
+  --apertar: 1;
   --elev-1: 0 1px 2px rgb(20 24 26 / 0.05);
   --elev-2: 0 10px 24px -12px rgb(20 24 26 / 0.18);
   --elev-3: 0 12px 32px -8px rgb(20 24 26 / 0.25);
@@ -347,6 +358,65 @@ body {
 
 .tnum {
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * Todo botao responde ao ser apertado.
+ *
+ * Isto estava no componente `Button`, e por isso alcancava 96 dos 252 botoes
+ * do app. Os outros 156 sao `<button>` escritos a mao nas telas -- as acoes
+ * dos cartoes, os icones, os filtros, o proprio "Entrar" -- e nenhum deles
+ * dava sinal de ter recebido o toque. No telefone nao ha hover: entre encostar
+ * o dedo e a rede responder nao havia nada, e em conexao ruim a pessoa aperta
+ * de novo. Como regra de elemento, alcanca os 252 sem depender de ninguem
+ * lembrar de usar o componente.
+ *
+ * `:active` vale a partir do pointer-down, nao do clique: o retorno chega no
+ * instante do toque, antes de qualquer resposta do servidor, e diz so
+ * "recebi" -- que e o que falta saber ali.
+ *
+ * Sem transicao, e isso e escolha e nao esquecimento. Por a transicao aqui
+ * exigiria declarar `transition-property` para todo botao, e essa declaracao
+ * venceria as classes `transition-colors` espalhadas pelas telas, trocando o
+ * que cada uma pediu por uma lista minha. O preco de nao ter seria a volta
+ * seca ao soltar; o preco de ter seria mexer, de longe, em transicao que
+ * alguem escolheu de perto. Fica seco: 3% em um quadro le como clique.
+ *
+ * `:not(:disabled)` porque botao desligado nao deve fingir que recebeu nada.
+ *
+ * Fora de `@layer` de proposito: regra sem camada vence utilitario do
+ * Tailwind, entao apertar vence o `hover:scale` que alguns cartoes tem. Quem
+ * esta com o dedo em cima manda mais que quem esta com o mouse por perto.
+ */
+button:not(:disabled):active {
+  scale: var(--apertar);
+}
+
+/*
+ * A faixa que resiste no fim, em vez de travar.
+ *
+ * Arrastando a faixa com o mouse, `scrollLeft` e grampeado pelo navegador: ao
+ * chegar na ponta o conteudo para de responder e a mao continua andando. Parede
+ * seca le como travamento -- a primeira leitura e que a pagina congelou --,
+ * enquanto resistencia que aumenta le como "responde, mas nao ha mais nada".
+ *
+ * Quem se move sao os filhos, e nao a faixa.
+ *
+ * Mover a faixa seria mover a moldura junto com o conteudo, e a moldura esta
+ * alinhada ao cartao em volta: ela sairia do lugar e o esmaecido das pontas
+ * iria junto. Deslocando cada filho pela mesma distancia, o conteudo escorrega
+ * dentro de uma moldura parada, que e o que acontece no telefone.
+ *
+ * A volta e transicao de CSS, nao laco de quadros. Laco de quadros ja deixou
+ * um cartao preso na tela nesta mesma sessao quando o navegador parou de
+ * entregar quadros com a janela coberta; transicao chega ao valor final mesmo
+ * sem ninguem olhando.
+ */
+.faixa-elastica > * {
+  translate: var(--puxao, 0px);
+}
+.faixa-elastica[data-soltando="1"] > * {
+  transition: translate 0.34s cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 /*

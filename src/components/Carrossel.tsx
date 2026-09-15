@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cx } from "./ui";
+import { modoPadraoLigado } from "./design";
 
 /**
  * Faixa que rola para o lado, arrastando com o mouse.
@@ -25,6 +26,23 @@ import { cx } from "./ui";
  */
 const LIMIAR_PX = 6;
 
+/**
+ * Quanto a faixa cede depois da ponta, em pixels.
+ *
+ * Formula de resistencia da referencia da Apple, a mesma que o iOS usa. Nao e
+ * uma fracao fixa do arrasto: quanto mais longe a mao vai, menos o conteudo
+ * acompanha, e a distancia tende a um teto. E por isso que a borracha nunca
+ * "acaba" nem arrebenta -- ela so fica cada vez mais dura, que e como uma
+ * coisa real avisa que chegou ao fim sem parar de responder.
+ *
+ * 0,55 e a constante do iOS. `largura` e o tamanho da faixa na tela: a mesma
+ * mao puxando uma faixa estreita e uma larga deve sentir a mesma coisa, entao
+ * a resistencia acompanha o tamanho em vez de ser um numero de pixels solto.
+ */
+function resistencia(alem: number, largura: number, constante = 0.55) {
+  return (alem * largura * constante) / (largura + constante * Math.abs(alem));
+}
+
 export function Carrossel({
   children,
   className,
@@ -35,6 +53,9 @@ export function Carrossel({
   const trilho = React.useRef<HTMLDivElement>(null);
   const gesto = React.useRef({ ativo: false, x0: 0, esq0: 0, andou: false });
   const [arrastando, setArrastando] = React.useState(false);
+  /* Deslocamento atual do conteudo alem da ponta, e se esta voltando. */
+  const [puxao, setPuxao] = React.useState(0);
+  const [soltando, setSoltando] = React.useState(false);
 
   /* Se há conteúdo escondido de cada lado, para o esmaecido dizer que tem
      mais — numa faixa sem barra de rolagem, é o único aviso. */
@@ -69,6 +90,11 @@ export function Carrossel({
     if (e.pointerType !== "mouse" || e.button !== 0) return;
     const el = trilho.current;
     if (!el) return;
+    /* Pegar de novo no meio da volta: o gesto que chega manda mais que a
+       animacao que esta saindo. Sem isto a faixa continuaria voltando sozinha
+       por baixo do dedo. */
+    setSoltando(false);
+    setPuxao(0);
     gesto.current = {
       ativo: true,
       x0: e.clientX,
@@ -96,13 +122,33 @@ export function Carrossel({
        */
       el.setPointerCapture(e.pointerId);
     }
-    el.scrollLeft = g.esq0 - d;
+    const desejado = g.esq0 - d;
+    const limite = el.scrollWidth - el.clientWidth;
+    el.scrollLeft = desejado;
+
+    if (modoPadraoLigado()) return;
+    /*
+     * O quanto passou da ponta -- e so isso vira borracha.
+     *
+     * Dentro do trilho, `scrollLeft` da conta sozinho e o conteudo nao se
+     * desloca nada. A borracha existe apenas no trecho que o navegador
+     * recusou.
+     */
+    const alem =
+      desejado < 0 ? -desejado : desejado > limite ? limite - desejado : 0;
+    setPuxao(alem === 0 ? 0 : resistencia(alem, el.clientWidth));
   };
 
   const aoSubir = () => {
     if (!gesto.current.ativo) return;
     gesto.current.ativo = false;
     setArrastando(false);
+    /* So liga a transicao se ha o que desfazer: ligada a toa, ela atrasaria
+       o proximo puxao em 340ms. */
+    if (puxao !== 0) {
+      setSoltando(true);
+      setPuxao(0);
+    }
     /* `andou` sobrevive até o clique logo abaixo, que é quem o zera. */
   };
 
@@ -134,8 +180,10 @@ export function Carrossel({
        * faixa e o vertical para a página, senão o dedo trava a rolagem do
        * telefone dentro dela.
        */
+      data-soltando={soltando ? "1" : undefined}
+      onTransitionEnd={() => setSoltando(false)}
       className={cx(
-        "flex gap-2.5 overflow-x-auto overscroll-x-contain pb-0.5 touch-pan-x sem-barra",
+        "faixa-elastica flex gap-2.5 overflow-x-auto overscroll-x-contain pb-0.5 touch-pan-x sem-barra",
         /*
          * A mão só aparece quando há para onde arrastar.
          *
@@ -150,12 +198,17 @@ export function Carrossel({
             : "cursor-grab",
         className
       )}
-      style={{
-        /* Esmaecido nas pontas onde há mais conteúdo. Em máscara e não em
-           gradiente por cima, para funcionar sobre qualquer fundo. */
-        maskImage: mascara(bordas),
-        WebkitMaskImage: mascara(bordas),
-      }}
+      style={
+        {
+          /* Esmaecido nas pontas onde há mais conteúdo. Em máscara e não em
+             gradiente por cima, para funcionar sobre qualquer fundo. */
+          maskImage: mascara(bordas),
+          WebkitMaskImage: mascara(bordas),
+          /* Lido pelos filhos em `.faixa-elastica > *`. Fica no pai porque
+             quem sabe o quanto passou da ponta é o trilho, não cada item. */
+          "--puxao": `${puxao}px`,
+        } as React.CSSProperties
+      }
       onScroll={medir}
     >
       {children}
