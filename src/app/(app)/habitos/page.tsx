@@ -269,7 +269,7 @@ export default function HabitosPage() {
     <div className="rise">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3.5">
         <div>
-          <h1 className="text-[26px] font-bold tracking-[-0.03em]">Hábitos</h1>
+          <h1 className="titulo-pagina">Hábitos</h1>
           <p className="mt-1 text-sm text-fg-mute">
             {ativos.length
               ? `${feitosHoje} de ${ativos.length} feitos hoje`

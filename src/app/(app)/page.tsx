@@ -438,7 +438,7 @@ export default function HomePage() {
         {/* Data e clima na mesma pílula, separados por um traço fino.
             Duas pílulas soltas competiriam entre si; aqui a data continua sendo
             o assunto e a temperatura entra como complemento. */}
-        <span className="flex items-center gap-2.5 whitespace-nowrap rounded-full bg-white px-4 py-2.5 text-[13px] font-semibold text-fg-dim shadow-[0_1px_2px_rgb(20_24_26/0.05)]">
+        <span className="flex items-center gap-2.5 whitespace-nowrap rounded-full bg-white px-4 py-2.5 text-[13px] font-semibold text-fg-dim shadow-[var(--elev-1)]">
           {now.toLocaleDateString("pt-BR", {
             weekday: "long",
             day: "2-digit",

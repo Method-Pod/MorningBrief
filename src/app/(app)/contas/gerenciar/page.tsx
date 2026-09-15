@@ -266,7 +266,7 @@ export default function GerenciarPage() {
           <ArrowLeft size={18} />
         </Link>
         <div className="min-w-0">
-          <h1 className="text-[26px] font-bold tracking-[-0.03em]">
+          <h1 className="titulo-pagina">
             Gerenciar contas
           </h1>
           <p className="mt-1 text-sm text-fg-mute">

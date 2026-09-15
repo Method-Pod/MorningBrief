@@ -145,7 +145,7 @@ export function MenuSuspenso({
           <div
             ref={caixa}
             role="menu"
-            className="brota fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-white p-1.5 shadow-[0_12px_32px_-8px_rgb(20_24_26/0.25)]"
+            className="brota fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-white p-1.5 shadow-[var(--elev-3)]"
             style={{ width: LARGURA, ...lugar }}
           >
             {itens.map((item, i) => (

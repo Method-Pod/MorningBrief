@@ -943,7 +943,7 @@ export default function AulasPage() {
     <div className="space-y-5 rise">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Aulas</h1>
+          <h1 className="titulo-pagina">Aulas</h1>
           <p className="mt-1 text-sm text-fg-mute">
             {contagem("fila")} para assistir · {contagem("feitas")} assistida
             {contagem("feitas") === 1 ? "" : "s"}

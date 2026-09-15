@@ -129,7 +129,7 @@ function Formulario() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-3 sm:p-6">
-      <div className="w-full max-w-[1040px] rounded-[24px] bg-white p-3 shadow-[0_24px_70px_-28px_rgb(20_24_26/0.22)] sm:rounded-[28px] sm:p-4">
+      <div className="w-full max-w-[1040px] rounded-[24px] bg-white p-3 shadow-[var(--elev-4)] sm:rounded-[28px] sm:p-4">
         <div className="grid items-stretch gap-4 lg:grid-cols-2">
           {/* ---------------- painel de marca ---------------- */}
           {/* No mobile vira faixa compacta em cima do formulário, em vez de

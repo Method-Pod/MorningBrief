@@ -125,6 +125,75 @@
   --a-line-soft: #f0f2f2;
 }
 
+/* ============================================================
+   Profundidade e tipografia.
+
+   Tudo aqui e escrito como variavel, e nao como valor solto, por um motivo
+   so: `:root[data-design="padrao"]`, mais abaixo, devolve cada uma ao que
+   era antes. Quem quiser a interface de volta como estava aperta um botao na
+   pagina de Conta, sem precisar de mim nem de git.
+   ============================================================ */
+:root {
+  /*
+   * Elevacao em duas camadas, e nao uma sombra so.
+   *
+   * O cartao tinha `0 1px 2px` com 5% de preto -- uma linha de contato e mais
+   * nada. Objeto real faz duas sombras ao mesmo tempo: uma curta e escura logo
+   * embaixo, onde ele quase encosta, e uma larga e fraca espalhada em volta,
+   * da luz do ambiente. Com so a primeira, a superficie parece adesivo colado
+   * no fundo; com as duas, parece estar acima dele.
+   *
+   * A escala sobe junto com o tamanho da superficie, que e a regra da
+   * referencia: quanto maior a coisa, mais grossa ela deve parecer. Uma
+   * pastilha e o modal nao podem projetar a mesma sombra.
+   */
+  --elev-1: 0 1px 2px rgb(20 24 26 / 0.05), 0 4px 10px -6px rgb(20 24 26 / 0.09);
+  --elev-2: 0 2px 4px rgb(20 24 26 / 0.06), 0 12px 24px -12px rgb(20 24 26 / 0.18);
+  --elev-3: 0 4px 8px rgb(20 24 26 / 0.07), 0 18px 40px -14px rgb(20 24 26 / 0.26);
+  --elev-4: 0 8px 16px rgb(20 24 26 / 0.09), 0 32px 68px -22px rgb(20 24 26 / 0.34);
+
+  /*
+   * O titulo de pagina, medido como conjunto.
+   *
+   * Havia quatro titulos diferentes espalhados pelas telas -- 24px/600,
+   * 26px/700, e dois com clamp -- e a diferenca nao queria dizer nada: era
+   * so a ordem em que as paginas foram escritas. Trocar de aba mudava o peso
+   * do titulo sem que nada tivesse mudado de importancia.
+   *
+   * Tamanho, peso, tracking e entrelinha vem juntos porque sao um so ajuste:
+   * letra grande precisa de tracking negativo (ela se espalha ao crescer) e
+   * de entrelinha curta (linha alta afasta demais duas linhas de titulo). Um
+   * valor de tracking para a escala inteira esta errado em algum tamanho.
+   */
+  --titulo-tam: 26px;
+  --titulo-peso: 700;
+  --titulo-tracking: -0.03em;
+  --titulo-leading: 1.15;
+}
+
+/*
+ * Modo padrao: a interface como era antes desta camada.
+ *
+ * Nao e um tema alternativo nem um "modo simples" -- e a saida. Cada variavel
+ * volta ao valor exato que tinha antes, entao o que se ve com o atributo
+ * ligado e a mesma tela de antes de tudo isto.
+ *
+ * O titulo volta a 24px/600, que era o mais comum dos quatro que existiam.
+ * As variantes de 26px e as com clamp nao tem como voltar uma a uma por
+ * variavel -- eram diferencas por pagina, nao por sistema -- e restaurar a
+ * bagunca original nao seria devolver nada a ninguem.
+ */
+:root[data-design="padrao"] {
+  --elev-1: 0 1px 2px rgb(20 24 26 / 0.05);
+  --elev-2: 0 10px 24px -12px rgb(20 24 26 / 0.18);
+  --elev-3: 0 12px 32px -8px rgb(20 24 26 / 0.25);
+  --elev-4: 0 24px 70px -28px rgb(20 24 26 / 0.22);
+  --titulo-tam: 24px;
+  --titulo-peso: 600;
+  --titulo-tracking: -0.025em;
+  --titulo-leading: 1.25;
+}
+
 @theme {
   /* superfícies — nomes antigos mantidos para não reescrever cada página */
   --color-ink-950: var(--a-bg);
@@ -187,16 +256,6 @@ body {
   color: var(--color-fg);
   -webkit-font-smoothing: antialiased;
   /*
-   * Deixa a fonte trocar de desenho conforme o tamanho.
-   *
-   * Uma fonte variavel com eixo optico nao e a mesma letra ampliada: no corpo
-   * de 12px ela vem com haste mais grossa e contraste menor para aguentar o
-   * tamanho, e no titulo de 30px vem mais fina e fechada. O navegador so faz
-   * essa troca se mandarem -- o padrao e `none`, que congela um desenho so
-   * para a escala inteira. Sem eixo optico na fonte, nao faz nada.
-   */
-  font-optical-sizing: auto;
-  /*
    * Impede o Safari de inflar texto sozinho ao girar o telefone.
    *
    * O ajuste automatico multiplica o corpo de algumas caixas e nao de outras,
@@ -232,8 +291,24 @@ body {
 @utility card {
   background: #fff;
   border-radius: 1.375rem;
-  box-shadow: 0 1px 2px rgb(20 24 26 / 0.05);
+  box-shadow: var(--elev-1);
 }
+
+/*
+ * O titulo de pagina como uma classe so.
+ *
+ * Substitui as quatro combinacoes soltas que havia nas telas. Em `rem`, e nao
+ * em `px`, para acompanhar quem aumentou o corpo de letra nas preferencias do
+ * navegador: com `px` o titulo fica do mesmo tamanho enquanto o texto em volta
+ * cresce, e a hierarquia se inverte justamente para quem precisa dela.
+ */
+@utility titulo-pagina {
+  font-size: calc(var(--titulo-tam) / 16 * 1rem);
+  font-weight: var(--titulo-peso);
+  letter-spacing: var(--titulo-tracking);
+  line-height: var(--titulo-leading);
+}
+
 
 /*
  * Camada própria para a barra lateral fixa.
@@ -487,7 +562,7 @@ textarea::placeholder {
     box-shadow 0.18s cubic-bezier(0.22, 0.61, 0.36, 1);
   &:hover {
     transform: translate3d(0, -2px, 0);
-    box-shadow: 0 10px 24px -12px rgb(20 24 26 / 0.18);
+    box-shadow: var(--elev-2);
   }
 }
 

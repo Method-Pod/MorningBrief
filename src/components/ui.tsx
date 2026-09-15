@@ -66,7 +66,7 @@ export function Button({
   }[size];
   const variants = {
     primary: "bg-brand-500 text-on-brand hover:bg-brand-600",
-    outline: "bg-white text-fg-dim shadow-[0_1px_2px_rgb(20_24_26/0.05)] hover:text-fg hover:shadow-[0_6px_20px_-8px_rgb(20_24_26/0.16)]",
+    outline: "bg-white text-fg-dim shadow-[var(--elev-1)] hover:text-fg hover:shadow-[var(--elev-2)]",
     ghost: "text-fg-mute hover:text-fg hover:bg-ink-800",
     subtle: "bg-ink-800 text-fg-dim hover:bg-brand-500/12 hover:text-brand-400",
     danger: "bg-neg/10 text-neg hover:bg-neg/20",
@@ -181,7 +181,7 @@ export function Segmented<T extends string>({
           className={cx(
             "h-7 rounded-lg px-3 text-xs font-medium transition-colors",
             value === o.value
-              ? "bg-white text-brand-400 shadow-[0_1px_2px_rgb(20_24_26/0.05)]"
+              ? "bg-white text-brand-400 shadow-[var(--elev-1)]"
               : "text-fg-mute hover:text-fg-dim"
           )}
         >

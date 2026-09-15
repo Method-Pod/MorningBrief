@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { modoPadraoLigado } from "./design";
+
 /**
  * Arrasto de cartão entre colunas, com o cartão seguindo o ponteiro.
  *
@@ -46,6 +48,24 @@ const PARADA_PX = 0.5;
 const PARADA_VEL = 12;
 /** Amostras de ponteiro mais velhas que isto não contam para a velocidade. */
 const JANELA_MS = 90;
+/*
+ * Teto do voo de volta, em milissegundos.
+ *
+ * A mola termina sozinha -- medida em simulação, o pior arremesso leva 0,8s.
+ * Isto não é a duração dela: é a rede embaixo. Quem encerra o voo e apaga a
+ * cópia é o próprio laço de quadros, então se os quadros pararem de chegar a
+ * limpeza nunca acontece, e o que fica na tela é uma cópia presa junto com o
+ * cartão original apagado -- um fantasma que não sai mais.
+ *
+ * E os quadros param: o navegador suspende `requestAnimationFrame` em aba de
+ * fundo e também em janela coberta por outra. Não é caso de laboratório --
+ * foi exatamente assim que este defeito apareceu, numa janela atrás de outra,
+ * com a aba se dizendo visível.
+ *
+ * 1200ms dá folga sobre os 0,8s do pior caso e ainda assim desfaz o estado
+ * antes de alguém voltar para a janela e ver o fantasma.
+ */
+const TETO_VOO_MS = 1200;
 
 const trava = (v: number, min: number, max: number) =>
   Math.min(max, Math.max(min, v));
@@ -102,12 +122,15 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
     hist: { x: number; y: number; t: number }[];
     /* Durante o voo de volta o gesto já acabou, mas o estado ainda vive. */
     voltando: boolean;
+    /* Rede de segurança do voo, para o caso de os quadros pararem. */
+    rede: number | null;
   } | null>(null);
 
   const limpar = React.useCallback(() => {
     const e = estado.current;
     if (!e) return;
     if (e.quadro !== null) cancelAnimationFrame(e.quadro);
+    if (e.rede !== null) clearTimeout(e.rede);
     e.clone?.remove();
     delete e.origem.dataset.arrastando;
     if (e.alvo) delete e.alvo.dataset.alvo;
@@ -156,7 +179,7 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
 
         const clone = e.origem.cloneNode(true) as HTMLElement;
         delete clone.dataset.arrastando;
-        clone.style.cssText = `position:fixed;left:${e.esqueda}px;top:${e.topo}px;width:${e.largura}px;margin:0;pointer-events:none;z-index:60;will-change:transform;box-shadow:0 18px 40px -12px rgb(20 24 26 / 0.28);`;
+        clone.style.cssText = `position:fixed;left:${e.esqueda}px;top:${e.topo}px;width:${e.largura}px;margin:0;pointer-events:none;z-index:60;will-change:transform;box-shadow:var(--elev-4);`;
         /* A cópia não deve repetir a animação de entrada do original. */
         clone.classList.remove("entra", "levanta");
         document.body.appendChild(clone);
@@ -276,6 +299,15 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
     };
 
     e.quadro = requestAnimationFrame(passo);
+    /*
+     * `setTimeout` continua correndo onde `requestAnimationFrame` para -- é
+     * por isso que a rede é um temporizador e não mais um quadro. Se a mola
+     * chegar antes, `limpar` cancela isto; se os quadros nunca vierem, isto
+     * desfaz o gesto sem eles.
+     */
+    e.rede = window.setTimeout(() => {
+      if (estado.current?.voltando) limpar();
+    }, TETO_VOO_MS);
   }, [limpar]);
 
   const soltar = React.useCallback(
@@ -303,11 +335,22 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
         limpar();
         onSoltar(item, coluna);
       } else if (arrastou) {
-        /* Quem pede menos movimento não quer ver o voo: some direto. */
+        /*
+         * Dois motivos para pular o voo, e eles são diferentes.
+         *
+         * `prefers-reduced-motion` é uma necessidade declarada no sistema
+         * operacional: movimento grande incomoda de verdade quem liga isso.
+         * `modoPadraoLigado` é uma escolha feita na página de Conta, de quem
+         * quis a interface como era antes — e antes a cópia sumia na hora.
+         *
+         * Nos dois casos o resultado é o mesmo, mas a razão não, e por isso
+         * são duas perguntas e não uma: desligar uma nunca deve desligar a
+         * outra sem querer.
+         */
         const parado = window.matchMedia?.(
           "(prefers-reduced-motion: reduce)"
         )?.matches;
-        if (parado) limpar();
+        if (parado || modoPadraoLigado()) limpar();
         else voltarParaOrigem();
       } else {
         /* Sem `ativo`, o ponteiro nem passou do limiar: foi um clique, e quem
@@ -381,6 +424,7 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
         quadro: null,
         hist: [{ x: ev.clientX, y: ev.clientY, t: performance.now() }],
         voltando: false,
+        rede: null,
       };
 
       window.addEventListener("pointermove", mover);

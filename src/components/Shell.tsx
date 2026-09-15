@@ -341,7 +341,7 @@ export function Shell({
           <button
             onClick={() => setOpen(true)}
             aria-label="Abrir menu"
-            className="grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-white text-fg-dim shadow-[0_1px_2px_rgb(20_24_26/0.05)]"
+            className="grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-white text-fg-dim shadow-[var(--elev-1)]"
           >
             <Menu size={17} />
           </button>

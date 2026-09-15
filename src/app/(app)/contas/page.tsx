@@ -1086,7 +1086,7 @@ export default function ContasPage() {
     <div className="rise">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3.5">
         <div>
-          <h1 className="text-[26px] font-bold tracking-[-0.03em]">
+          <h1 className="titulo-pagina">
             Contas a pagar
           </h1>
           <p className="mt-1 text-sm text-fg-mute">

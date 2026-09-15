@@ -255,7 +255,7 @@ function Suspenso({
             ref={caixa}
             role="menu"
             onMouseDown={(e) => e.preventDefault()}
-            className="pop fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-white p-1.5 shadow-[0_12px_32px_-8px_rgb(20_24_26/0.25)]"
+            className="pop fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-white p-1.5 shadow-[var(--elev-3)]"
             style={{ width: largura, ...lugar }}
           >
             {children(() => setAberto(false))}

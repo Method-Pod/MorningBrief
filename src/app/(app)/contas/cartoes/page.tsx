@@ -203,7 +203,7 @@ export default function CartoesPage() {
           <ArrowLeft size={18} />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="text-[26px] font-bold tracking-[-0.03em]">
+          <h1 className="titulo-pagina">
             Meus cartões
           </h1>
           <p className="mt-1 text-sm text-fg-mute">
