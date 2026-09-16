@@ -105,6 +105,12 @@ const blank = () => ({
   day_of_month: new Date().getDate(),
 });
 
+/** O `q` da URL, quando a busca global mandou para cá. */
+function paramBusca() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("q") ?? "";
+}
+
 export default function DemandasPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = useEstadoCacheado<Task[]>("tasks", []);
@@ -113,7 +119,16 @@ export default function DemandasPage() {
     () => !temCache("tasks", "task_items")
   );
   const [view, setView] = React.useState<"board" | "list" | "cliente">("board");
-  const [q, setQ] = React.useState("");
+  /*
+   * Semeado pela busca global: `?q=` na URL entra como filtro inicial.
+   *
+   * Sem isto a busca global levava a pessoa até a tela certa e a largava na
+   * lista inteira, para procurar de novo o que ela acabou de digitar.
+   * `useState` com valor inicial, e não um efeito depois da montagem, para a
+   * tela já abrir filtrada em vez de mostrar tudo e encolher no quadro
+   * seguinte.
+   */
+  const [q, setQ] = React.useState(() => paramBusca());
   const [prio, setPrio] = React.useState<"all" | Priority>("all");
   const [cliente, setCliente] = React.useState<"all" | string>("all");
   const [open, setOpen] = React.useState(false);

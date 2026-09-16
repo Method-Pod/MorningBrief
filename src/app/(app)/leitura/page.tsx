@@ -127,6 +127,12 @@ const manualVazio = () => ({
   description: "",
 });
 
+/** O `q` da URL, quando a busca global mandou para cá. */
+function paramBusca() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("q") ?? "";
+}
+
 export default function LeituraPage() {
   /* Esmaecido nas pontas da lista que rola, para o corte não mentir fim. */
   const bordas = useBordasRolagem<HTMLUListElement>();
@@ -146,7 +152,16 @@ export default function LeituraPage() {
     recarregar?: boolean;
   } | null>(null);
   const [prateleira, setPrateleira] = React.useState<Filtro>("reading");
-  const [busca, setBusca] = React.useState("");
+  /*
+   * Semeado pela busca global: `?q=` na URL entra como filtro inicial.
+   *
+   * Sem isto a busca global levava a pessoa até a tela certa e a largava na
+   * lista inteira, para procurar de novo o que ela acabou de digitar.
+   * `useState` com valor inicial, e não um efeito depois da montagem, para a
+   * tela já abrir filtrada em vez de mostrar tudo e encolher no quadro
+   * seguinte.
+   */
+  const [busca, setBusca] = React.useState(() => paramBusca());
   const [ordem, setOrdem] = React.useState<Ordem>("recentes");
 
   /* meta do ano */

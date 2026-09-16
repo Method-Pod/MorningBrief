@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { BuscaGlobal } from "./BuscaGlobal";
 import * as React from "react";
 import {
   BookOpen,
@@ -17,6 +18,7 @@ import {
   StickyNote,
   Wallet,
   X,
+  Search,
 } from "lucide-react";
 import { Iniciais, useAvatar } from "./Avatar";
 import { IdentityProvider } from "./identity";
@@ -343,6 +345,8 @@ export function Shell({
         </div>
       )}
 
+      <BuscaGlobal />
+
       {/* -------- conteúdo -------- */}
       <main className="min-w-0 flex-1 px-5 pb-14 pt-6 sm:px-8 sm:pt-8 lg:px-8">
         <div className="mb-5 flex items-center gap-3 lg:hidden">
@@ -356,6 +360,15 @@ export function Shell({
           <span className="text-[18px] font-bold tracking-[-0.035em]">
             morning<span className="font-normal text-fg-mute">brief</span>
           </span>
+          {/* No telefone não há Ctrl+K: sem este botão a busca global não
+              existiria ali. */}
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent("mb:buscar"))}
+            aria-label="Buscar em tudo"
+            className="ml-auto grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-white text-fg-dim shadow-[var(--elev-1)]"
+          >
+            <Search size={17} />
+          </button>
         </div>
         <IdentityProvider value={{ email, nome }}>{children}</IdentityProvider>
       </main>

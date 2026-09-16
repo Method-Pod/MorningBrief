@@ -141,6 +141,12 @@ const vazio = () => ({
   fechaDia: "",
 });
 
+/** O `q` da URL, quando a busca global mandou para cá. */
+function paramBusca() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("q") ?? "";
+}
+
 export default function ContasPage() {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
@@ -151,7 +157,16 @@ export default function ContasPage() {
   );
   const [filtro, setFiltro] = React.useState<Filtro>("todas");
   const [ordem, setOrdem] = React.useState<Ordem>("vencimento");
-  const [q, setQ] = React.useState("");
+  /*
+   * Semeado pela busca global: `?q=` na URL entra como filtro inicial.
+   *
+   * Sem isto a busca global levava a pessoa até a tela certa e a largava na
+   * lista inteira, para procurar de novo o que ela acabou de digitar.
+   * `useState` com valor inicial, e não um efeito depois da montagem, para a
+   * tela já abrir filtrada em vez de mostrar tudo e encolher no quadro
+   * seguinte.
+   */
+  const [q, setQ] = React.useState(() => paramBusca());
   const [dia, setDia] = React.useState<string | null>(null);
   /** "AAAA-MM" em foco. A lista, o resumo, os gráficos e o calendário seguem. */
   const [mes, setMes] = React.useState(() => todayISO().slice(0, 7));
