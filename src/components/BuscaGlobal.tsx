@@ -40,6 +40,15 @@ const POR_TIPO = 4;
 /** Abaixo disto quase tudo casa, e a lista não ajuda a decidir. */
 const MINIMO = 2;
 
+/** "20 de set." — curto, porque divide a linha com o nome. */
+function dataCurta(iso: string) {
+  const [a, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return new Date(a, m - 1, d).toLocaleDateString("pt-BR", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
 type Achado = {
   id: string;
   titulo: string;
@@ -164,9 +173,19 @@ export function BuscaGlobal() {
           destino: `/anotacoes/${r.id}`,
           icone: <FileText size={15} />,
         })),
-        ...((contas.data as { id: string; description: string }[]) ?? []).map((r) => ({
+        ...(
+          (contas.data as { id: string; description: string; due_date: string }[]) ?? []
+        ).map((r) => ({
           id: `c${r.id}`,
           titulo: r.description,
+          /*
+           * A data é o que distingue uma conta da outra.
+           *
+           * Conta se repete todo mês, então buscar "internet" devolvia quatro
+           * linhas escritas igual, sem nada para escolher entre elas. O nome
+           * sozinho não identifica a linha; o vencimento identifica.
+           */
+          detalhe: r.due_date ? `vence ${dataCurta(r.due_date)}` : null,
           onde: "Conta",
           destino: `/contas?q=${q}`,
           icone: <Wallet size={15} />,

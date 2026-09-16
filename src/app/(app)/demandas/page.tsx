@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -105,12 +106,6 @@ const blank = () => ({
   day_of_month: new Date().getDate(),
 });
 
-/** O `q` da URL, quando a busca global mandou para cá. */
-function paramBusca() {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("q") ?? "";
-}
-
 export default function DemandasPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = useEstadoCacheado<Task[]>("tasks", []);
@@ -120,6 +115,17 @@ export default function DemandasPage() {
   );
   const [view, setView] = React.useState<"board" | "list" | "cliente">("board");
   /*
+   * `useSearchParams`, e não `window.location.search`.
+   *
+   * Lendo direto do `window`, a semeadura funcionava ao abrir a URL colada na
+   * barra e falhava vinda da busca global — na navegação do lado do cliente o
+   * `useState` roda antes de o endereço ser atualizado, então o parâmetro
+   * ainda não estava lá. O hook entrega os parâmetros da rota que está
+   * entrando, que é o que se quer nos dois casos.
+   */
+  const paramDaUrl = useSearchParams();
+
+  /*
    * Semeado pela busca global: `?q=` na URL entra como filtro inicial.
    *
    * Sem isto a busca global levava a pessoa até a tela certa e a largava na
@@ -128,7 +134,7 @@ export default function DemandasPage() {
    * tela já abrir filtrada em vez de mostrar tudo e encolher no quadro
    * seguinte.
    */
-  const [q, setQ] = React.useState(() => paramBusca());
+  const [q, setQ] = React.useState(() => paramDaUrl.get("q") ?? "");
   const [prio, setPrio] = React.useState<"all" | Priority>("all");
   const [cliente, setCliente] = React.useState<"all" | string>("all");
   const [open, setOpen] = React.useState(false);

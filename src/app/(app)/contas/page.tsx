@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { MenuSuspenso } from "@/components/MenuSuspenso";
 import Link from "next/link";
 import {
@@ -141,12 +141,6 @@ const vazio = () => ({
   fechaDia: "",
 });
 
-/** O `q` da URL, quando a busca global mandou para cá. */
-function paramBusca() {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("q") ?? "";
-}
-
 export default function ContasPage() {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
@@ -158,6 +152,17 @@ export default function ContasPage() {
   const [filtro, setFiltro] = React.useState<Filtro>("todas");
   const [ordem, setOrdem] = React.useState<Ordem>("vencimento");
   /*
+   * `useSearchParams`, e não `window.location.search`.
+   *
+   * Lendo direto do `window`, a semeadura funcionava ao abrir a URL colada na
+   * barra e falhava vinda da busca global — na navegação do lado do cliente o
+   * `useState` roda antes de o endereço ser atualizado, então o parâmetro
+   * ainda não estava lá. O hook entrega os parâmetros da rota que está
+   * entrando, que é o que se quer nos dois casos.
+   */
+  const paramDaUrl = useSearchParams();
+
+  /*
    * Semeado pela busca global: `?q=` na URL entra como filtro inicial.
    *
    * Sem isto a busca global levava a pessoa até a tela certa e a largava na
@@ -166,7 +171,7 @@ export default function ContasPage() {
    * tela já abrir filtrada em vez de mostrar tudo e encolher no quadro
    * seguinte.
    */
-  const [q, setQ] = React.useState(() => paramBusca());
+  const [q, setQ] = React.useState(() => paramDaUrl.get("q") ?? "");
   const [dia, setDia] = React.useState<string | null>(null);
   /** "AAAA-MM" em foco. A lista, o resumo, os gráficos e o calendário seguem. */
   const [mes, setMes] = React.useState(() => todayISO().slice(0, 7));

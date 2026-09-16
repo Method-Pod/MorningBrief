@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FileText,
   Pin,
@@ -74,12 +74,6 @@ const COR_DO_ICONE: Record<string, string> = {
   slate: "text-fg-mute bg-ink-800",
 };
 
-/** O `q` da URL, quando a busca global mandou para cá. */
-function paramBusca() {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("q") ?? "";
-}
-
 export default function AnotacoesPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const router = useRouter();
@@ -96,6 +90,17 @@ export default function AnotacoesPage() {
   /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
   const [loading, setLoading] = React.useState(() => !temCache("notes"));
   /*
+   * `useSearchParams`, e não `window.location.search`.
+   *
+   * Lendo direto do `window`, a semeadura funcionava ao abrir a URL colada na
+   * barra e falhava vinda da busca global — na navegação do lado do cliente o
+   * `useState` roda antes de o endereço ser atualizado, então o parâmetro
+   * ainda não estava lá. O hook entrega os parâmetros da rota que está
+   * entrando, que é o que se quer nos dois casos.
+   */
+  const paramDaUrl = useSearchParams();
+
+  /*
    * Semeado pela busca global: `?q=` na URL entra como filtro inicial.
    *
    * Sem isto a busca global levava a pessoa até a tela certa e a largava na
@@ -104,7 +109,7 @@ export default function AnotacoesPage() {
    * tela já abrir filtrada em vez de mostrar tudo e encolher no quadro
    * seguinte.
    */
-  const [q, setQ] = React.useState(() => paramBusca());
+  const [q, setQ] = React.useState(() => paramDaUrl.get("q") ?? "");
   const [criando, setCriando] = React.useState(false);
   const [filtro, setFiltro] = React.useState<"all" | "sem" | string>("all");
   const [gerindo, setGerindo] = React.useState(false);
