@@ -32,7 +32,6 @@ import {
   type TaskItem,
 } from "@/lib/types";
 import { dateBR, daysUntil, todayISO } from "@/lib/format";
-import { HORAS_RETENCAO } from "@/lib/limpeza";
 import { frequencyDescription } from "@/lib/recurring";
 import {
   Badge,
@@ -764,7 +763,7 @@ export default function DemandasPage() {
           inteira acima dos filtros. */}
       <p className="mb-3 flex items-center gap-1.5 text-[11px] text-fg-mute sm:mb-4 sm:gap-2 sm:text-[12px]">
         <Info size={12} className="shrink-0" />
-        Concluídas saem {HORAS_RETENCAO}h depois.
+        Concluídas saem às 6h da manhã.
       </p>
 
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">

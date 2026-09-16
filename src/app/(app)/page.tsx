@@ -43,8 +43,8 @@ import {
 } from "@/lib/format";
 import { textoDaNota } from "@/lib/notas";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
+import { ultimaVirada } from "@/lib/viradaDoDia";
 import {
-  HORAS_RETENCAO,
   limparAulasAssistidas,
   limparConcluidas,
 } from "@/lib/limpeza";
@@ -200,9 +200,11 @@ export default function HomePage() {
     setBills(
       ((b.data as Bill[]) ?? []).map((x) => ({ ...x, amount: Number(x.amount) }))
     );
-    /* Descarta o que a limpeza vai apagar: sem isso, a demanda concluída há
-       mais de 24h apareceria por um instante antes de o delete responder. */
-      const corte = Date.now() - HORAS_RETENCAO * 3600 * 1000;
+    /* Descarta o que a limpeza vai apagar: sem isso, a demanda concluída num
+       dia de manutenção já encerrado apareceria por um instante antes de o
+       delete responder. Mesma virada que a limpeza usa, senão o que some da
+       tela e o que sai do banco discordariam. */
+    const corte = ultimaVirada().getTime();
     setTasks(
       ((t.data as Task[]) ?? []).filter(
         (x) =>
@@ -452,7 +454,7 @@ export default function HomePage() {
         <div className="mb-4 flex items-center gap-2.5 rounded-[14px] bg-ink-800 px-4 py-3 text-[12.5px] text-fg-mute">
           <Trash2 size={15} className="shrink-0" />
           {limpas} demanda{limpas > 1 ? "s" : ""} concluída
-          {limpas > 1 ? "s" : ""} há mais de 24h {limpas > 1 ? "foram" : "foi"}{" "}
+          {limpas > 1 ? "s" : ""} de ontem {limpas > 1 ? "foram" : "foi"}{" "}
           removida{limpas > 1 ? "s" : ""}.
         </div>
       )}

@@ -6,7 +6,6 @@ import {
   limparPagasDeMesesAnteriores,
   limparEventosPassados,
   limparAulasAssistidas,
-  HORAS_RETENCAO,
   MESES_RETENCAO_PAGAS,
   DIAS_RETENCAO_AULAS,
 } from "../src/lib/limpeza.ts";
@@ -16,17 +15,33 @@ const diasAtras = (d) => new Date(Date.now() - d * 86_400_000).toISOString();
 
 /* ------------------------- demandas concluidas ------------------------- */
 
-test("so apaga demanda concluida, e so depois da janela", async () => {
+test("so apaga demanda concluida, e so de antes da virada das 6h", async () => {
+  /* Relogio fixo: 12h UTC = 9h em Sao Paulo, entao o corte e as 9h UTC. */
+  const agora = new Date("2026-03-10T12:00:00Z");
   const sb = fakeSupabase({
     tasks: [
-      { id: "1", user_id: "u1", status: "done", completed_at: horasAtras(HORAS_RETENCAO + 1) },
-      { id: "2", user_id: "u1", status: "done", completed_at: horasAtras(1) },
+      /* concluida ontem a noite: dia de manutencao encerrado, sai */
+      { id: "1", user_id: "u1", status: "done", completed_at: "2026-03-09T20:00:00Z" },
+      /* concluida hoje as 7h da manha, depois da virada: fica */
+      { id: "2", user_id: "u1", status: "done", completed_at: "2026-03-10T10:00:00Z" },
       { id: "3", user_id: "u1", status: "todo", completed_at: null },
-      { id: "4", user_id: "u1", status: "doing", completed_at: horasAtras(999) },
+      { id: "4", user_id: "u1", status: "doing", completed_at: "2026-01-01T00:00:00Z" },
     ],
   });
-  assert.equal(await limparConcluidas(sb, { userId: "u1" }), 1);
+  assert.equal(await limparConcluidas(sb, { userId: "u1", agora }), 1);
   assert.deepEqual(sb.banco.tabelas.tasks.map((t) => t.id), ["2", "3", "4"]);
+});
+
+test("concluida cinco minutos antes da virada sai; cinco depois, fica", async () => {
+  const agora = new Date("2026-03-10T12:00:00Z");
+  const sb = fakeSupabase({
+    tasks: [
+      { id: "antes", user_id: "u1", status: "done", completed_at: "2026-03-10T08:55:00Z" },
+      { id: "depois", user_id: "u1", status: "done", completed_at: "2026-03-10T09:05:00Z" },
+    ],
+  });
+  assert.equal(await limparConcluidas(sb, { userId: "u1", agora }), 1);
+  assert.deepEqual(sb.banco.tabelas.tasks.map((t) => t.id), ["depois"]);
 });
 
 test("demanda concluida sem completed_at nunca e apagada", async () => {

@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** Janela de retenção de uma demanda concluída, em horas. */
-export const HORAS_RETENCAO = 24;
+import { ultimaVirada } from "./viradaDoDia";
 
 /**
  * Meses que uma conta paga fica guardada, contando o mês atual.
@@ -19,11 +18,21 @@ export const HORAS_RETENCAO = 24;
 export const MESES_RETENCAO_PAGAS = 12;
 
 /**
- * Apaga demandas concluídas há mais de 24 horas.
+ * Apaga as demandas concluídas antes da última virada das 6h.
  *
- * Roda quando o Início é aberto, no mesmo momento em que as recorrências são
- * materializadas. Não há agendador: se o app ficar dias fechado, a limpeza
- * acontece na próxima abertura e alcança tudo que já passou da janela.
+ * Era uma janela corrida de 24 horas contada do instante de cada conclusão, e
+ * isso fazia o tempo de vida depender da hora do clique: concluída às 14h de
+ * segunda, a demanda tinha 16h na varredura das 6h de terça — sobrevivia — e só
+ * saía na de quarta. Concluída às 4h da manhã, saía no mesmo dia. Agora o
+ * critério é um só e é o mesmo para todas: pertence a um dia de manutenção já
+ * encerrado.
+ *
+ * O corte nunca alcança o que foi concluído depois dele, então nada some
+ * debaixo da mão de quem acabou de marcar.
+ *
+ * O cron das 6h (`0 9 * * *` em UTC é 6h em São Paulo) é quem faz isso todo
+ * dia. A cópia que roda ao abrir o Início é reserva, para o caso de o cron não
+ * ter rodado — e usa a mesma virada, então não antecipa a limpeza.
  *
  * Duas salvaguardas deliberadas:
  *
@@ -39,11 +48,12 @@ export const MESES_RETENCAO_PAGAS = 12;
  */
 export async function limparConcluidas(
   supabase: SupabaseClient,
-  opcoes: { userId?: string } = {}
+  /* `agora` existe para o teste poder fixar o relógio: o corte depende da hora
+     do dia, e sem isto o mesmo teste passaria de manhã e falharia de tarde. É
+     a mesma razão pela qual as rotinas de manutenção aceitam `hoje`. */
+  opcoes: { userId?: string; agora?: Date } = {}
 ): Promise<number | null> {
-  const limite = new Date(
-    Date.now() - HORAS_RETENCAO * 60 * 60 * 1000
-  ).toISOString();
+  const limite = ultimaVirada(opcoes.agora).toISOString();
 
   /*
    * `userId` é obrigatório quando quem chama usa a chave de serviço.

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Bill, CalendarEvent, EventRecurrence, RecurringTask } from "./types";
 import { isDueOn } from "./recurring";
 import { todayISO } from "./format";
+import { diaDeManutencao } from "./viradaDoDia";
 
 const DIA = 86_400_000;
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -466,8 +467,17 @@ const CHAVE_DIA = "mb.manutencao.dia";
  * A marca é local ao navegador de propósito: gravá-la no banco custaria a ida
  * que o atalho quer evitar, e errar para o lado de rodar de novo é inofensivo
  * — as rotinas são idempotentes.
+ *
+ * O dia aqui é o de manutenção, que vira às 6h, e não a data do calendário.
+ *
+ * Com a data do calendário, abrir o app às 00h10 já contava como dia novo: a
+ * reserva rodava ali e as recorrentes do dia nasciam de madrugada, seis horas
+ * antes do combinado — e a limpeza junto. Com a virada às 6h, quem abre o app
+ * de madrugada ainda está no dia anterior, que já foi feito, e nada acontece
+ * até as 6h. Passado o horário, o cron já terá feito o serviço e esta reserva
+ * não encontra nada a fazer; se o cron falhar, ela cobre.
  */
-export function precisaDeManutencao(hoje = todayISO()) {
+export function precisaDeManutencao(hoje = diaDeManutencao()) {
   if (typeof window === "undefined") return true;
   try {
     return window.localStorage.getItem(CHAVE_DIA) !== hoje;
@@ -479,7 +489,7 @@ export function precisaDeManutencao(hoje = todayISO()) {
 }
 
 /** Marca o dia como feito. Só chame quando nenhuma rotina falhou. */
-export function marcarManutencaoFeita(hoje = todayISO()) {
+export function marcarManutencaoFeita(hoje = diaDeManutencao()) {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(CHAVE_DIA, hoje);
