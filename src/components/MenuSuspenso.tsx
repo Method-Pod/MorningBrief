@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { MoreVertical } from "lucide-react";
+import { ChevronDown, MoreVertical } from "lucide-react";
 import { cx } from "./ui";
 
 /**
@@ -31,10 +31,20 @@ const FOLGA = 6;
 export function MenuSuspenso({
   itens,
   rotulo = "Mais ações",
+  rotuloVisivel,
   className,
 }: {
   itens: ItemMenuSuspenso[];
   rotulo?: string;
+  /*
+   * Quando vem, o gatilho deixa de ser três pontos e vira botão com texto.
+   *
+   * Nas linhas de lista os três pontos bastam: a linha inteira é o contexto e
+   * o ícone só precisa dizer "há mais aqui". No cabeçalho de uma página não
+   * há contexto nenhum em volta — três pontos soltos ali não dizem se guardam
+   * ações do item, da página ou da conta. Com o texto, o botão se explica.
+   */
+  rotuloVisivel?: string;
   className?: string;
 }) {
   const [aberto, setAberto] = React.useState(false);
@@ -129,14 +139,29 @@ export function MenuSuspenso({
         aria-haspopup="menu"
         aria-expanded={aberto}
         className={cx(
-          "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors",
-          aberto
-            ? "bg-ink-800 text-fg"
-            : "text-fg-mute hover:bg-ink-800 hover:text-fg",
+          rotuloVisivel
+            ? /* Mesma silhueta do Button variante outline, para o cabeçalho
+                 não misturar dois formatos de botão lado a lado. */
+              "inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-fg-dim shadow-[var(--elev-1)] transition-colors hover:text-fg"
+            : "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors",
+          !rotuloVisivel &&
+            (aberto
+              ? "bg-ink-800 text-fg"
+              : "text-fg-mute hover:bg-ink-800 hover:text-fg"),
           className
         )}
       >
-        <MoreVertical size={15} />
+        {rotuloVisivel ? (
+          <>
+            {rotuloVisivel}
+            <ChevronDown
+              size={14}
+              className={cx("transition-transform", aberto && "rotate-180")}
+            />
+          </>
+        ) : (
+          <MoreVertical size={15} />
+        )}
       </button>
 
       {aberto &&

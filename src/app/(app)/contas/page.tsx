@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
+import { MenuSuspenso } from "@/components/MenuSuspenso";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -140,6 +142,7 @@ const vazio = () => ({
 });
 
 export default function ContasPage() {
+  const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = useEstadoCacheado<Bill[]>("bills", []);
   /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
@@ -1101,23 +1104,40 @@ export default function ContasPage() {
             )}
           </p>
         </div>
+        {/*
+          Uma ação do dia a dia, e o resto recolhido.
+
+          Eram quatro botões do mesmo tamanho: "Nova conta", que se aperta
+          várias vezes por semana, ao lado de "Categorias", que talvez uma vez
+          por mês. Quatro alvos equivalentes obrigam a ler os quatro toda vez
+          para achar o que se usa sempre — e no celular eles quebravam em duas
+          fileiras, empurrando a primeira conta para fora da tela.
+
+          As três de manutenção vão para um menu; a que importa fica sozinha e
+          destacada.
+        */}
         <div className="flex flex-wrap gap-2">
-          <Link href="/contas/gerenciar">
-            <Button>
-              <SlidersHorizontal size={15} />
-              Gerenciar
-            </Button>
-          </Link>
-          <Link href="/contas/cartoes">
-            <Button>
-              <CreditCard size={15} />
-              Cartões
-            </Button>
-          </Link>
-          <Button onClick={() => setGerindoCategorias(true)}>
-            <Tag size={15} />
-            Categorias
-          </Button>
+          <MenuSuspenso
+            rotulo="Gerenciar contas"
+            rotuloVisivel="Gerenciar"
+            itens={[
+              {
+                rotulo: "Contas fixas",
+                icone: <SlidersHorizontal size={15} />,
+                aoEscolher: () => router.push("/contas/gerenciar"),
+              },
+              {
+                rotulo: "Cartões",
+                icone: <CreditCard size={15} />,
+                aoEscolher: () => router.push("/contas/cartoes"),
+              },
+              {
+                rotulo: "Categorias",
+                icone: <Tag size={15} />,
+                aoEscolher: () => setGerindoCategorias(true),
+              },
+            ]}
+          />
           <Button variant="primary" onClick={novo}>
             <Wallet size={15} />
             Nova conta
