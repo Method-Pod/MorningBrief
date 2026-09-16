@@ -1278,11 +1278,33 @@ export default function DemandasPage() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
             <Field label="Cliente / projeto">
+              {/*
+                Sugere o que já existe, em vez de aceitar tudo do zero.
+
+                O campo é texto livre e não há tabela de clientes, então cada
+                grafia nova cria um cliente novo — em silêncio. Foi o que
+                aconteceu com a Bia: hoje ela existe como "Bia",
+                "Bia - Canal Oficial" e "Bia - Setembro Amarelo", e as três
+                demandas dela aparecem como 2 + 1 + 0 no filtro, sem nenhum
+                número dizer três. Um espaço a mais basta para repetir isso.
+
+                `datalist` porque continua sendo texto livre: cliente novo se
+                digita normalmente, e não há migração nem tabela nova. O que
+                muda é que a grafia já usada aparece antes de você redigitá-la
+                diferente. É contenção, não solução — a solução é a tabela de
+                clientes, e essa é decisão sua.
+              */}
               <Input
+                list="clientes-ja-usados"
                 value={form.client}
                 onChange={(e) => setForm({ ...form, client: e.target.value })}
                 placeholder="Opcional"
               />
+              <datalist id="clientes-ja-usados">
+                {clientes.map((c) => (
+                  <option key={c.chave} value={c.nome} />
+                ))}
+              </datalist>
             </Field>
             <Field label="Prioridade">
               <Select
