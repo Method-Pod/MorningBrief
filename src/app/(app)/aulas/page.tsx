@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { MenuSuspenso } from "@/components/MenuSuspenso";
 import {
   Check,
   Clock,
@@ -961,39 +962,47 @@ export default function AulasPage() {
             )}
           </p>
         </div>
+        {/*
+          Uma ação em destaque, e as outras quatro recolhidas — mesmo padrão de
+          Contas a pagar.
+
+          Eram cinco botões na linha, e o aperto já era admitido no código: os
+          rótulos sumiam no telefone para "Curso" e "Aula" não aparecerem
+          cortados como "C…" e "A…". O contorno resolvia o corte e deixava
+          quatro ícones sem nome lado a lado, que é outro problema.
+
+          Com o menu, os rótulos voltam inteiros nos dois tamanhos de tela, e
+          "Aula" — que se aperta várias vezes por semana, enquanto Etiquetas
+          talvez uma vez por mês — para de disputar espaço com o resto.
+        */}
         <div className="flex w-full items-center gap-2 sm:w-auto">
-          <Button
-            onClick={() => setGerindo(true)}
+          <MenuSuspenso
+            rotulo="Gerenciar aulas"
+            rotuloVisivel="Gerenciar"
             className="shrink-0"
-            title="Gerenciar etiquetas"
-          >
-            <Tag size={15} />
-            <span className="hidden sm:inline">Etiquetas</span>
-          </Button>
-          <Button
-            onClick={() => setImportando(true)}
-            className="shrink-0"
-            title="Importar playlist do YouTube"
-          >
-            <ListVideo size={15} />
-            <span className="hidden sm:inline">Playlist</span>
-          </Button>
-          <Button
-            onClick={() => abrirCanal()}
-            className="shrink-0"
-            title="Salvar um canal para estudar"
-          >
-            <Tv size={15} />
-            <span className="hidden sm:inline">Canal</span>
-          </Button>
-          {/* Rótulo escondido no telefone, como Etiquetas, Playlist e Canal.
-              Com cinco botões na linha, "Curso" e "Aula" apareciam cortados
-              como "C…" e "A…" — e num par assim é melhor um ícone limpo e um
-              rótulo inteiro no botão principal do que dois pela metade. */}
-          <Button onClick={() => abrirCurso()} className="shrink-0" title="Adicionar curso">
-            <Layers size={15} />
-            <span className="hidden sm:inline">Curso</span>
-          </Button>
+            itens={[
+              {
+                rotulo: "Etiquetas",
+                icone: <Tag size={15} />,
+                aoEscolher: () => setGerindo(true),
+              },
+              {
+                rotulo: "Playlist",
+                icone: <ListVideo size={15} />,
+                aoEscolher: () => setImportando(true),
+              },
+              {
+                rotulo: "Canal",
+                icone: <Tv size={15} />,
+                aoEscolher: () => abrirCanal(),
+              },
+              {
+                rotulo: "Curso",
+                icone: <Layers size={15} />,
+                aoEscolher: () => abrirCurso(),
+              },
+            ]}
+          />
           <Button
             variant="primary"
             onClick={() => setAddAula(true)}
