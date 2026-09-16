@@ -32,14 +32,15 @@ import { cx } from "./ui";
  */
 const NAV = [
   /*
-   * "Hoje", e nao "Inicio".
+   * "Início", e não "Hoje".
    *
-   * Os outros oito itens nomeiam o proprio conteudo -- Demandas, Habitos,
-   * Leitura, Contas a pagar. "Inicio" era o unico guarda-chuva: dizia a
-   * posicao do item no menu, nao o que a tela mostra. E a tela mostra o dia:
-   * tarefas de hoje, clima, agenda, pendencias.
+   * Cheguei a trocar por "Hoje", com o argumento de que os outros oito itens
+   * nomeiam o próprio conteúdo e este era o único guarda-chuva. O dono do app
+   * preferiu "Início" — e a preferência de quem usa todo dia vale mais que a
+   * regra: é ele quem lê este menu de manhã, e para ele aquilo é a entrada,
+   * não o dia.
    */
-  { href: "/", label: "Hoje", icon: LayoutDashboard },
+  { href: "/", label: "Início", icon: LayoutDashboard },
   { href: "/demandas", label: "Demandas", icon: ListChecks },
   { href: "/habitos", label: "Hábitos", icon: Repeat2 },
   { href: "/leitura", label: "Leitura", icon: BookOpen },

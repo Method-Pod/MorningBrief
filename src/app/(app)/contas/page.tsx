@@ -1178,82 +1178,30 @@ export default function ContasPage() {
       )}
 
       {/* ------------------------------ resumo do mês ------------------------------ */}
-      {/*
-        Um número em destaque, e não quatro do mesmo tamanho.
-
-        Eram quatro cartões iguais — Total, Pagas, Pendentes, Vencidas — e com
-        peso visual idêntico "Vencidas R$ 0,00" gritava tanto quanto o que
-        precisa ser pago. O número que exige ação não se distinguia do que é só
-        histórico. No celular era pior: os quatro empilhavam e ocupavam quase
-        uma tela inteira de rolagem antes de aparecer a primeira conta.
-
-        Agora o destaque é sempre a resposta para "o que eu preciso fazer":
-        vencidas quando há, pendentes quando não há vencidas, e "tudo pago"
-        quando não há nenhuma das duas. O resto vira uma linha ao lado — Total
-        continua ali porque é a pergunta seguinte, mas deixa de disputar.
-
-        Total não some, mas também não merecia cartão: é soma de Pagas com
-        Pendentes, o único dos quatro que não traz informação nova.
-      */}
-      <Card className="p-[18px]">
-        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
-          <div>
-            <p
-              className={cx(
-                "text-[10.5px] font-bold uppercase tracking-[0.1em]",
-                resumoMes.qtdVencidas > 0
-                  ? "text-neg"
-                  : resumoMes.qtdPendentes > 0
-                    ? "text-warn"
-                    : "text-pos"
-              )}
-            >
-              {resumoMes.qtdVencidas > 0
-                ? "Vencidas"
-                : resumoMes.qtdPendentes > 0
-                  ? "A pagar"
-                  : `Tudo pago em ${nomeMes}`}
-            </p>
-            <p className="mt-2 text-[28px] font-bold leading-none tracking-[-0.035em] tnum">
-              {brl(
-                resumoMes.qtdVencidas > 0
-                  ? resumoMes.vencidas
-                  : resumoMes.pendentes
-              )}
-            </p>
-            <p className="mt-1.5 text-[11.5px] text-fg-mute">
-              {resumoMes.qtdVencidas > 0
-                ? `${resumoMes.qtdVencidas} conta${resumoMes.qtdVencidas === 1 ? "" : "s"} passou do prazo`
-                : resumoMes.qtdPendentes > 0
-                  ? `${resumoMes.qtdPendentes} conta${resumoMes.qtdPendentes === 1 ? "" : "s"} em aberto`
-                  : `${resumoMes.qtdPagas} conta${resumoMes.qtdPagas === 1 ? "" : "s"} quitada${resumoMes.qtdPagas === 1 ? "" : "s"}`}
-            </p>
-          </div>
-
-          <dl className="flex gap-6 text-[12px]">
-            <div>
-              <dt className="text-fg-mute">Pagas</dt>
-              <dd className="mt-0.5 font-bold text-pos tnum">
-                {brl(resumoMes.pagas)}
-              </dd>
-            </div>
-            {/* Vencidas em destaque? então pendentes vem aqui, e vice-versa —
-                nenhum dos dois some, e o que está em cima não se repete. */}
-            {resumoMes.qtdVencidas > 0 && resumoMes.qtdPendentes > 0 && (
-              <div>
-                <dt className="text-fg-mute">Pendentes</dt>
-                <dd className="mt-0.5 font-bold text-warn tnum">
-                  {brl(resumoMes.pendentes)}
-                </dd>
-              </div>
-            )}
-            <div>
-              <dt className="text-fg-mute">Total do mês</dt>
-              <dd className="mt-0.5 font-bold tnum">{brl(resumoMes.total)}</dd>
-            </div>
-          </dl>
-        </div>
-      </Card>
+      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
+        Resumo de {nomeMes}
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Numero rotulo="Total" valor={resumoMes.total} qtd={resumoMes.qtdTotal} />
+        <Numero
+          rotulo="Pagas"
+          valor={resumoMes.pagas}
+          qtd={resumoMes.qtdPagas}
+          tom="text-pos"
+        />
+        <Numero
+          rotulo="Pendentes"
+          valor={resumoMes.pendentes}
+          qtd={resumoMes.qtdPendentes}
+          tom="text-warn"
+        />
+        <Numero
+          rotulo="Vencidas"
+          valor={resumoMes.vencidas}
+          qtd={resumoMes.qtdVencidas}
+          tom="text-neg"
+        />
+      </div>
 
       {/* ------------------------------ lista ------------------------------ */}
       <Card className="mt-4 overflow-hidden">
@@ -2030,6 +1978,37 @@ export default function ContasPage() {
 }
 
 /* ------------------------------ peças ------------------------------ */
+
+function Numero({
+  rotulo,
+  valor,
+  qtd,
+  tom,
+}: {
+  rotulo: string;
+  valor: number;
+  qtd: number;
+  tom?: string;
+}) {
+  return (
+    <Card className="p-[18px]">
+      <p
+        className={cx(
+          "text-[10.5px] font-bold uppercase tracking-[0.1em]",
+          tom ?? "text-fg-mute"
+        )}
+      >
+        {rotulo}
+      </p>
+      <p className="mt-2.5 text-[20px] font-bold tracking-[-0.03em] tnum">
+        {brl(valor)}
+      </p>
+      <p className="mt-1 text-[11.5px] text-fg-mute">
+        {qtd} conta{qtd === 1 ? "" : "s"}
+      </p>
+    </Card>
+  );
+}
 
 function Cabeca({ titulo, sub }: { titulo: string; sub?: string }) {
   return (
