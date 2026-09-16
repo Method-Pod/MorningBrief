@@ -217,23 +217,69 @@ export default function RecorrentesPage() {
   const runNow = async (r: RecurringTask) => {
     const uid = await currentUserId(supabase);
     if (!uid) return notice.show(SESSION_EXPIRED);
-    const { error } = await supabase.from("tasks").insert({
-      user_id: uid,
-      title: r.title,
-      description: r.description,
-      client: r.client,
-      priority: r.priority,
-      status: "todo",
-      due_date: today,
-      origin_id: r.id,
-      ...(r.links?.length ? { links: r.links } : {}),
-    });
-    if (error) return notice.show(`Não foi possível gerar a demanda: ${error.message}`);
+    const { data: criada, error } = await supabase
+      .from("tasks")
+      .insert({
+        user_id: uid,
+        title: r.title,
+        description: r.description,
+        client: r.client,
+        priority: r.priority,
+        status: "todo",
+        due_date: today,
+        origin_id: r.id,
+        ...(r.links?.length ? { links: r.links } : {}),
+      })
+      .select("id")
+      .maybeSingle();
+
+    /*
+     * Já existir hoje não é erro: é a resposta certa.
+     *
+     * `tasks_origin_day_uniq` garante uma demanda por regra por dia, e é ela
+     * que impede a duplicata quando o app está aberto em duas abas. Quando o
+     * cron das 6h já gerou e alguém aperta "Gerar agora", o banco recusa a
+     * segunda cópia — comportamento correto, mas a mensagem que chegava na
+     * tela era `duplicate key value violates unique constraint`, jargão de
+     * Postgres para algo que cabe em cinco palavras.
+     *
+     * A manutenção diária já tratava este código; aqui ele escapava.
+     */
+    const jaExistia = error?.code === "23505";
+    if (error && !jaExistia)
+      return notice.show(`Não foi possível gerar a demanda: ${error.message}`);
+
+    /*
+     * A ocorrência nasce com os itens do modelo — e não nascia.
+     *
+     * A geração automática cria o checklist junto, e criar a regra pela tela
+     * de Demandas também. Só este caminho não criava: quem apertava "Gerar
+     * agora" recebia a demanda vazia e tinha de digitar os cinco itens à mão,
+     * sem nada indicando por que daquela vez veio diferente.
+     *
+     * Falha aqui não desfaz a demanda, pela mesma razão que na manutenção: ela
+     * existe e vale mais sem checklist do que não existir.
+     */
+    const modelo = r.checklist ?? [];
+    if (!jaExistia && criada?.id && modelo.length)
+      await supabase.from("task_items").insert(
+        modelo.map((title, i) => ({
+          user_id: uid,
+          task_id: criada.id,
+          title,
+          position: i,
+        }))
+      );
+
     /*
      * `last_run_on` é o que impede a duplicata: a manutenção diária olha essa
      * data para decidir se já gerou hoje. O erro dela era descartado, então
      * uma falha aqui passava por sucesso e a mesma demanda voltaria sozinha
      * mais tarde — com a pessoa sem motivo para desconfiar.
+     *
+     * Marca também quando a demanda já existia: se existe, a regra rodou hoje,
+     * e deixar a data para trás faria a manutenção tentar de novo mais tarde e
+     * bater na mesma trava.
      */
     const { data: marcou, error: erroMarca } = await supabase
       .from("recurring_tasks")
@@ -241,9 +287,11 @@ export default function RecorrentesPage() {
       .eq("id", r.id)
       .select("id");
     notice.show(
-      erroMarca || !marcou?.length
-        ? `"${r.title}" foi criada em Demandas, mas não consegui marcar a recorrência como já gerada hoje — ela pode gerar de novo. Recarregue e confira.`
-        : `"${r.title}" foi criada em Demandas.`
+      jaExistia
+        ? `"${r.title}" já tinha sido gerada hoje — está em Demandas.`
+        : erroMarca || !marcou?.length
+          ? `"${r.title}" foi criada em Demandas, mas não consegui marcar a recorrência como já gerada hoje — ela pode gerar de novo. Recarregue e confira.`
+          : `"${r.title}" foi criada em Demandas.`
     );
     load();
   };

@@ -95,6 +95,28 @@ export async function updateSession(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
 
   if (!autenticado && !isPublic) {
+    /*
+     * Rota de dados responde 401; página responde redirecionamento.
+     *
+     * As duas saíam com 307 para /login, e para o `fetch` isso é pior que um
+     * erro: ele segue o redirecionamento sozinho, recebe a página de login em
+     * HTML com status 200, e o `.json()` do outro lado estoura com
+     * "Unexpected token '<'". O que chega na tela é um erro de sintaxe onde a
+     * causa era sessão expirada — e nenhum dos dois textos tem relação com o
+     * outro.
+     *
+     * Redirecionar só faz sentido para quem é um navegador navegando. Para
+     * quem está buscando dados, a resposta honesta é o status que diz
+     * exatamente o que houve.
+     */
+    if (path.startsWith("/api/"))
+      return comPolitica(
+        NextResponse.json(
+          { erro: "sessão expirada", code: "sem_sessao" },
+          { status: 401 }
+        )
+      );
+
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/login";
     redirect.searchParams.set("next", path);
