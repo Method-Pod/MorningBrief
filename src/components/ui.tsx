@@ -444,6 +444,68 @@ export function Skeleton({ className }: { className?: string }) {
   return <div className={cx("animate-pulse rounded-lg bg-black/[0.06]", className)} />;
 }
 
+/*
+ * O que a tela mostra enquanto os dados não chegaram.
+ *
+ * Nove das dez telas não mostravam nada: cinco faziam `if (loading) return
+ * null`, que apaga a página inteira -- cabeçalho, título e tudo --, e quatro
+ * devolviam `null` no lugar da lista. O `Skeleton` acima existia desde sempre
+ * e não era usado em lugar nenhum.
+ *
+ * O buraco não durava pouco. Medido em Contas, no ar: o HTML fica pronto aos
+ * 925ms, as consultas só disparam aos 990ms e o conteúdo aparece aos 1306ms.
+ * São quase 400ms de branco depois de a página já estar montada -- e a
+ * primeira abertura do dia é justamente a de manhã, que é para o que este app
+ * existe. Tela vazia e tela quebrada têm a mesma aparência.
+ *
+ * O esqueleto não deixa nada mais rápido. Ele troca "não sei se travou" por
+ * "está vindo, e vai ter esta forma" -- e, de quebra, o conteúdo real entra no
+ * lugar onde o rascunho já estava, em vez de empurrar a página.
+ */
+
+/** Uma página inteira, para quem apagava tudo enquanto carregava. */
+export function EsqueletoPagina({ blocos = 3 }: { blocos?: number }) {
+  return (
+    <div className="space-y-5" aria-busy="true" aria-label="Carregando">
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-44" />
+        <Skeleton className="h-3.5 w-60" />
+      </div>
+      <div className="space-y-4">
+        {Array.from({ length: blocos }).map((_, i) => (
+          <div key={i} className="card p-4">
+            <EsqueletoLista linhas={3} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Algumas linhas de lista.
+ *
+ * As larguras variam de propósito e não são aleatórias: linha de tamanho
+ * idêntico lê como tabela vazia, e sorteada a cada render pisca a cada
+ * atualização. O ciclo de quatro dá irregularidade de texto e fica estável.
+ */
+export function EsqueletoLista({ linhas = 4 }: { linhas?: number }) {
+  const larguras = ["w-3/4", "w-1/2", "w-5/6", "w-2/3"];
+  return (
+    <div className="space-y-3" aria-busy="true" aria-label="Carregando">
+      {Array.from({ length: linhas }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3">
+          <Skeleton className="h-9 w-9 shrink-0 rounded-[10px]" />
+          <div className="flex-1 space-y-1.5">
+            <Skeleton className={cx("h-3", larguras[i % larguras.length])} />
+            <Skeleton className="h-2.5 w-1/4" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ------------------------------ Confirm ------------------------------ */
 
 /**

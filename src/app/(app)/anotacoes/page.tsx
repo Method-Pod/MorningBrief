@@ -38,6 +38,7 @@ import {
   useConfirm,
   useNotice,
   cx,
+  EsqueletoPagina,
 } from "@/components/ui";
 
 /**
@@ -395,7 +396,7 @@ export default function AnotacoesPage() {
 
   const fixadas = vista.filter((n) => n.pinned).length;
 
-  if (loading) return null;
+  if (loading) return <EsqueletoPagina blocos={3} />;
 
   const pilula = (ativa: boolean) =>
     cx(

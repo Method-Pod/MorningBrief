@@ -47,6 +47,7 @@ import {
   useConfirm,
   useNotice,
   cx,
+  EsqueletoLista,
 } from "@/components/ui";
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
 import { useArrastarCartao } from "@/components/arrastarCartao";
@@ -824,7 +825,7 @@ export default function DemandasPage() {
       </div>
 
       {loading ? (
-        null
+        <div className="card p-4"><EsqueletoLista linhas={5} /></div>
       ) : rows.length === 0 ? (
         <Card>
           <Empty

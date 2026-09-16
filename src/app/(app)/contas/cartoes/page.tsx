@@ -18,6 +18,7 @@ import {
   cx,
   useConfirm,
   useNotice,
+  EsqueletoPagina,
 } from "@/components/ui";
 
 /**
@@ -190,7 +191,7 @@ export default function CartoesPage() {
     );
   };
 
-  if (loading) return null;
+  if (loading) return <EsqueletoPagina blocos={2} />;
 
   return (
     <div className="rise">

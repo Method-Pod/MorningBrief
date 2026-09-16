@@ -731,6 +731,18 @@ textarea::placeholder {
   }
 
   /*
+   * O esqueleto para de pulsar e vira um bloco parado.
+   *
+   * `animate-pulse` e oscilacao em laco, que e o caso mais citado de gatilho
+   * de enjoo -- e, diferente do giro, aqui nao se perde nada ao parar: o
+   * bloco cinza no lugar do conteudo ja diz sozinho "isto ainda vai chegar".
+   * A pulsacao era enfeite; a forma e que era a informacao.
+   */
+  .animate-pulse {
+    animation: none;
+  }
+
+  /*
    * Transicoes: some o que move, fica o que tinge.
    *
    * Restringir `transition-property` em vez de zerar a duracao. `transform`

@@ -81,6 +81,7 @@ import {
   cx,
   useConfirm,
   useNotice,
+  EsqueletoPagina,
 } from "@/components/ui";
 
 /* ------------------------------ filtros e ordem ------------------------------ */
@@ -1080,7 +1081,7 @@ export default function ContasPage() {
   const nadaPendente =
     !loading && rows.length > 0 && contagens.pendentes === 0;
 
-  if (loading) return null;
+  if (loading) return <EsqueletoPagina blocos={4} />;
 
   return (
     <div className="rise">

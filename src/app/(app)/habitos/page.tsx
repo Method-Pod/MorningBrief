@@ -28,6 +28,7 @@ import {
   cx,
   useConfirm,
   useNotice,
+  EsqueletoPagina,
 } from "@/components/ui";
 
 /** semanaDe devolve segunda→domingo, então os nomes seguem a mesma ordem. */
@@ -263,7 +264,7 @@ export default function HabitosPage() {
     ? "Esta semana"
     : `${dataCurta(semana[0]).replace(".", "")} – ${dataCurta(semana[6])}`;
 
-  if (loading) return null;
+  if (loading) return <EsqueletoPagina blocos={3} />;
 
   return (
     <div className="rise">

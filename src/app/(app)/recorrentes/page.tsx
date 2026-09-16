@@ -42,6 +42,7 @@ import {
   useConfirm,
   useNotice,
   cx,
+  EsqueletoLista,
 } from "@/components/ui";
 
 const FREQS: Frequency[] = [
@@ -363,7 +364,7 @@ export default function RecorrentesPage() {
       />
 
       {loading ? (
-        null
+        <div className="card p-4"><EsqueletoLista linhas={4} /></div>
       ) : view.length === 0 ? (
         <Card>
           <Empty

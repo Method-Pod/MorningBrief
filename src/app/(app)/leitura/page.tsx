@@ -40,6 +40,7 @@ import {
   cx,
   useConfirm,
   useNotice,
+  EsqueletoLista,
 } from "@/components/ui";
 import {
   Capa,
@@ -1256,7 +1257,7 @@ export default function LeituraPage() {
           </div>
         )}
 
-        {loading ? null : daPrateleira.length === 0 ? (
+        {loading ? <div className="card p-4"><EsqueletoLista linhas={4} /></div> : daPrateleira.length === 0 ? (
           <Card>
             <Empty
               icon={<BookOpen size={18} />}

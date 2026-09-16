@@ -66,6 +66,7 @@ import {
   cx,
   useConfirm,
   useNotice,
+  EsqueletoLista,
 } from "@/components/ui";
 
 /** "Todas" é filtro de tela; as outras duas são o estado da aula. */
@@ -1394,7 +1395,7 @@ export default function AulasPage() {
           )}
         </div>
 
-        {loading ? null : lista.length === 0 ? (
+        {loading ? <div className="card p-4"><EsqueletoLista linhas={5} /></div> : lista.length === 0 ? (
           <Card>
             <Empty
               icon={<GraduationCap size={18} />}

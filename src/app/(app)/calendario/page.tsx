@@ -45,6 +45,7 @@ import {
   useConfirm,
   useNotice,
   cx,
+  EsqueletoPagina,
 } from "@/components/ui";
 
 const MONTHS = [
@@ -470,7 +471,7 @@ export default function CalendarioPage() {
 
   const day = index.get(selected) ?? { events: [], bills: [], tasks: [] };
 
-  if (loading) return null;
+  if (loading) return <EsqueletoPagina blocos={2} />;
 
   return (
     <div className="space-y-5 rise">

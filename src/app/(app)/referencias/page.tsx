@@ -36,6 +36,7 @@ import {
   cx,
   useConfirm,
   useNotice,
+  EsqueletoPagina,
 } from "@/components/ui";
 
 /**
@@ -653,7 +654,7 @@ export default function ReferenciasPage() {
         : "bg-ink-800 text-fg-mute hover:text-fg-dim"
     );
 
-  if (loading) return null;
+  if (loading) return <EsqueletoPagina blocos={3} />;
 
   return (
     <div className="space-y-5 rise">

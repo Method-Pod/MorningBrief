@@ -55,7 +55,9 @@ import {
   precisaDeManutencao,
   reporRecorrentesPerdidas,
 } from "@/lib/manutencao";
-import { Card, useNotice, cx } from "@/components/ui";
+import { Card, useNotice, cx,
+  EsqueletoPagina,
+} from "@/components/ui";
 import { useIdentity } from "@/components/identity";
 
 /*
@@ -409,7 +411,7 @@ export default function HomePage() {
     };
   }, [tasks, bills, recurring, events, notes, today]);
 
-  if (loading) return null;
+  if (loading) return <EsqueletoPagina blocos={4} />;
 
   /* Raio e circunferência do anel do card escuro: o `strokeDashoffset` precisa
      do perímetro para desenhar a fatia. */
