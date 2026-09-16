@@ -16,6 +16,8 @@ import {
   Trash2,
   Wallet,
   Zap,
+  Check,
+  Repeat,
 } from "lucide-react";
 import { Clima } from "@/components/Clima";
 import { createClient } from "@/lib/supabase/client";
@@ -76,6 +78,8 @@ type Livro = {
   current_page: number;
 };
 
+type Habito = { id: string; name: string; color: string };
+
 type Ref = {
   id: string;
   name: string;
@@ -134,6 +138,16 @@ export default function HomePage() {
   const [notes, setNotes] = useEstadoCacheado<Note[]>("painel_notas", []);
   const [lendo, setLendo] = useEstadoCacheado<Livro[]>("painel_lendo", []);
   const [refs, setRefs] = useEstadoCacheado<Ref[]>("painel_refs", []);
+  /*
+   * Hábitos no brief da manhã.
+   *
+   * O brief tinha Hoje, Contas e Agenda — e não tinha hábitos, que é
+   * justamente a coisa que se marca de manhã. Para dar baixa num hábito era
+   * preciso lembrar sozinho de abrir outra aba, o que anula o sentido de
+   * existir um brief: ele deveria ser o único lugar que se olha ao acordar.
+   */
+  const [habitos, setHabitos] = useEstadoCacheado<Habito[]>("painel_habitos", []);
+  const [marcados, setMarcados] = useEstadoCacheado<string[]>("painel_habitos_hoje", []);
   const [generated, setGenerated] = React.useState(0);
   const [limpas, setLimpas] = React.useState(0);
   const [draft, setDraft] = React.useState("");
@@ -144,7 +158,7 @@ export default function HomePage() {
   const today = todayISO();
 
   const load = React.useCallback(async () => {
-    const [b, t, r, e, n, lv, rf] = await Promise.all([
+    const [b, t, r, e, n, lv, rf, hb, hl] = await Promise.all([
       supabase.from("bills").select("*").order("due_date"),
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("recurring_tasks").select("*").order("created_at"),
@@ -197,6 +211,11 @@ export default function HomePage() {
         .select("id,name,url,image_url,icon_url,image_own,busca,created_at")
         .order("created_at", { ascending: false })
         .limit(8),
+      /* Só os ativos, e só as marcas de hoje: o brief não mostra histórico.
+         Tolera falha como leitura e referências — quem não rodou o SQL de
+         hábitos simplesmente não vê o cartão. */
+      supabase.from("habits").select("id,name,color").eq("active", true),
+      supabase.from("habit_logs").select("habit_id").eq("day", today),
     ]);
     // numeric do Postgres vem como string no JSON; normaliza na fronteira
     setBills(
@@ -222,8 +241,55 @@ export default function HomePage() {
     setNotes((n.data as Note[]) ?? []);
     setLendo((lv.data as Livro[]) ?? []);
     setRefs((rf.data as Ref[]) ?? []);
+    setHabitos((hb.data as Habito[]) ?? []);
+    setMarcados(((hl.data as { habit_id: string }[]) ?? []).map((x) => x.habit_id));
     return (r.data as RecurringTask[]) ?? [];
   }, [supabase]);
+
+
+  /**
+   * Marca ou desmarca um hábito sem sair do brief.
+   *
+   * Otimista: a marca muda na hora e o banco confirma atrás. Esperar a volta
+   * da rede para riscar o item faria o toque parecer engasgado, e é um toque
+   * que se dá várias vezes em sequência de manhã.
+   *
+   * Em caso de falha, desfaz o que foi mostrado — é a única forma honesta de
+   * ser otimista: assumir sucesso e corrigir a tela se não foi.
+   */
+  const alternarHabito = React.useCallback(
+    async (habitId: string) => {
+      const tinha = marcados.includes(habitId);
+      setMarcados((v) =>
+        tinha ? v.filter((x) => x !== habitId) : [...v, habitId]
+      );
+
+      const desfazer = () =>
+        setMarcados((v) =>
+          tinha ? [...v, habitId] : v.filter((x) => x !== habitId)
+        );
+
+      if (tinha) {
+        const { error } = await supabase
+          .from("habit_logs")
+          .delete()
+          .eq("habit_id", habitId)
+          .eq("day", today);
+        if (error) desfazer();
+        return;
+      }
+
+      const uid = await currentUserId(supabase);
+      if (!uid) return desfazer();
+      const { error } = await supabase
+        .from("habit_logs")
+        .insert({ user_id: uid, habit_id: habitId, day: today });
+      /* 23505 = unique(habit_id, day): já estava marcado em outra aba. O
+         resultado desejado é o que está na tela, então não é falha. */
+      if (error && error.code !== "23505") desfazer();
+    },
+    [marcados, setMarcados, supabase]
+  );
 
   React.useEffect(() => {
     let alive = true;
@@ -752,6 +818,68 @@ export default function HomePage() {
             </div>
           </div>
         </Card>
+
+        {/*
+          Hábitos, com a marcação aqui mesmo.
+
+          Mostrar só a lista obrigaria a abrir a aba de Hábitos para dar baixa
+          — e aí o brief vira um aviso, não um lugar onde se resolve. Marcar
+          custa um toque e a tela não recarrega: a mudança é otimista, e o
+          banco confirma atrás.
+
+          Só aparece se houver hábito ativo. Sem nenhum, um cartão vazio
+          ocuparia a faixa mais valiosa da tela para dizer que não há nada.
+        */}
+        {habitos.length > 0 && (
+          <Card>
+            <Head
+              icon={<Repeat size={14} />}
+              title="Hábitos"
+              href="/habitos"
+              link="ver todos"
+            />
+            <div className="px-[18px] pb-[18px] pt-1.5">
+              <div className="flex items-baseline gap-2.5 pt-2.5">
+                <b className="text-2xl font-bold tracking-[-0.035em] tnum">
+                  {marcados.length}/{habitos.length}
+                </b>
+                <span className="text-xs text-fg-mute">marcados hoje</span>
+              </div>
+              <div className="mt-3 flex flex-col">
+                {habitos.map((h) => {
+                  const feito = marcados.includes(h.id);
+                  return (
+                    <button
+                      key={h.id}
+                      onClick={() => alternarHabito(h.id)}
+                      aria-pressed={feito}
+                      className="flex items-center gap-2.5 rounded-[10px] py-1.5 pr-1 text-left transition-colors hover:bg-ink-800"
+                    >
+                      <span
+                        className={cx(
+                          "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[6px] border transition-colors",
+                          feito
+                            ? "border-transparent bg-brand-500 text-white"
+                            : "border-line"
+                        )}
+                      >
+                        {feito && <Check size={12} strokeWidth={3} />}
+                      </span>
+                      <span
+                        className={cx(
+                          "min-w-0 flex-1 truncate text-sm font-medium",
+                          feito && "text-fg-mute line-through"
+                        )}
+                      >
+                        {h.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </Card>
+        )}
 
         <Card>
           <Head icon={<CalendarDays size={14} />} title="Agenda" href="/calendario" link="ver tudo" />
