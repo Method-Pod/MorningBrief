@@ -502,7 +502,7 @@ export default function HomePage() {
       ))}
 
       {/* ------------------------ seu dia + hoje ------------------------ */}
-      <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
         <div className="flex flex-col rounded-[22px] bg-gradient-to-br from-[#26292b] to-[#1b1e20] p-[22px] text-white">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -828,7 +828,7 @@ export default function HomePage() {
         cartão vazio em painel é espaço morto.
       */}
       {(lendo.length > 0 || refs.length > 0) && (
-        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
           {lendo.length > 0 && (
             <Card>
               <Head

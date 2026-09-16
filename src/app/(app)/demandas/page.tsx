@@ -1222,7 +1222,7 @@ export default function DemandasPage() {
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
             <Field label="Cliente / projeto">
               <Input
                 value={form.client}

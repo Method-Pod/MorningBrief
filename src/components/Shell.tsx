@@ -29,7 +29,15 @@ import { cx } from "./ui";
  * e pelo aviso de demanda gerada.
  */
 const NAV = [
-  { href: "/", label: "Início", icon: LayoutDashboard },
+  /*
+   * "Hoje", e nao "Inicio".
+   *
+   * Os outros oito itens nomeiam o proprio conteudo -- Demandas, Habitos,
+   * Leitura, Contas a pagar. "Inicio" era o unico guarda-chuva: dizia a
+   * posicao do item no menu, nao o que a tela mostra. E a tela mostra o dia:
+   * tarefas de hoje, clima, agenda, pendencias.
+   */
+  { href: "/", label: "Hoje", icon: LayoutDashboard },
   { href: "/demandas", label: "Demandas", icon: ListChecks },
   { href: "/habitos", label: "Hábitos", icon: Repeat2 },
   { href: "/leitura", label: "Leitura", icon: BookOpen },

@@ -1469,7 +1469,7 @@ export default function LeituraPage() {
               </Field>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_100px_110px]">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_100px_110px]">
               <Field label="ISBN">
                 <Input
                   value={formEdit.isbn}
@@ -1798,7 +1798,7 @@ export default function LeituraPage() {
                 </Field>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_100px_110px]">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_100px_110px]">
                 <Field label="ISBN">
                   <Input
                     value={manual.isbn}

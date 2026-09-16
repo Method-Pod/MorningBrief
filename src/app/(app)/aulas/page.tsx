@@ -1659,7 +1659,7 @@ export default function AulasPage() {
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_110px]">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_110px]">
             <Field label="Canal / autor">
               <Input
                 value={form.canal}

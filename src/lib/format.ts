@@ -1,3 +1,5 @@
+import { FUSO } from "./viradaDoDia";
+
 /*
  * Os formatadores nascem uma vez, fora das funções.
  *
@@ -98,12 +100,26 @@ export const valorDigitado = (entrada: string | number): number => {
   return parseFloat(ehMilhar ? pedacos.join("") : cru);
 };
 
-/** Data local de hoje em ISO (YYYY-MM-DD), sem converter para UTC. */
-export const todayISO = () => {
-  const d = new Date();
-  const off = d.getTimezoneOffset();
-  return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 10);
-};
+/**
+ * Hoje em ISO (YYYY-MM-DD), no mesmo fuso que o servidor usa.
+ *
+ * Lia o fuso do aparelho. O servidor calcula tudo em America/Sao_Paulo -- a
+ * geracao das recorrentes, a limpeza das concluidas, o vencimento das contas --
+ * e com o relogio do computador em outro fuso as duas datas discordavam em
+ * silencio: a tela dizia um "hoje" e o cron tinha trabalhado com outro. Nada
+ * na interface indicava a divergencia, o que faz dela o pior tipo de defeito.
+ *
+ * Notebook com fuso errado, ou voce em viagem, e o app inteiro passa a
+ * concordar consigo mesmo -- que e o que importa aqui, ja que o dado e seu e
+ * mora num fuso so.
+ */
+export const todayISO = () =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: FUSO,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 
 export const daysUntil = (iso: string) => {
   const today = new Date(todayISO() + "T00:00:00");

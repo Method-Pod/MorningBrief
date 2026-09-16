@@ -490,7 +490,7 @@ export default function CalendarioPage() {
         </Button>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
         {/* ------------------------------ grade ------------------------------ */}
         <Card className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 px-4 py-4">
