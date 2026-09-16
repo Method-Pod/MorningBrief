@@ -801,12 +801,44 @@ export default function DemandasPage() {
             className="w-full sm:w-[200px]"
             aria-label="Filtrar por cliente"
           >
+            {/*
+              Separado em dois grupos, e não numa lista corrida.
+
+              O número ao lado do nome conta o que está EM ABERTO, então um
+              cliente sem nada pendente aparece com (0) — e ficava misturado,
+              do mesmo tamanho, entre os que têm trabalho esperando. Metade da
+              lista podia estar zerada sem nada dizer isso antes de clicar.
+
+              Os dois grupos respondem perguntas diferentes: "quem está me
+              esperando" e "com quem eu já trabalhei". Nenhum cliente some — o
+              histórico continua acessível, que é o motivo de o (0) existir.
+            */}
             <option value="all">Todos os clientes</option>
-            {clientes.map((c) => (
-              <option key={c.chave} value={c.chave}>
-                {c.nome} ({c.abertas})
-              </option>
-            ))}
+            {(() => {
+              const comTrabalho = clientes.filter((c) => c.abertas > 0);
+              const semTrabalho = clientes.filter((c) => c.abertas === 0);
+              const grupo = (
+                rotulo: string,
+                lista: typeof clientes,
+                mostrarNumero: boolean
+              ) =>
+                lista.length > 0 && (
+                  <optgroup label={rotulo}>
+                    {lista.map((c) => (
+                      <option key={c.chave} value={c.chave}>
+                        {c.nome}
+                        {mostrarNumero ? ` (${c.abertas})` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              return (
+                <>
+                  {grupo("Com demandas abertas", comTrabalho, true)}
+                  {grupo("Sem nada em aberto", semTrabalho, false)}
+                </>
+              );
+            })()}
           </Select>
         )}
 
