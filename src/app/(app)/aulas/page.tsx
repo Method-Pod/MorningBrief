@@ -1125,7 +1125,7 @@ export default function AulasPage() {
                       <span
                         className={cx(
                           "block h-full w-full origin-left rounded-full transition-transform duration-[300ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]",
-                          pronto ? "bg-pos" : "bg-[var(--cor-barra)]"
+                          pronto ? "bg-pos" : "bg-brand-500"
                         )}
                         style={{ transform: `scaleX(${pct / 100})` }}
                       />
@@ -1301,7 +1301,7 @@ export default function AulasPage() {
                   <span
                     className={cx(
                       "block h-full w-full origin-left rounded-full transition-transform duration-[320ms]",
-                      naSemana >= meta ? "bg-pos" : "bg-[var(--cor-barra)]"
+                      naSemana >= meta ? "bg-pos" : "bg-brand-500"
                     )}
                     style={{
                       transform: `scaleX(${Math.min(1, naSemana / meta)})`,
@@ -1534,7 +1534,7 @@ export default function AulasPage() {
                             <>
                               <span className="h-1 min-w-[48px] flex-1 overflow-hidden rounded-full bg-ink-800">
                                 <span
-                                  className="block h-full w-full origin-left rounded-full bg-[var(--cor-barra)] transition-transform duration-300"
+                                  className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
                                   style={{ transform: `scaleX(${pct / 100})` }}
                                 />
                               </span>

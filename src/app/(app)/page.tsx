@@ -983,7 +983,27 @@ export default function HomePage() {
           quanto andou. R$ 200 em aberto quer dizer coisas opostas num mês de
           R$ 300 e num de R$ 3.000. Aqui a barra responde isso de um olhar.
         */}
-        <Card className="md:col-span-2 xl:col-span-3">
+        {/*
+          Quanto o resumo ocupa depende de quantos cartoes vieram antes dele.
+          
+          A faixa tem quatro cartoes fixos — Contas, Agenda, Recorrentes e este
+          — e um quinto que so aparece quando ha habitos. Um `col-span` fixo
+          acerta um caso e erra o outro: com `xl:col-span-3` ele virava faixa
+          inteira e descia para uma linha propria, deixando o vao ao lado de
+          Recorrentes que era justamente o que ele veio tapar.
+          
+          Com o quinto cartao presente, sobra uma coluna ao lado de Recorrentes
+          e ele ocupa duas; sem o quinto, Recorrentes fecha a primeira linha e
+          ele ocupa as tres. As quatro combinacoes (duas larguras x com e sem
+          habitos) fecham sem sobra.
+        */}
+        <Card
+          className={
+            habitos.length > 0
+              ? "md:col-span-2 xl:col-span-2"
+              : "xl:col-span-3"
+          }
+        >
           <Head icon={<PieChart size={14} />} title={`Resumo de ${nomeMes}`} href="/contas" link="abrir contas" />
           <div className="px-[18px] pb-[18px] pt-3">
             {m.totalMes === 0 ? (
@@ -1116,7 +1136,7 @@ export default function HomePage() {
                           <span className="mt-1.5 flex items-center gap-2">
                             <span className="h-1 min-w-[40px] flex-1 overflow-hidden rounded-full bg-ink-800">
                               <span
-                                className="block h-full w-full origin-left rounded-full bg-[var(--cor-barra)] transition-transform duration-300"
+                                className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
                                 style={{ transform: `scaleX(${pct / 100})` }}
                               />
                             </span>

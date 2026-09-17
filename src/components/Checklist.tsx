@@ -48,7 +48,7 @@ export function ProgressoChecklist({
         <div
           className={cx(
             "h-full w-full origin-left rounded-full transition-transform duration-[280ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]",
-            completo ? "bg-pos" : "bg-[var(--cor-barra)]"
+            completo ? "bg-pos" : "bg-brand-500"
           )}
           style={{ transform: `scaleX(${pct / 100})` }}
         />
