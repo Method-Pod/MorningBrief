@@ -66,8 +66,22 @@ export function Button({
     icon: "h-9 w-9 text-sm",
   }[size];
   const variants = {
-    primary: "bg-brand-500 text-on-brand hover:bg-brand-600",
-    outline: "bg-white text-fg-dim shadow-[var(--elev-1)] hover:text-fg hover:shadow-[var(--elev-2)]",
+    /*
+     * O halo embaixo do botao cheio.
+     *
+     * O botao pintado com o accent e o unico elemento saturado da tela, e sem
+     * nada embaixo ele fica como adesivo colado. `--brilho` e a luz que ele
+     * mesmo emitiria -- a propria cor do botao, espalhada e empurrada para
+     * baixo -- e por isso acompanha as cinco cores sem nada escrito aqui.
+     * Ver `--brilho` em globals.css.
+     *
+     * No hover ele abre um pouco em vez de a cor so escurecer: as duas coisas
+     * juntas leem como "o botao veio para frente", que e o que o hover quer
+     * dizer.
+     */
+    primary:
+      "bg-brand-500 text-on-brand shadow-[var(--brilho)] hover:bg-brand-600 hover:shadow-[var(--brilho-forte)]",
+    outline: "bg-ink-900 text-fg-dim shadow-[var(--elev-1)] hover:text-fg hover:shadow-[var(--elev-2)]",
     ghost: "text-fg-mute hover:text-fg hover:bg-ink-800",
     subtle: "bg-ink-800 text-fg-dim hover:bg-brand-500/12 hover:text-brand-400",
     danger: "bg-neg/10 text-neg hover:bg-neg/20",
@@ -78,7 +92,7 @@ export function Button({
 /* ------------------------------ Inputs ------------------------------ */
 
 const fieldBase =
-  "w-full rounded-[14px] border border-transparent bg-ink-800 px-3.5 text-sm text-fg placeholder:text-fg-mute transition-colors focus:border-brand-500 focus:bg-white focus:outline-none";
+  "w-full rounded-[14px] border border-transparent bg-ink-800 px-3.5 text-sm text-fg placeholder:text-fg-mute transition-colors focus:border-brand-500 focus:bg-ink-900 focus:outline-none";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
@@ -147,7 +161,9 @@ export function Badge({
     pos: "bg-pos/12 text-pos border-transparent",
     neg: "bg-neg/12 text-neg border-transparent",
     warn: "bg-warn/12 text-warn border-transparent",
-    violet: "bg-violet-500/12 text-violet-700 border-transparent",
+    /* `violeta` é token do app, e não o violet do Tailwind: o built-in tem um
+       valor só, e um tom escolhido para fundo branco fica ilegível no escuro. */
+    violet: "bg-violeta/12 text-violeta border-transparent",
   }[tone];
   return (
     <span
@@ -182,7 +198,7 @@ export function Segmented<T extends string>({
           className={cx(
             "h-7 rounded-lg px-3 text-xs font-medium transition-colors",
             value === o.value
-              ? "bg-white text-brand-400 shadow-[var(--elev-1)]"
+              ? "bg-ink-900 text-brand-400 shadow-[var(--elev-1)]"
               : "text-fg-mute hover:text-fg-dim"
           )}
         >
@@ -358,7 +374,7 @@ export function Modal({
       )}
     >
       <div
-        className={cx("fixed inset-0 bg-fg/35", saindo ? "fade-sai" : "fade")}
+        className={cx("fixed inset-0 bg-[var(--veu)]", saindo ? "fade-sai" : "fade")}
         onClick={onClose}
       />
       <div
@@ -377,7 +393,7 @@ export function Modal({
            * e tinha que rolar procurando o Salvar. Assim cabeçalho e rodapé
            * ficam sempre à vista e só o miolo rola.
            */
-          "relative z-10 my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-[20px] bg-white shadow-[0_24px_60px_-20px_rgb(20_24_26/0.3)] sm:max-h-[calc(100dvh-3rem)]",
+          "relative z-10 my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-[20px] bg-ink-900 shadow-[var(--elev-4)] sm:max-h-[calc(100dvh-3rem)]",
           saindo ? "pop-sai" : "pop",
           size === "xl" ? "max-w-3xl" : size === "lg" ? "max-w-2xl" : "max-w-lg"
         )}
@@ -441,7 +457,7 @@ export function Empty({
 /* ------------------------------ Skeleton ------------------------------ */
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cx("animate-pulse rounded-lg bg-black/[0.06]", className)} />;
+  return <div className={cx("animate-pulse rounded-lg bg-fg/[0.07]", className)} />;
 }
 
 /*
@@ -622,7 +638,7 @@ export function useNotice() {
       ? createPortal(
           <div
             role="status"
-            className="fixed bottom-5 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full bg-neg px-4 py-3 text-center text-xs font-medium text-white shadow-[0_6px_20px_-8px_rgb(20_24_26/0.4)] pop"
+            className="fixed bottom-5 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full bg-neg px-4 py-3 text-center text-xs font-medium text-white shadow-[var(--elev-3)] pop"
           >
             {msg}
           </div>,

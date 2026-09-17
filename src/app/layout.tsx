@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { ACCENT_KEYS } from "@/lib/accents";
+import { TEMA_STORAGE } from "@/lib/tema";
 import { RegistroApp } from "@/components/RegistroApp";
+import { CorDaBarra } from "@/components/tema";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -99,7 +101,21 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f1f4f7",
+  /*
+   * A cor da barra do navegador, uma por tema.
+   *
+   * É o que pinta a faixa de cima no Android e a área em volta do app
+   * instalado. Com um valor só, quem usa o escuro via uma tira clara grudada
+   * no alto de uma tela escura — o detalhe que denuncia que o tema escuro foi
+   * aplicado por fora e não pensado.
+   *
+   * Os valores são `--a-bg` de cada tema. Aqui não dá para usar a variável:
+   * isto vira uma etiqueta no <head>, lida antes de qualquer CSS.
+   */
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f1f4f7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0f1418" },
+  ],
   width: "device-width",
   initialScale: 1,
 };
@@ -120,9 +136,20 @@ export const viewport: Viewport = {
  * Derivar da mesma constante que o seletor usa faz as duas listas não terem
  * como divergir de novo: acrescentar uma cor em `lib/accents` já a ensina aqui.
  */
+/*
+ * O tema segue a mesma receita, e pela mesma razão.
+ *
+ * Só que aqui a piscada seria pior: abrir no claro e saltar para o escuro
+ * depois da hidratação é a tela inteira trocando de cor na cara de quem
+ * abriu, não um detalhe mudando de tom.
+ *
+ * "auto" não é gravado no atributo de propósito — ausência é o que o CSS lê
+ * como automático. Ver `lib/tema`.
+ */
 const ACCENT_BOOT = `try{var a=localStorage.getItem('mb.accent');
 if(${JSON.stringify([...ACCENT_KEYS])}.indexOf(a)>-1)document.documentElement.dataset.accent=a}catch(e){}
-try{if(localStorage.getItem('mb.design')==='padrao')document.documentElement.dataset.design='padrao'}catch(e){}`;
+try{var t=localStorage.getItem(${JSON.stringify(TEMA_STORAGE)});
+if(t==='claro'||t==='escuro')document.documentElement.dataset.tema=t}catch(e){}`;
 
 export default async function RootLayout({
   children,
@@ -173,6 +200,7 @@ export default async function RootLayout({
       <body className="min-h-dvh font-sans antialiased">
         {children}
         <RegistroApp />
+        <CorDaBarra />
       </body>
     </html>
   );

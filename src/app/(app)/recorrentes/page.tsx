@@ -676,7 +676,7 @@ export default function RecorrentesPage() {
               type="checkbox"
               checked={form.active}
               onChange={(e) => setForm({ ...form, active: e.target.checked })}
-              className="h-4 w-4 accent-[#2f7bff]"
+              className="h-4 w-4 accent-brand-500"
             />
             <span className="text-sm text-fg-dim">
               Ativa

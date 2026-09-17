@@ -8,16 +8,18 @@ import {
   KeyRound,
   LogOut,
   Mail,
+  Monitor,
+  Moon,
   Palette,
   ShieldCheck,
-  Sparkles,
+  Sun,
   User,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { dateTimeBR } from "@/lib/format";
 import { sairDaConta } from "@/lib/sair";
 import { ACCENTS, useAccent } from "@/components/accent";
-import { useDesign } from "@/components/design";
+import { TEMAS, useTema } from "@/components/tema";
 import { TrocarFoto, useAvatar } from "@/components/Avatar";
 import { Button, Card, Input, cx } from "@/components/ui";
 
@@ -41,7 +43,7 @@ export default function ContaPage() {
   const [aviso, setAviso] = React.useState("");
   const [erro, setErro] = React.useState("");
   const { accent, setAccent } = useAccent();
-  const { modo, setModo } = useDesign();
+  const { tema, setTema } = useTema();
   const { url: foto, setUrl: setFoto } = useAvatar();
 
   React.useEffect(() => {
@@ -214,9 +216,46 @@ export default function ContaPage() {
           </div>
         </Card>
 
-        {/* ------------------------------ tema ------------------------------ */}
+        {/* --------------------------- claro e escuro --------------------------- */}
         <Card>
-          <Cabeca icon={<Palette size={14} />} titulo="Tema" />
+          <Cabeca icon={<Sun size={14} />} titulo="Claro ou escuro" />
+          <div className="px-[18px] pb-[18px] pt-3">
+            <p className="text-[13px] text-fg-mute">
+              No automático, o app segue o que estiver no seu celular ou
+              computador — inclusive quando ele troca sozinho ao anoitecer. A
+              escolha fica salva neste navegador.
+            </p>
+            <div className="mt-3.5 flex flex-wrap gap-2.5">
+              {TEMAS.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTema(t.key)}
+                  aria-pressed={tema === t.key}
+                  className={cx(
+                    "flex items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-[13px] font-medium transition-colors",
+                    tema === t.key
+                      ? "bg-brand-500/12 text-brand-400"
+                      : "bg-ink-800 text-fg-dim hover:text-fg"
+                  )}
+                >
+                  {t.key === "claro" ? (
+                    <Sun size={15} />
+                  ) : t.key === "escuro" ? (
+                    <Moon size={15} />
+                  ) : (
+                    <Monitor size={15} />
+                  )}
+                  {t.name}
+                  {tema === t.key && <Check size={14} />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Card>
+
+        {/* ------------------------------ cor ------------------------------ */}
+        <Card>
+          <Cabeca icon={<Palette size={14} />} titulo="Cor de destaque" />
           <div className="px-[18px] pb-[18px] pt-3">
             <p className="text-[13px] text-fg-mute">
               A cor escolhida fica salva neste navegador.
@@ -240,44 +279,6 @@ export default function ContaPage() {
                   />
                   {a.name}
                   {accent === a.key && <Check size={14} />}
-                </button>
-              ))}
-            </div>
-          </div>
-        </Card>
-
-        {/* ------------------------------ aparência ------------------------------ */}
-        <Card>
-          <Cabeca icon={<Sparkles size={14} />} titulo="Aparência" />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <p className="text-[13px] text-fg-mute">
-              A interface atual tem sombras em duas camadas, títulos de mesmo
-              tamanho em todas as telas e alguns movimentos a mais — o botão
-              afunda ao ser apertado, o menu cresce a partir de onde foi
-              aberto, e o cartão solto fora de uma coluna volta para o lugar.
-              O modo padrão desliga tudo isso e devolve a interface como era
-              antes. Fica salvo neste navegador.
-            </p>
-            <div className="mt-3.5 flex flex-wrap gap-2.5">
-              {(
-                [
-                  { chave: "atual", nome: "Atual" },
-                  { chave: "padrao", nome: "Padrão (como era antes)" },
-                ] as const
-              ).map((o) => (
-                <button
-                  key={o.chave}
-                  onClick={() => setModo(o.chave)}
-                  aria-pressed={modo === o.chave}
-                  className={cx(
-                    "flex items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-[13px] font-medium transition-colors",
-                    modo === o.chave
-                      ? "bg-brand-500/12 text-brand-400"
-                      : "bg-ink-800 text-fg-dim hover:text-fg"
-                  )}
-                >
-                  {o.nome}
-                  {modo === o.chave && <Check size={14} />}
                 </button>
               ))}
             </div>

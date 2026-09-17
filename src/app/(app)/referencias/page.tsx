@@ -745,7 +745,7 @@ export default function ReferenciasPage() {
                     Três degraus: o ícone que o site declara, o /favicon.ico do
                     domínio, e a bússola. Ver `iconeDaLista`.
                   */}
-                  <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-[9px] bg-white ring-1 ring-line-soft">
+                  <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-[9px] bg-ink-900 ring-1 ring-line-soft">
                     {iconeDaLista(r, quebradas[r.id]) ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
@@ -1095,7 +1095,7 @@ export default function ReferenciasPage() {
               */}
               {form.busca ? (
                 <div className="flex items-center gap-3 p-3">
-                  <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[11px] bg-white ring-1 ring-line-soft">
+                  <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-[11px] bg-ink-900 ring-1 ring-line-soft">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={previa ?? form.image_url}
@@ -1139,7 +1139,7 @@ export default function ReferenciasPage() {
                 : "Pode colar com Ctrl+V. JPG, PNG ou WebP, até 3 MB."
             }
           >
-            <label className="flex h-10 cursor-pointer items-center gap-2 rounded-[14px] border border-line bg-white px-3.5 text-[12.5px] text-fg-mute transition-colors hover:border-brand-400 hover:text-fg-dim">
+            <label className="flex h-10 cursor-pointer items-center gap-2 rounded-[14px] border border-line bg-ink-900 px-3.5 text-[12.5px] text-fg-mute transition-colors hover:border-brand-400 hover:text-fg-dim">
               <ImagePlus size={15} />
               {arquivo
                 ? arquivo.name
@@ -1184,7 +1184,7 @@ export default function ReferenciasPage() {
                         "h-8 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
                         marcada
                           ? "border-brand-500 bg-brand-500/12 text-brand-400"
-                          : "border-line bg-white text-fg-mute hover:border-brand-400"
+                          : "border-line bg-ink-900 text-fg-mute hover:border-brand-400"
                       )}
                     >
                       {c.name}

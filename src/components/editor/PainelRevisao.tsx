@@ -39,7 +39,7 @@ export function PainelRevisao({
   const vale = achados.filter((a) => a.trocas[0]);
 
   return (
-    <div className="mb-4 overflow-hidden rounded-[16px] border border-line bg-white shadow-[0_8px_24px_-16px_rgb(20_24_26/0.25)]">
+    <div className="mb-4 overflow-hidden rounded-[16px] border border-line bg-ink-900 shadow-[var(--elev-2)]">
       <div className="flex items-center gap-2 border-b border-line-soft px-3.5 py-2.5">
         <SpellCheck2 size={14} className="shrink-0 text-fg-mute" />
         <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-fg">
@@ -108,7 +108,7 @@ export function PainelRevisao({
                          provável, e por isso é a que fica preenchida: as
                          outras existem para o caso de ele ter errado. */
                       i === 0
-                        ? "bg-brand-500 text-on-brand hover:bg-brand-600"
+                        ? "bg-brand-500 text-on-brand shadow-[var(--brilho)] hover:bg-brand-600 hover:shadow-[var(--brilho-forte)]"
                         : "border border-line text-fg-dim hover:bg-ink-800 hover:text-fg"
                     )}
                   >

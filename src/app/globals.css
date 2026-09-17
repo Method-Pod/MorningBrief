@@ -21,6 +21,11 @@
   --a-sink: #f7f9fb;
   --a-line: #e3e8ee;
   --a-line-soft: #edf1f5;
+
+  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
+  --a-2-esc: #4690ea;
+  --a-text-esc: #599ced;
+  --a-soft-esc: #192b3f;
 }
 :root[data-accent="red"] {
   --a: #e72828;
@@ -32,6 +37,11 @@
   --a-sink: #faf7f7;
   --a-line: #eae3e3;
   --a-line-soft: #f3eeee;
+
+  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
+  --a-2-esc: #ea4646;
+  --a-text-esc: #ef7171;
+  --a-soft-esc: #371d20;
 }
 :root[data-accent="blue"] {
   --a: #287ee7;
@@ -43,6 +53,11 @@
   --a-sink: #f7f9fb;
   --a-line: #e3e8ee;
   --a-line-soft: #edf1f5;
+
+  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
+  --a-2-esc: #4690ea;
+  --a-text-esc: #599ced;
+  --a-soft-esc: #192b3f;
 }
 :root[data-accent="green"] {
   --a: #28e75e;
@@ -54,17 +69,11 @@
   --a-sink: #f7fbf8;
   --a-line: #e2ece5;
   --a-line-soft: #edf4ef;
-}
-:root[data-accent="yellow"] {
-  --a: #e7e128;
-  --a-ink: #23210a;
-  --a-2: #c9c31c;
-  --a-text: #6b6605;
-  --a-soft: #fbfae2;
-  --a-bg: #f5f5ee;
-  --a-sink: #faf9f3;
-  --a-line: #eae9db;
-  --a-line-soft: #f3f2e9;
+
+  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
+  --a-2-esc: #46ea75;
+  --a-text-esc: #28e75e;
+  --a-soft-esc: #193c29;
 }
 
 /*
@@ -90,17 +99,11 @@
   --a-sink: #f9f9f8;
   --a-line: #ebe8e6;
   --a-line-soft: #f2f1f0;
-}
-:root[data-accent="pink"] {
-  --a: #e7288e;
-  --a-ink: #fff;
-  --a-2: #bd1f73;
-  --a-text: #b4166a;
-  --a-soft: #fbe9f3;
-  --a-bg: #f5f2f4;
-  --a-sink: #f9f8f9;
-  --a-line: #ebe6e8;
-  --a-line-soft: #f2f0f1;
+
+  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
+  --a-2-esc: #ea9e46;
+  --a-text-esc: #e78e28;
+  --a-soft-esc: #372d20;
 }
 :root[data-accent="violet"] {
   --a: #7e28e7;
@@ -112,26 +115,19 @@
   --a-sink: #f9f8f9;
   --a-line: #e8e6eb;
   --a-line-soft: #f1f0f2;
-}
-:root[data-accent="cyan"] {
-  --a: #28e7e1;
-  --a-ink: #0a2423;
-  --a-2: #1fbdb8;
-  --a-text: #0d6966;
-  --a-soft: #e9fbfb;
-  --a-bg: #f2f5f4;
-  --a-sink: #f8f9f9;
-  --a-line: #e6ebea;
-  --a-line-soft: #f0f2f2;
+
+  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
+  --a-2-esc: #9046ea;
+  --a-text-esc: #b380f1;
+  --a-soft-esc: #271d3f;
 }
 
 /* ============================================================
    Profundidade e tipografia.
 
-   Tudo aqui e escrito como variavel, e nao como valor solto, por um motivo
-   so: `:root[data-design="padrao"]`, mais abaixo, devolve cada uma ao que
-   era antes. Quem quiser a interface de volta como estava aperta um botao na
-   pagina de Conta, sem precisar de mim nem de git.
+   Escrito como variavel, e nao como valor solto, para a escala de elevacao e
+   o tamanho de titulo terem um lugar so onde mudar -- e nao uma sombra
+   diferente por componente, que foi como isto comecou.
    ============================================================ */
 :root {
   /*
@@ -168,10 +164,8 @@
   /*
    * Quanto o botao encolhe ao ser apertado.
    *
-   * Variavel, e nao 0.97 escrito na regra, porque o modo padrao precisa poder
-   * zerar isto -- e zerar e `1`, nao `none`: `scale: none` e valido mas volta
-   * a ser o valor inicial de outra forma, e `1` deixa explicito que a conta
-   * continua acontecendo e o resultado e nao mexer.
+   * Variavel para o valor ser um so: sao varios botoes, e um deles com 0.95
+   * enquanto os outros tem 0.97 e a diferenca que ninguem sabe explicar.
    */
   --apertar: 0.97;
 
@@ -181,46 +175,253 @@
   --titulo-leading: 1.15;
 }
 
+/* ============================================================
+   Claro e escuro.
+
+   Os valores que NÃO dependem do accent ficam aqui, com nome próprio, e o
+   `@theme` abaixo só aponta para eles. Essa volta existe para o tema escuro
+   poder trocar tudo num bloco só: `@theme` é lido pelo Tailwind uma vez, na
+   compilação, e não dá para reescrevê-lo em tempo de execução — mas uma
+   variável para a qual ele aponta, dá.
+
+   Três estados, e não dois. `data-tema="claro"` e `data-tema="escuro"` são
+   escolhas explícitas; SEM o atributo é o automático, que segue o sistema
+   operacional — e é o padrão de quem nunca abriu a página de Conta. Por isso
+   o bloco do meio casa em `:not([data-tema="claro"])`: dentro da consulta de
+   mídia, ele pega o automático E o escuro, mas nunca alguém que pediu claro
+   num sistema escuro.
+   ============================================================ */
+:root {
+  /* superfícies, do fundo da página para cima */
+  --sup-cartao: #ffffff;
+  --sup-alta: #ffffff;
+  --borda-forte: #c8cfd2;
+
+  --txt: #14181a;
+  --txt-dim: #4d565b;
+  --txt-mute: #666e74;
+
+  --cor-pos: #1f9d63;
+  --cor-neg: #cf4a3f;
+  --cor-warn: #b8820c;
+
+  --barra: #d5dbd7;
+  --barra-hover: #c0c8c3;
+
+  /*
+   * O roxo das etiquetas de demanda.
+   *
+   * É o único tom fora da paleta do app — ele marca "veio de uma recorrência"
+   * e não podia ser o accent, que muda de cor. Como qualquer tom escolhido
+   * para papel branco, ele some no escuro: #6d28d9 sobre o cartão escuro dá
+   * 2,2:1. Por isso tem os dois valores, como o resto.
+   */
+  --cor-violeta: #6d28d9;
+
+  /*
+   * Os dois blocos escuros por escolha, e não por tema.
+   *
+   * O cartão "Seu dia" e o painel de marca do login são escuros de propósito,
+   * com texto branco em cima — no tema claro eles são o contraste da tela.
+   * No escuro, ficarem iguais ao resto seria perdê-los: o painel do login
+   * encostaria no cartão que o abriga e sumiria a borda entre os dois. Então
+   * eles clareiam junto, para continuarem sendo o bloco que se destaca.
+   */
+  --bloco-1: #26292b;
+  --bloco-2: #1b1e20;
+  --painel-marca: #16191b;
+
+  /*
+   * O véu atrás de um modal escurece, nos dois temas.
+   *
+   * Estava escrito como `bg-fg/35` — a cor do TEXTO com transparência. No
+   * claro isso dá um cinza escuro, que é o certo; no escuro, `--txt` é quase
+   * branco, e o véu clarearia a tela em vez de apagá-la. Véu é sombra, não
+   * tinta de texto, e por isso tem nome próprio.
+   */
+  --veu: rgb(20 24 26 / 0.35);
+
+  /*
+   * O brilho embaixo do botao cheio.
+   *
+   * Um botao pintado com o accent e o unico elemento saturado da tela; sem
+   * nada embaixo, ele fica como um adesivo colado. O halo e a luz que ele
+   * mesmo emitiria: sai da propria cor do botao, espalhada e empurrada para
+   * baixo, e some antes de virar contorno.
+   *
+   * `color-mix` com o accent, e nao um roxo ou azul escrito aqui, porque a
+   * cor e escolhida na pagina de Conta — o halo tem de acompanhar as cinco.
+   *
+   * No claro ele e discreto de proposito: sobre fundo quase branco, brilho
+   * demais vira borrao sujo em volta do botao. O valor forte fica para o
+   * escuro, onde ha espaco para a luz aparecer.
+   */
+  --brilho: 0 6px 16px -6px color-mix(in srgb, var(--a) 45%, transparent);
+  --brilho-forte: 0 8px 22px -6px color-mix(in srgb, var(--a) 60%, transparent);
+
+  /*
+   * A paleta dos gráficos por categoria.
+   *
+   * Sai daqui e não de `charts.tsx` porque ela também muda de tema: os mesmos
+   * tons que se leem sobre papel branco somem sobre fundo escuro. A primeira
+   * fatia é sempre o accent escolhido, para o gráfico pertencer à tela.
+   */
+  --cat-1: #6d5bd0;
+  --cat-2: #1f9d63;
+  --cat-3: #b8820c;
+  --cat-4: #cf4a3f;
+  --cat-5: #2563a8;
+  --cat-6: #c2559b;
+  --cat-7: #0e8f8f;
+  --cat-8: #8a6a3b;
+  --cat-9: #666e74;
+
+  /* Diz ao navegador de que lado estamos: caixa de seleção, campo de data,
+     barra de rolagem nativa e o preenchimento automático seguem isto. */
+  color-scheme: light;
+}
+
 /*
- * Modo padrao: a interface como era antes desta camada.
+ * O tema escuro, num lugar só.
  *
- * Nao e um tema alternativo nem um "modo simples" -- e a saida. Cada variavel
- * volta ao valor exato que tinha antes, entao o que se ve com o atributo
- * ligado e a mesma tela de antes de tudo isto.
+ * O conteúdo é idêntico nos dois blocos abaixo — muda só quem os liga. Está
+ * escrito duas vezes de propósito: `@media` e o seletor de atributo não se
+ * combinam numa regra só sem repetir o corpo, e uma indireção a mais (um
+ * terceiro nome de variável para "o valor do tema") custaria mais para ler do
+ * que a repetição custa para manter. Se um dia divergirem, é aqui.
  *
- * O titulo volta a 24px/600, que era o mais comum dos quatro que existiam.
- * As variantes de 26px e as com clamp nao tem como voltar uma a uma por
- * variavel -- eram diferencas por pagina, nao por sistema -- e restaurar a
- * bagunca original nao seria devolver nada a ninguem.
+ * As tintas do accent no escuro não foram escolhidas a olho: saíram do mesmo
+ * critério dos tons claros — o accent como TEXTO entre 6 e 6,1:1 contra a
+ * superfície do cartão (#161b1f), o verde naturalmente acima disso — e estão
+ * conferidas uma a uma. Os neutros ficam entre 4,98 e 14,35:1 na mesma
+ * superfície.
  */
-:root[data-design="padrao"] {
-  --apertar: 1;
-  --elev-1: 0 1px 2px rgb(20 24 26 / 0.05);
-  --elev-2: 0 10px 24px -12px rgb(20 24 26 / 0.18);
-  --elev-3: 0 12px 32px -8px rgb(20 24 26 / 0.25);
-  --elev-4: 0 24px 70px -28px rgb(20 24 26 / 0.22);
-  --titulo-tam: 24px;
-  --titulo-peso: 600;
-  --titulo-tracking: -0.025em;
-  --titulo-leading: 1.25;
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --a-bg: #0f1418;
+    --a-sink: #1b2126;
+    --a-line: #2a3238;
+    --a-line-soft: #212930;
+    --a-2: var(--a-2-esc);
+    --a-text: var(--a-text-esc);
+    --a-soft: var(--a-soft-esc);
+
+    --sup-cartao: #161b1f;
+    --sup-alta: #1e252a;
+    --borda-forte: #3d474e;
+
+    --txt: #e6eaee;
+    --txt-dim: #a9b3ba;
+    --txt-mute: #808b93;
+
+    --cor-pos: #35c880;
+    --cor-neg: #f0705f;
+    --cor-warn: #e0a42a;
+
+    --barra: #333c43;
+    --barra-hover: #46525a;
+  --cor-violeta: #a78bfa;
+    --cor-violeta: #a78bfa;
+
+    --bloco-1: #2b3036;
+    --bloco-2: #1e242a;
+    --painel-marca: #20262c;
+    --veu: rgb(0 0 0 / 0.62);
+
+    --brilho: 0 8px 24px -8px color-mix(in srgb, var(--a) 65%, transparent);
+    --brilho-forte: 0 10px 32px -8px color-mix(in srgb, var(--a) 85%, transparent);
+
+    --cat-1: #9c8cf0;
+    --cat-2: #35c880;
+    --cat-3: #e0a42a;
+    --cat-4: #f0705f;
+    --cat-5: #6aa6e8;
+    --cat-6: #e086c0;
+    --cat-7: #33c4c4;
+    --cat-8: #c4a170;
+    --cat-9: #98a3aa;
+
+    /*
+     * Sombra preta sobre fundo escuro não aparece. O que separa as camadas no
+     * escuro é a própria superfície ser mais clara que o fundo — por isso
+     * `--sup-cartao` é mais claro que `--a-bg` —, e a sombra fica só como
+     * contorno, mais forte para ainda dizer alguma coisa.
+     */
+    --elev-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 10px -6px rgb(0 0 0 / 0.5);
+    --elev-2: 0 2px 4px rgb(0 0 0 / 0.45), 0 12px 24px -12px rgb(0 0 0 / 0.6);
+    --elev-3: 0 4px 8px rgb(0 0 0 / 0.5), 0 18px 40px -14px rgb(0 0 0 / 0.65);
+    --elev-4: 0 8px 16px rgb(0 0 0 / 0.55), 0 32px 68px -22px rgb(0 0 0 / 0.7);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-tema="escuro"] {
+  --a-bg: #0f1418;
+  --a-sink: #1b2126;
+  --a-line: #2a3238;
+  --a-line-soft: #212930;
+  --a-2: var(--a-2-esc);
+  --a-text: var(--a-text-esc);
+  --a-soft: var(--a-soft-esc);
+
+  --sup-cartao: #161b1f;
+  --sup-alta: #1e252a;
+  --borda-forte: #3d474e;
+
+  --txt: #e6eaee;
+  --txt-dim: #a9b3ba;
+  --txt-mute: #808b93;
+
+  --cor-pos: #35c880;
+  --cor-neg: #f0705f;
+  --cor-warn: #e0a42a;
+
+  --barra: #333c43;
+  --barra-hover: #46525a;
+
+  --bloco-1: #2b3036;
+  --bloco-2: #1e242a;
+  --painel-marca: #20262c;
+  --veu: rgb(0 0 0 / 0.62);
+
+  --brilho: 0 8px 24px -8px color-mix(in srgb, var(--a) 65%, transparent);
+  --brilho-forte: 0 10px 32px -8px color-mix(in srgb, var(--a) 85%, transparent);
+
+  --cat-1: #9c8cf0;
+  --cat-2: #35c880;
+  --cat-3: #e0a42a;
+  --cat-4: #f0705f;
+  --cat-5: #6aa6e8;
+  --cat-6: #e086c0;
+  --cat-7: #33c4c4;
+  --cat-8: #c4a170;
+  --cat-9: #98a3aa;
+
+  --elev-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 10px -6px rgb(0 0 0 / 0.5);
+  --elev-2: 0 2px 4px rgb(0 0 0 / 0.45), 0 12px 24px -12px rgb(0 0 0 / 0.6);
+  --elev-3: 0 4px 8px rgb(0 0 0 / 0.5), 0 18px 40px -14px rgb(0 0 0 / 0.65);
+  --elev-4: 0 8px 16px rgb(0 0 0 / 0.55), 0 32px 68px -22px rgb(0 0 0 / 0.7);
+
+  color-scheme: dark;
 }
 
 @theme {
   /* superfícies — nomes antigos mantidos para não reescrever cada página */
   --color-ink-950: var(--a-bg);
-  --color-ink-900: #ffffff;
-  --color-ink-850: #ffffff;
+  --color-ink-900: var(--sup-cartao);
+  --color-ink-850: var(--sup-alta);
   --color-ink-800: var(--a-sink);
   --color-ink-750: var(--a-sink);
   --color-ink-700: var(--a-line);
-  --color-ink-600: #c8cfd2;
+  --color-ink-600: var(--borda-forte);
 
   --color-line: var(--a-line);
   --color-line-soft: var(--a-line-soft);
 
-  --color-fg: #14181a;
-  --color-fg-dim: #4d565b;
-  --color-fg-mute: #666e74;
+  --color-fg: var(--txt);
+  --color-fg-dim: var(--txt-dim);
+  --color-fg-mute: var(--txt-mute);
 
   /* brand-400 = accent como TEXTO · brand-500 = preenchimento · brand-600 = hover */
   --color-brand-400: var(--a-text);
@@ -228,9 +429,10 @@
   --color-brand-600: var(--a-2);
   --color-on-brand: var(--a-ink);
 
-  --color-pos: #1f9d63;
-  --color-neg: #cf4a3f;
-  --color-warn: #b8820c;
+  --color-pos: var(--cor-pos);
+  --color-neg: var(--cor-neg);
+  --color-warn: var(--cor-warn);
+  --color-violeta: var(--cor-violeta);
 
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
@@ -288,19 +490,19 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d5dbd7;
+  background: var(--barra);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #c0c8c3;
+  background: var(--barra-hover);
   background-clip: content-box;
 }
 
 /* ---------- primitivas ---------- */
 @utility card {
-  background: #fff;
+  background: var(--sup-cartao);
   border-radius: 1.375rem;
   box-shadow: var(--elev-1);
 }
@@ -972,7 +1174,7 @@ textarea::placeholder {
   height: 16px;
   border: 1.5px solid var(--color-line);
   border-radius: 5px;
-  background: #fff;
+  background: var(--sup-cartao);
   display: grid;
   place-items: center;
   transition:
@@ -1022,18 +1224,18 @@ textarea::placeholder {
 }
 
 .nota-corpo [data-destaque][data-tom="nota"] {
-  background: color-mix(in srgb, var(--color-brand-500) 8%, #fff);
-  border-color: color-mix(in srgb, var(--color-brand-500) 25%, #fff);
+  background: color-mix(in srgb, var(--color-brand-500) 8%, var(--sup-cartao));
+  border-color: color-mix(in srgb, var(--color-brand-500) 25%, var(--sup-cartao));
 }
 
 .nota-corpo [data-destaque][data-tom="atencao"] {
-  background: color-mix(in srgb, var(--color-warn) 9%, #fff);
-  border-color: color-mix(in srgb, var(--color-warn) 28%, #fff);
+  background: color-mix(in srgb, var(--color-warn) 9%, var(--sup-cartao));
+  border-color: color-mix(in srgb, var(--color-warn) 28%, var(--sup-cartao));
 }
 
 .nota-corpo [data-destaque][data-tom="bom"] {
-  background: color-mix(in srgb, var(--color-pos) 8%, #fff);
-  border-color: color-mix(in srgb, var(--color-pos) 25%, #fff);
+  background: color-mix(in srgb, var(--color-pos) 8%, var(--sup-cartao));
+  border-color: color-mix(in srgb, var(--color-pos) 25%, var(--sup-cartao));
 }
 
 /* ---------- dica na linha vazia ---------- */
@@ -1054,7 +1256,7 @@ textarea::placeholder {
 /* ---------- nó selecionado para arrastar ---------- */
 
 .nota-corpo .ProseMirror-selectednode {
-  outline: 2px solid color-mix(in srgb, var(--color-brand-500) 45%, #fff);
+  outline: 2px solid color-mix(in srgb, var(--color-brand-500) 45%, var(--sup-cartao));
   outline-offset: 3px;
   border-radius: 6px;
 }
@@ -1106,7 +1308,14 @@ textarea::placeholder {
    * colado de outro programa vinha como marca invisível.
    */
   background-color: #fef08a;
-  color: inherit;
+  /*
+   * Tinta escura fixa, e nao `inherit`.
+   *
+   * O fundo do marca-texto e amarelo claro nos dois temas — e cor de marcacao,
+   * nao de tema. Herdando, no escuro ele receberia texto quase branco em cima
+   * de amarelo claro e o trecho marcado seria o unico ilegivel da anotacao.
+   */
+  color: #23210a;
   border-radius: 4px;
   padding: 0.08em 0.15em;
   box-decoration-break: clone;

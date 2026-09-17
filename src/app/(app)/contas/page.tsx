@@ -1216,7 +1216,7 @@ export default function ContasPage() {
             <button
               onClick={() => trocarMes(mesVizinho(-1))}
               aria-label={`Ver ${rotuloMes(mesVizinho(-1) + "-01")}`}
-              className="grid h-7 w-7 place-items-center rounded-full text-fg-mute transition-colors hover:bg-white hover:text-fg"
+              className="grid h-7 w-7 place-items-center rounded-full text-fg-mute transition-colors hover:bg-ink-900 hover:text-fg"
             >
               <ChevronLeft size={15} />
             </button>
@@ -1226,7 +1226,7 @@ export default function ContasPage() {
             <button
               onClick={() => trocarMes(mesVizinho(1))}
               aria-label={`Ver ${rotuloMes(mesVizinho(1) + "-01")}`}
-              className="grid h-7 w-7 place-items-center rounded-full text-fg-mute transition-colors hover:bg-white hover:text-fg"
+              className="grid h-7 w-7 place-items-center rounded-full text-fg-mute transition-colors hover:bg-ink-900 hover:text-fg"
             >
               <ChevronRight size={15} />
             </button>
@@ -2145,7 +2145,7 @@ function Linha({
         <button
           onClick={onEditar}
           aria-label="Editar"
-          className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-white hover:text-fg"
+          className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-ink-900 hover:text-fg"
         >
           <Pencil size={14} />
         </button>

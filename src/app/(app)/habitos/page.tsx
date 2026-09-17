@@ -426,8 +426,8 @@ export default function HabitosPage() {
                               on
                                 ? "border-transparent bg-brand-500 text-on-brand"
                                 : ehHoje(d)
-                                  ? "border-brand-500 bg-white text-brand-400"
-                                  : "border-line bg-white text-fg-mute",
+                                  ? "border-brand-500 bg-ink-900 text-brand-400"
+                                  : "border-line bg-ink-900 text-fg-mute",
                               !travado && !on && "hover:border-brand-500",
                               travado && "cursor-not-allowed opacity-35"
                             )}

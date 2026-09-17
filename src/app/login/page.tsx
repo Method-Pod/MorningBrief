@@ -49,7 +49,7 @@ const TEXTOS: Record<Modo, { titulo: string; sub: string; acao: string }> = {
 };
 
 const campo =
-  "h-12 w-full rounded-[14px] border border-line bg-white text-[15px] outline-none transition-colors focus:border-brand-500";
+  "h-12 w-full rounded-[14px] border border-line bg-ink-900 text-[15px] outline-none transition-colors focus:border-brand-500";
 
 function Formulario() {
   const router = useRouter();
@@ -129,12 +129,12 @@ function Formulario() {
 
   return (
     <div className="flex min-h-dvh items-center justify-center p-3 sm:p-6">
-      <div className="w-full max-w-[1040px] rounded-[24px] bg-white p-3 shadow-[var(--elev-4)] sm:rounded-[28px] sm:p-4">
+      <div className="w-full max-w-[1040px] rounded-[24px] bg-ink-900 p-3 shadow-[var(--elev-4)] sm:rounded-[28px] sm:p-4">
         <div className="grid items-stretch gap-4 lg:grid-cols-2">
           {/* ---------------- painel de marca ---------------- */}
           {/* No mobile vira faixa compacta em cima do formulário, em vez de
               desaparecer: era a única peça que dava identidade à tela. */}
-          <aside className="relative flex min-h-[168px] flex-col overflow-hidden rounded-[20px] bg-[#16191b] p-6 sm:min-h-[196px] lg:min-h-0 lg:p-9">
+          <aside className="relative flex min-h-[168px] flex-col overflow-hidden rounded-[20px] bg-[var(--painel-marca)] p-6 sm:min-h-[196px] lg:min-h-0 lg:p-9">
             {/* Aurora do accent: única peça decorativa, e ela acompanha o tema. */}
             <div
               aria-hidden
@@ -269,7 +269,7 @@ function Formulario() {
               <button
                 type="submit"
                 disabled={ocupado || !configurado}
-                className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-brand-500 text-[15px] font-bold text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-45"
+                className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-brand-500 shadow-[var(--brilho)] transition-shadow hover:shadow-[var(--brilho-forte)] text-[15px] font-bold text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-45"
               >
                 {ocupado ? (
                   <Loader2 size={17} className="girar-lento" />

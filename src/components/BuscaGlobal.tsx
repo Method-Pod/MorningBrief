@@ -255,11 +255,11 @@ export function BuscaGlobal() {
 
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-start justify-center px-4 pt-[12vh]">
-      <div className="absolute inset-0 bg-fg/35 fade" onClick={() => setAberto(false)} />
+      <div className="absolute inset-0 bg-[var(--veu)] fade" onClick={() => setAberto(false)} />
       <div
         role="dialog"
         aria-label="Buscar em tudo"
-        className="pop relative w-full max-w-[560px] overflow-hidden rounded-[18px] bg-white shadow-[var(--elev-4)]"
+        className="pop relative w-full max-w-[560px] overflow-hidden rounded-[18px] bg-ink-900 shadow-[var(--elev-4)]"
       >
         <div className="flex items-center gap-2.5 border-b border-line-soft px-4">
           <Search size={16} className="shrink-0 text-fg-mute" />

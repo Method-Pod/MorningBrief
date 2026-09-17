@@ -64,7 +64,7 @@ const DOW_FULL = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
  */
 const EVENT_COLORS = [
   { key: "blue", nome: "azul", cls: "bg-brand-500" },
-  { key: "violet", nome: "violeta", cls: "bg-violet-500" },
+  { key: "violet", nome: "violeta", cls: "bg-violeta" },
   { key: "emerald", nome: "verde", cls: "bg-pos" },
   { key: "amber", nome: "âmbar", cls: "bg-warn" },
   { key: "rose", nome: "rosa", cls: "bg-neg" },
@@ -900,7 +900,7 @@ export default function CalendarioPage() {
               type="checkbox"
               checked={form.all_day}
               onChange={(e) => setForm({ ...form, all_day: e.target.checked })}
-              className="h-4 w-4 accent-[#2f7bff]"
+              className="h-4 w-4 accent-brand-500"
             />
             <span className="text-sm text-fg-dim">Dia inteiro</span>
           </label>

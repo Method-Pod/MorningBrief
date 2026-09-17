@@ -344,7 +344,7 @@ export function Clima({ className }: { className?: string }) {
       </button>
 
       {abrindo && (
-        <span className="absolute right-0 top-[calc(100%+10px)] z-20 flex w-[230px] flex-col gap-1.5 rounded-[14px] bg-white p-2.5 text-left shadow-[var(--elev-3)]">
+        <span className="absolute right-0 top-[calc(100%+10px)] z-20 flex w-[230px] flex-col gap-1.5 rounded-[14px] bg-ink-900 p-2.5 text-left shadow-[var(--elev-3)]">
           <span className="flex items-center gap-1.5 px-0.5 text-[10px] font-medium uppercase tracking-wider text-fg-mute">
             <MapPin size={11} />
             Sua cidade

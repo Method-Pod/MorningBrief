@@ -762,7 +762,7 @@ export function Editor({
           ref={caixaMenu}
           /* `fixed` porque a coordenada vem do `coordsAtPos`, que é relativa à
              janela — e a caixa do editor rola. */
-          className="fixed z-50 w-[248px] overflow-y-auto overscroll-contain rounded-[16px] border border-line bg-white p-1.5 shadow-[var(--elev-3)]"
+          className="fixed z-50 w-[248px] overflow-y-auto overscroll-contain rounded-[16px] border border-line bg-ink-900 p-1.5 shadow-[var(--elev-3)]"
           style={lugarDoMenu(menu)}
         >
           {menu.itens.map((item, i) => {

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 
-import { modoPadraoLigado } from "./design";
 
 /**
  * Arrasto de cartão entre colunas, com o cartão seguindo o ponteiro.
@@ -336,21 +335,14 @@ export function useArrastarCartao<T>({ onSoltar }: Opcoes<T>) {
         onSoltar(item, coluna);
       } else if (arrastou) {
         /*
-         * Dois motivos para pular o voo, e eles são diferentes.
-         *
          * `prefers-reduced-motion` é uma necessidade declarada no sistema
          * operacional: movimento grande incomoda de verdade quem liga isso.
-         * `modoPadraoLigado` é uma escolha feita na página de Conta, de quem
-         * quis a interface como era antes — e antes a cópia sumia na hora.
-         *
-         * Nos dois casos o resultado é o mesmo, mas a razão não, e por isso
-         * são duas perguntas e não uma: desligar uma nunca deve desligar a
-         * outra sem querer.
+         * Nesse caso a cópia some na hora, em vez de voar de volta.
          */
         const parado = window.matchMedia?.(
           "(prefers-reduced-motion: reduce)"
         )?.matches;
-        if (parado || modoPadraoLigado()) limpar();
+        if (parado) limpar();
         else voltarParaOrigem();
       } else {
         /* Sem `ativo`, o ponteiro nem passou do limiar: foi um clique, e quem

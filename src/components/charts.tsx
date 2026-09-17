@@ -3,18 +3,24 @@
 import * as React from "react";
 import { brl } from "@/lib/format";
 
-/** Paleta estável por categoria: a mesma categoria mantém a cor entre telas. */
+/**
+ * Paleta estável por categoria: a mesma categoria mantém a cor entre telas.
+ *
+ * Os tons moram no CSS (`--cat-1` a `--cat-9`) e não aqui, porque eles mudam
+ * com o tema: um tom escolhido para se ler sobre papel branco some sobre fundo
+ * escuro. A primeira fatia é o accent, para o gráfico pertencer à tela.
+ */
 const PALETA = [
   "var(--a)",
-  "#6d5bd0",
-  "#1f9d63",
-  "#b8820c",
-  "#cf4a3f",
-  "#2563a8",
-  "#c2559b",
-  "#0e8f8f",
-  "#8a6a3b",
-  "#666e74",
+  "var(--cat-1)",
+  "var(--cat-2)",
+  "var(--cat-3)",
+  "var(--cat-4)",
+  "var(--cat-5)",
+  "var(--cat-6)",
+  "var(--cat-7)",
+  "var(--cat-8)",
+  "var(--cat-9)",
 ];
 
 export const corCategoria = (nome: string, ordem: string[]) => {
@@ -374,7 +380,7 @@ export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
                   cy={Y(dados[ativo].valor)}
                   r="4.5"
                   fill="var(--a)"
-                  stroke="#fff"
+                  stroke="var(--sup-cartao)"
                   strokeWidth="2"
                 />
               </g>
@@ -383,7 +389,7 @@ export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
 
           {ativo !== null && (
             <div
-              className="pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-[12px] bg-fg px-3 py-2 text-white"
+              className="pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-[12px] bg-fg px-3 py-2 text-ink-900"
               style={{
                 left: Math.min(Math.max(X(ativo), 54), L - 54),
                 top: Y(dados[ativo].valor) - 8,

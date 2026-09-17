@@ -58,7 +58,7 @@ import {
 /** A bolinha de cada cor, no seletor da edição rápida. */
 const BOLINHA: Record<string, string> = {
   blue: "bg-brand-500",
-  violet: "bg-violet-500",
+  violet: "bg-violeta",
   emerald: "bg-pos",
   amber: "bg-warn",
   rose: "bg-neg",
@@ -67,7 +67,7 @@ const BOLINHA: Record<string, string> = {
 
 const COR_DO_ICONE: Record<string, string> = {
   blue: "text-brand-400 bg-brand-500/10",
-  violet: "text-violet-500 bg-violet-500/10",
+  violet: "text-violeta bg-violeta/10",
   emerald: "text-pos bg-pos/10",
   amber: "text-warn bg-warn/10",
   rose: "text-neg bg-neg/10",
@@ -721,7 +721,7 @@ export default function AnotacoesPage() {
                         "h-8 rounded-full border px-3 text-[11.5px] font-medium transition-colors",
                         marcada
                           ? "border-brand-500 bg-brand-500/12 text-brand-400"
-                          : "border-line bg-white text-fg-mute hover:border-brand-400"
+                          : "border-line bg-ink-900 text-fg-mute hover:border-brand-400"
                       )}
                     >
                       {c.name}

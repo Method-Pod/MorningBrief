@@ -158,7 +158,7 @@ export function CalendarioPagamentos({
                     <i
                       className={cx(
                         "h-1 w-1 rounded-full",
-                        escolhido ? "bg-white" : "bg-neg"
+                        escolhido ? "bg-on-brand" : "bg-neg"
                       )}
                     />
                   )}
@@ -166,7 +166,7 @@ export function CalendarioPagamentos({
                     <i
                       className={cx(
                         "h-1 w-1 rounded-full",
-                        escolhido ? "bg-white" : "bg-warn"
+                        escolhido ? "bg-on-brand" : "bg-warn"
                       )}
                     />
                   )}
@@ -174,7 +174,7 @@ export function CalendarioPagamentos({
                     <i
                       className={cx(
                         "h-1 w-1 rounded-full",
-                        escolhido ? "bg-white" : "bg-pos"
+                        escolhido ? "bg-on-brand" : "bg-pos"
                       )}
                     />
                   )}

@@ -180,7 +180,7 @@ export function GerenciarColecoes({
                 type="button"
                 onClick={() => criar(s)}
                 disabled={ocupado}
-                className="h-6 rounded-full border border-line bg-white px-2.5 text-[10.5px] font-semibold text-brand-400 transition-colors hover:border-brand-400 hover:bg-brand-500/8 disabled:opacity-50"
+                className="h-6 rounded-full border border-line bg-ink-900 px-2.5 text-[10.5px] font-semibold text-brand-400 transition-colors hover:border-brand-400 hover:bg-brand-500/8 disabled:opacity-50"
               >
                 + {s}
               </button>

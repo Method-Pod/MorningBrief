@@ -1450,7 +1450,7 @@ export default function AulasPage() {
                         "order-2 mt-[3px] grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-[180ms] disabled:opacity-50 sm:order-none",
                         l.feita
                           ? "border-pos bg-pos text-white"
-                          : "border-line bg-white hover:border-brand-400"
+                          : "border-line bg-ink-900 hover:border-brand-400"
                       )}
                     >
                       <Check
@@ -1520,7 +1520,7 @@ export default function AulasPage() {
                             href={l.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-white px-2.5 text-[10.5px] font-semibold text-brand-400 transition-colors hover:border-brand-400 hover:bg-brand-500/8"
+                            className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-ink-900 px-2.5 text-[10.5px] font-semibold text-brand-400 transition-colors hover:border-brand-400 hover:bg-brand-500/8"
                           >
                             <ExternalLink size={10} />
                             abrir

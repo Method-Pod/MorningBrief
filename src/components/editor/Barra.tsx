@@ -255,7 +255,7 @@ function Suspenso({
             ref={caixa}
             role="menu"
             onMouseDown={(e) => e.preventDefault()}
-            className="pop fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-white p-1.5 shadow-[var(--elev-3)]"
+            className="pop fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-ink-900 p-1.5 shadow-[var(--elev-3)]"
             style={{ width: largura, ...lugar }}
           >
             {children(() => setAberto(false))}
@@ -412,7 +412,7 @@ export function Barra({
           onClick={alternar}
           aria-expanded={false}
           aria-label="Abrir a barra de formatação"
-          className="flex h-8 items-center gap-1.5 rounded-[14px] border border-line bg-white px-2.5 text-[12px] font-semibold text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+          className="flex h-8 items-center gap-1.5 rounded-[14px] border border-line bg-ink-900 px-2.5 text-[12px] font-semibold text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
         >
           <Type size={14} />
           Formatar
@@ -444,7 +444,7 @@ export function Barra({
        * controles passam da largura da tela.
        */
       className={cx(
-        "mb-3 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-[14px] border border-line bg-white px-1.5 py-1 shadow-[0_4px_16px_-8px_rgb(20_24_26/0.25)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+        "mb-3 flex w-fit max-w-full items-center gap-0.5 overflow-x-auto rounded-[14px] border border-line bg-ink-900 px-1.5 py-1 shadow-[var(--elev-2)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
         semRecuo ? "" : "-ml-7 -mr-1"
       )}
     >
@@ -639,7 +639,7 @@ export function Barra({
                 }}
                 onBlur={() => porTamanho(Number(rascunho))}
                 aria-label="Tamanho em pixels"
-                className="h-7 w-full min-w-0 rounded-lg border border-line bg-white px-2 text-center text-[12.5px] font-semibold tabular-nums outline-none transition-colors focus:border-brand-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                className="h-7 w-full min-w-0 rounded-lg border border-line bg-ink-900 px-2 text-center text-[12.5px] font-semibold tabular-nums outline-none transition-colors focus:border-brand-500 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
               />
               <button
                 type="button"

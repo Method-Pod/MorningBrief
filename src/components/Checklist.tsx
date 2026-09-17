@@ -95,7 +95,7 @@ export function ListaDeItens({
                 "grid h-[15px] w-[15px] shrink-0 place-items-center rounded-[5px] border transition-[background-color,border-color] duration-[180ms]",
                 i.done
                   ? "border-pos bg-pos text-white"
-                  : "border-line bg-white group-hover/i:border-brand-400"
+                  : "border-line bg-ink-900 group-hover/i:border-brand-400"
               )}
             >
               <Check
@@ -194,7 +194,7 @@ export function EditorChecklist({
                   "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[6px] border transition-[background-color,border-color]",
                   item.done
                     ? "border-pos bg-pos text-white"
-                    : "border-line bg-white hover:border-brand-400"
+                    : "border-line bg-ink-900 hover:border-brand-400"
                 )}
               >
                 <Check

@@ -142,7 +142,7 @@ export function MenuSuspenso({
           rotuloVisivel
             ? /* Mesma silhueta do Button variante outline, para o cabeçalho
                  não misturar dois formatos de botão lado a lado. */
-              "inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-white px-4 text-sm font-medium text-fg-dim shadow-[var(--elev-1)] transition-colors hover:text-fg"
+              "inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-ink-900 px-4 text-sm font-medium text-fg-dim shadow-[var(--elev-1)] transition-colors hover:text-fg"
             : "grid h-8 w-8 shrink-0 place-items-center rounded-lg transition-colors",
           !rotuloVisivel &&
             (aberto
@@ -170,7 +170,7 @@ export function MenuSuspenso({
           <div
             ref={caixa}
             role="menu"
-            className="brota fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-white p-1.5 shadow-[var(--elev-3)]"
+            className="brota fixed z-[70] overflow-hidden rounded-[14px] border border-line bg-ink-900 p-1.5 shadow-[var(--elev-3)]"
             style={{ width: LARGURA, ...lugar }}
           >
             {itens.map((item, i) => (

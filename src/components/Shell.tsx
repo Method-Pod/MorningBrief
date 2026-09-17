@@ -81,7 +81,7 @@ function CaixaConta({
       className={cx(
         "flex items-center rounded-[16px] p-2.5 transition-colors",
         compacta ? "justify-center" : "gap-2.5",
-        ativo ? "bg-brand-500/12" : "bg-ink-800 hover:bg-black/[0.03]"
+        ativo ? "bg-brand-500/12" : "bg-ink-800 hover:bg-fg/[0.04]"
       )}
     >
       <Iniciais nome={nome} url={foto} tamanho={30} />
@@ -326,10 +326,10 @@ export function Shell({
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div
-            className="absolute inset-0 bg-fg/35 fade"
+            className="absolute inset-0 bg-[var(--veu)] fade"
             onClick={() => setOpen(false)}
           />
-          <aside className="relative flex h-full w-[262px] flex-col overflow-y-auto bg-white pt-6 pb-5 desliza-esq">
+          <aside className="relative flex h-full w-[262px] flex-col overflow-y-auto bg-ink-900 pt-6 pb-5 desliza-esq">
             <div className="mb-6 flex items-center justify-between pr-3">
               {wordmark}
               <button
@@ -354,7 +354,7 @@ export function Shell({
           <button
             onClick={() => setOpen(true)}
             aria-label="Abrir menu"
-            className="grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-white text-fg-dim shadow-[var(--elev-1)]"
+            className="grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-ink-900 text-fg-dim shadow-[var(--elev-1)]"
           >
             <Menu size={17} />
           </button>
@@ -366,7 +366,7 @@ export function Shell({
           <button
             onClick={() => window.dispatchEvent(new CustomEvent("mb:buscar"))}
             aria-label="Buscar em tudo"
-            className="ml-auto grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-white text-fg-dim shadow-[var(--elev-1)]"
+            className="ml-auto grid h-[38px] w-[38px] place-items-center rounded-[14px] bg-ink-900 text-fg-dim shadow-[var(--elev-1)]"
           >
             <Search size={17} />
           </button>

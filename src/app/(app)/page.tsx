@@ -508,7 +508,7 @@ export default function HomePage() {
         {/* Data e clima na mesma pílula, separados por um traço fino.
             Duas pílulas soltas competiriam entre si; aqui a data continua sendo
             o assunto e a temperatura entra como complemento. */}
-        <span className="flex items-center gap-2.5 whitespace-nowrap rounded-full bg-white px-4 py-2.5 text-[13px] font-semibold text-fg-dim shadow-[var(--elev-1)]">
+        <span className="flex items-center gap-2.5 whitespace-nowrap rounded-full bg-ink-900 px-4 py-2.5 text-[13px] font-semibold text-fg-dim shadow-[var(--elev-1)]">
           {now.toLocaleDateString("pt-BR", {
             weekday: "long",
             day: "2-digit",
@@ -571,7 +571,7 @@ export default function HomePage() {
 
       {/* ------------------------ seu dia + hoje ------------------------ */}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="flex flex-col rounded-[22px] bg-gradient-to-br from-[#26292b] to-[#1b1e20] p-[22px] text-white">
+        <div className="flex flex-col rounded-[22px] bg-gradient-to-br from-[var(--bloco-1)] to-[var(--bloco-2)] p-[22px] text-white">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/60">
@@ -632,13 +632,13 @@ export default function HomePage() {
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="Adicionar tarefa de hoje..."
                 aria-label="Adicionar tarefa de hoje"
-                className="h-[38px] flex-1 rounded-[14px] border border-transparent bg-ink-800 px-3.5 text-sm outline-none transition-colors focus:border-brand-500 focus:bg-white"
+                className="h-[38px] flex-1 rounded-[14px] border border-transparent bg-ink-800 px-3.5 text-sm outline-none transition-colors focus:border-brand-500 focus:bg-ink-900"
               />
               <button
                 type="submit"
                 disabled={adding || !draft.trim()}
                 aria-label="Adicionar"
-                className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[14px] bg-brand-500 text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-40"
+                className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[14px] bg-brand-500 shadow-[var(--brilho)] hover:shadow-[var(--brilho-forte)] text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-40"
               >
                 <Plus size={18} />
               </button>
@@ -1143,7 +1143,7 @@ function ValorDaFatura({
           inputMode="decimal"
           placeholder="0,00"
           aria-label={`Valor da fatura de ${conta.description}`}
-          className="h-8 w-[110px] rounded-lg border border-warn/30 bg-white px-2.5 text-right text-[13px] font-bold text-fg outline-none transition-colors tnum focus:border-warn"
+          className="h-8 w-[110px] rounded-lg border border-warn/30 bg-ink-900 px-2.5 text-right text-[13px] font-bold text-fg outline-none transition-colors tnum focus:border-warn"
         />
         <button
           type="button"

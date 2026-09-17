@@ -246,7 +246,7 @@ function Estado({
         inputMode="decimal"
         placeholder="0,00"
         aria-label={`Valor da fatura de ${conta.description}`}
-        className="h-8 w-[92px] rounded-lg border border-warn/35 bg-white px-2 text-right text-[12.5px] font-bold text-fg outline-none transition-colors tnum focus:border-warn"
+        className="h-8 w-[92px] rounded-lg border border-warn/35 bg-ink-900 px-2 text-right text-[12.5px] font-bold text-fg outline-none transition-colors tnum focus:border-warn"
       />
       <button
         type="button"

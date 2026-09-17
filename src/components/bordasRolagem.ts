@@ -2,7 +2,6 @@
 
 import * as React from "react";
 
-import { useDesign } from "./design";
 
 /*
  * Esmaecido no alto e embaixo de uma lista que rola.
@@ -57,7 +56,6 @@ export function useBordasRolagem<T extends HTMLElement>() {
    * se ligam nele; o modal fecha, o nó sai, e eles se soltam.
    */
   const [no, setNo] = React.useState<T | null>(null);
-  const { modo } = useDesign();
   const [bordas, setBordas] = React.useState({ topo: false, base: false });
 
   const medir = React.useCallback(() => {
@@ -98,14 +96,12 @@ export function useBordasRolagem<T extends HTMLElement>() {
     };
   }, [no, medir]);
 
-  const ligado = modo !== "padrao";
-
   return {
     ref: setNo,
     onScroll: medir,
     style: {
-      maskImage: ligado ? mascara(bordas) : undefined,
-      WebkitMaskImage: ligado ? mascara(bordas) : undefined,
+      maskImage: mascara(bordas),
+      WebkitMaskImage: mascara(bordas),
     } as React.CSSProperties,
   };
 }

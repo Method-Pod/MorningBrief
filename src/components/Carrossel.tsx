@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { cx } from "./ui";
-import { modoPadraoLigado } from "./design";
 
 /**
  * Faixa que rola para o lado, arrastando com o mouse.
@@ -126,7 +125,6 @@ export function Carrossel({
     const limite = el.scrollWidth - el.clientWidth;
     el.scrollLeft = desejado;
 
-    if (modoPadraoLigado()) return;
     /*
      * O quanto passou da ponta -- e so isso vira borracha.
      *
