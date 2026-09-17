@@ -133,97 +133,63 @@ function Formulario() {
         <div className="grid items-stretch gap-4 lg:grid-cols-2">
           {/* ---------------- painel de marca ---------------- */}
           {/*
-            O painel É a cor escolhida, e nao um quase-preto ao lado dela.
+            Marca em cima, frase embaixo, e nada entre as duas.
 
-            Era um bloco #16191b: sobre o cartao branco isso e o contraste da
-            tela, e funcionava. Sobre o cartao ESCURO virou um cinza a dois
-            passos do fundo — sem separacao, sem hierarquia, e com a aurora do
-            accent lavada por cima. Sendo a cor, ele se distingue nos dois
-            temas pelo mesmo motivo: e o unico bloco saturado da tela.
+            O painel E a cor escolhida: era um quase-preto, o que funcionava
+            sobre o cartao branco — ali ele era o contraste da tela — e virava
+            um cinza a dois passos do fundo no tema escuro, sem separacao
+            nenhuma. Sendo a cor, ele se distingue nos dois temas pelo mesmo
+            motivo: e o unico bloco saturado da pagina.
 
             Os dois tons do degrade vem por accent, afundados ate o branco
             alcancar 4,6:1 no tom mais claro. Ver `--painel-1` em globals.css.
+
+            O que houve aqui antes e o que nao pode voltar: pastilha de saudacao,
+            tres cartoes numerados e um quadradinho com a inicial. Cada peca
+            dessas e um movimento de pagina de produto, e juntas elas afogaram a
+            unica coisa que o painel tem para dizer. O vazio entre a marca e a
+            frase nao e espaco sobrando — e o que faz a frase ser lida.
 
             No telefone ele vira uma faixa em cima do formulario em vez de
             sumir: era a unica peca que dava identidade a tela.
           */}
           <aside
-            className="relative flex flex-col overflow-hidden rounded-[20px] p-6 text-white sm:p-7 lg:min-h-[520px] lg:p-9"
+            className="relative flex flex-col overflow-hidden rounded-[20px] p-7 text-white sm:p-8 lg:min-h-[500px] lg:p-10"
             style={{
               background:
                 "linear-gradient(155deg, var(--painel-1) 0%, var(--painel-2) 100%)",
             }}
           >
-            {/*
-              Duas luzes, e nao uma textura.
-
-              A de cima da volume ao canto onde a marca fica; a de baixo levanta
-              o chao atras dos cartoes. Sao o mesmo branco em opacidade baixa,
-              entao acompanham a cor sem precisar de valor proprio por accent.
-            */}
+            {/* Uma luz so, no canto de cima. Duas ja seria textura, e textura
+                aqui e enfeite: o degrade sozinho ja da a profundidade. */}
             <div
               aria-hidden
               className="pointer-events-none absolute inset-0"
               style={{
                 background:
-                  "radial-gradient(90% 60% at 12% 0%, rgb(255 255 255 / 0.22) 0%, transparent 62%), radial-gradient(70% 50% at 100% 100%, rgb(255 255 255 / 0.13) 0%, transparent 60%)",
+                  "radial-gradient(85% 55% at 15% -5%, rgb(255 255 255 / 0.20) 0%, transparent 60%)",
               }}
             />
 
-            <div className="relative flex items-center gap-2">
-              <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-white/15 text-[13px] font-black">
-                m
-              </span>
-              <p className="text-[17px] font-bold tracking-[-0.035em]">
-                morning<span className="font-normal text-white/60">brief</span>
-              </p>
-            </div>
+            <p className="relative text-[17px] font-bold tracking-[-0.035em] lg:text-[18px]">
+              morning<span className="font-normal text-white/60">brief</span>
+            </p>
 
-            <div className="relative mt-8 lg:mt-auto lg:pt-10">
-              {/* A pastilha e o que da um comeco a coluna antes da manchete —
-                  sem ela o titulo nasce colado no topo da area vazia. */}
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11.5px] font-semibold">
-                Bom dia ☕
-              </span>
-              <h2 className="mt-3.5 text-[26px] font-bold leading-[1.1] tracking-[-0.035em] sm:text-[30px] lg:text-[34px]">
+            {/* `mt-auto` empurra a frase para o pe: e ela que fecha o bloco, e
+                a distancia ate a marca e o que da peso a ela. No telefone a
+                folga e menor, senao a faixa empurraria o formulario para fora
+                da tela. */}
+            <div className="relative mt-14 lg:mt-auto">
+              <h2 className="text-[24px] font-bold leading-[1.1] tracking-[-0.04em] sm:text-[31px] lg:text-[35px]">
                 Tudo que importa
                 <br />
                 antes do primeiro café.
               </h2>
-              <p className="mt-3 max-w-[340px] text-[13.5px] leading-relaxed text-white/75">
+              <p className="mt-3.5 max-w-[320px] text-[13.5px] leading-relaxed text-white/70">
                 Demandas, contas a pagar, hábitos, anotações e agenda numa só
                 tela.
               </p>
             </div>
-
-            {/*
-              As tres pecas, no pe.
-
-              Elas resolvem o vazio que sobrava embaixo da manchete e, de
-              quebra, dizem o que o app faz antes de alguem entrar. Somem no
-              telefone: ali o painel e uma faixa de identidade, e tres cartoes
-              empurrariam o formulario para fora da tela.
-            */}
-            <ul className="relative mt-7 hidden gap-2.5 sm:grid sm:grid-cols-3 lg:mt-9">
-              {[
-                ["1", "Demandas", "e recorrências"],
-                ["2", "Contas", "e cartões"],
-                ["3", "Hábitos", "notas e agenda"],
-              ].map(([n, titulo, sub]) => (
-                <li
-                  key={n}
-                  className="rounded-[14px] border border-white/15 bg-white/10 p-3"
-                >
-                  <span className="grid h-5 w-5 place-items-center rounded-full bg-white/25 text-[10.5px] font-bold">
-                    {n}
-                  </span>
-                  <p className="mt-2 text-[12.5px] font-bold leading-tight">
-                    {titulo}
-                  </p>
-                  <p className="text-[11px] leading-tight text-white/70">{sub}</p>
-                </li>
-              ))}
-            </ul>
           </aside>
 
           {/* ---------------- formulário ---------------- */}

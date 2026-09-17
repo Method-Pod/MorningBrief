@@ -91,8 +91,17 @@ function CaixaConta({
          */
         compacta
           ? cx(
+              /*
+               * Selecionada, a foto ganha um anel colado nela; fora disso, nada
+               * em volta.
+               *
+               * `ring-offset` desenhava um segundo circulo separado por uma
+               * faixa da cor do fundo — de longe le como dois aneis e um
+               * recorte quadrado, nao como "esta e a tela atual". Sem o
+               * afastamento, o anel e a borda do proprio circulo.
+               */
               "justify-center rounded-full",
-              ativo && "ring-2 ring-brand-500 ring-offset-2 ring-offset-ink-900"
+              ativo && "ring-2 ring-brand-500"
             )
           : cx(
               "gap-2.5 rounded-[16px] p-2.5",

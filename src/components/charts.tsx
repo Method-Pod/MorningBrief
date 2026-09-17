@@ -11,7 +11,6 @@ import { brl } from "@/lib/format";
  * escuro. A primeira fatia é o accent, para o gráfico pertencer à tela.
  */
 const PALETA = [
-  "var(--a)",
   "var(--cat-1)",
   "var(--cat-2)",
   "var(--cat-3)",
@@ -20,12 +19,23 @@ const PALETA = [
   "var(--cat-6)",
   "var(--cat-7)",
   "var(--cat-8)",
-  "var(--cat-9)",
 ];
+
+/** Da nona categoria em diante: cinza neutro, e nunca uma cor repetida. */
+const RESTO = "var(--cat-resto)";
 
 export const corCategoria = (nome: string, ordem: string[]) => {
   const i = ordem.indexOf(nome);
-  return PALETA[(i < 0 ? ordem.length : i) % PALETA.length];
+  /*
+   * Sem `% PALETA.length`.
+   *
+   * Reciclar fazia a nona categoria receber a cor da primeira — duas fatias
+   * diferentes com a mesma cor no mesmo grafico, que e a pior coisa que uma
+   * paleta categorica pode fazer. Passando de oito, todas viram o mesmo cinza:
+   * "as outras" e uma resposta honesta; "igual a primeira" nao e.
+   */
+  if (i < 0 || i >= PALETA.length) return RESTO;
+  return PALETA[i];
 };
 
 /* ==================== participação por categoria ==================== */

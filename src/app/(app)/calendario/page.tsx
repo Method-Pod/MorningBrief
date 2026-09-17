@@ -56,19 +56,19 @@ const DOW = ["D", "S", "T", "Q", "Q", "S", "S"];
 const DOW_FULL = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
 /*
- * `key` é o que está gravado no banco e não muda; `nome` é só o rótulo.
+ * Todo evento usa a cor de destaque do app — não há mais escolha de cor.
  *
- * As chaves são as do Tailwind e apareciam cruas na tela: ninguém sabe de cor
- * que "rose" é rosa e "amber" é amarelo. A bolinha ao lado resolve de vez, e o
- * nome em português ajuda quem lê antes de olhar.
+ * O seletor existia e não pagava o espaço que ocupava: escolher entre cinco
+ * cores a cada evento é um passo a mais num formulário que já tem sete
+ * campos, e a cor não queria dizer nada — não era categoria nem prioridade,
+ * era enfeite por evento. O calendário fica mais legível com uma cor só, e
+ * ela acompanha o que foi escolhido na página de Conta.
+ *
+ * A coluna `color` continua no banco e os eventos antigos continuam com o
+ * valor que tinham: a tela só deixou de ler. Nada foi apagado, e voltar a
+ * oferecer a escolha um dia é devolver este trecho, não migrar dado.
  */
-const EVENT_COLORS = [
-  { key: "blue", nome: "azul", cls: "bg-brand-500" },
-  { key: "violet", nome: "violeta", cls: "bg-violeta" },
-  { key: "emerald", nome: "verde", cls: "bg-pos" },
-  { key: "amber", nome: "âmbar", cls: "bg-warn" },
-  { key: "rose", nome: "rosa", cls: "bg-neg" },
-];
+const COR_DO_EVENTO = "bg-brand-500";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const isoOf = (y: number, m: number, d: number) => `${y}-${pad(m + 1)}-${pad(d)}`;
@@ -581,8 +581,7 @@ export default function CalendarioPage() {
                         <span
                           className={cx(
                             "h-1.5 w-1.5 shrink-0 rounded-full",
-                            EVENT_COLORS.find((c) => c.key === e.color)?.cls ??
-                              "bg-brand-500"
+                            COR_DO_EVENTO
                           )}
                         />
                         <span className="truncate">{e.title}</span>
@@ -674,8 +673,7 @@ export default function CalendarioPage() {
                           <span
                             className={cx(
                               "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-                              EVENT_COLORS.find((c) => c.key === e.color)?.cls ??
-                                "bg-brand-500"
+                              COR_DO_EVENTO
                             )}
                           />
                           <div className="min-w-0">
@@ -968,30 +966,6 @@ export default function CalendarioPage() {
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
                 placeholder="Sala 2, Google Meet..."
               />
-            </Field>
-            <Field label="Cor">
-              <div className="relative">
-                {/* A bolinha mostra a cor escolhida sem depender do nome. */}
-                <span
-                  aria-hidden
-                  className={cx(
-                    "pointer-events-none absolute left-3.5 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full",
-                    EVENT_COLORS.find((c) => c.key === form.color)?.cls ??
-                      "bg-brand-500"
-                  )}
-                />
-                <Select
-                  value={form.color}
-                  onChange={(e) => setForm({ ...form, color: e.target.value })}
-                  className="!pl-[34px]"
-                >
-                  {EVENT_COLORS.map((c) => (
-                    <option key={c.key} value={c.key}>
-                      {c.nome}
-                    </option>
-                  ))}
-                </Select>
-              </div>
             </Field>
           </div>
 

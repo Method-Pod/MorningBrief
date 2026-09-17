@@ -246,9 +246,35 @@
   --txt-dim: #4d565b;
   --txt-mute: #666e74;
 
-  --cor-pos: #1f9d63;
-  --cor-neg: #cf4a3f;
-  --cor-warn: #b8820c;
+  /*
+   * Verde, vermelho e âmbar NÃO mudam com o tema. São fixos, de propósito.
+   *
+   * Prioridade, conta vencida e conta paga querem dizer a mesma coisa sempre,
+   * e cor que muda de tom conforme o tema deixa de ser um sinal e vira
+   * decoração — foi o pedido, e é a leitura certa.
+   *
+   * O custo é medido, não suposto: **não existe cor única que alcance 4,5:1
+   * nos dois fundos.** Para chegar a 4,5 sobre branco a luminância tem de
+   * ficar em 0,183 ou abaixo; sobre o cartão escuro, em 0,222 ou acima. As
+   * duas faixas não se cruzam — é aritmética, não falta de tentativa.
+   *
+   * Então o valor de cada matiz é o que maximiza o PIOR dos dois lados. Onde
+   * eles caem:
+   *
+   *              branco   escuro        antes (claro / escuro)
+   *   verde       4,20     4,13         3,46 / 5,01
+   *   vermelho    4,18     4,15         4,46 / 3,89
+   *   âmbar       4,13     4,20         3,37 / 5,15
+   *   roxo        4,14     4,19         (era 7,5 / 6,4 em dois valores)
+   *
+   * Repare que no tema CLARO quase todos melhoraram: os tons antigos estavam
+   * abaixo de 3,5 sobre branco. O que se perde é no escuro, e fica em 4,13 —
+   * pouco abaixo de 4,5, e acima de 3:1, que é o piso para rótulo em negrito,
+   * pastilha e bolinha, que é como estas cores são usadas.
+   */
+  --cor-pos: #1c8d59;
+  --cor-neg: #d74d42;
+  --cor-warn: #a4740b;
 
   --barra: #d5dbd7;
   --barra-hover: #c0c8c3;
@@ -261,7 +287,8 @@
    * para papel branco, ele some no escuro: #6d28d9 sobre o cartão escuro dá
    * 2,2:1. Por isso tem os dois valores, como o resto.
    */
-  --cor-violeta: #6d28d9;
+  /* Fixo pelo mesmo motivo das três acima: 4,14 no branco, 4,19 no escuro. */
+  --cor-violeta: #b141ff;
 
   /*
    * Os dois blocos escuros por escolha, e não por tema.
@@ -340,15 +367,48 @@
    * tons que se leem sobre papel branco somem sobre fundo escuro. A primeira
    * fatia é sempre o accent escolhido, para o gráfico pertencer à tela.
    */
-  --cat-1: #6d5bd0;
-  --cat-2: #1f9d63;
-  --cat-3: #b8820c;
-  --cat-4: #cf4a3f;
-  --cat-5: #2563a8;
-  --cat-6: #c2559b;
-  --cat-7: #0e8f8f;
-  --cat-8: #8a6a3b;
-  --cat-9: #666e74;
+  /*
+   * A paleta dos gráficos por categoria — oito matizes, em ordem fixa.
+   *
+   * A cor de destaque NÃO entra aqui, e isso é a correção principal: a
+   * primeira fatia era `var(--a)` e a segunda um roxo próprio, então com o
+   * accent no roxo o gráfico abria com duas fatias quase iguais lado a lado.
+   * Cor de categoria identifica uma categoria; ela não pode mudar porque
+   * alguém trocou a cor do app.
+   *
+   * A ordem é fixa e nunca reciclada: a mesma categoria mantém a mesma cor
+   * entre telas e entre meses. Passando de oito, a nona vira cinza neutro
+   * (`--cat-resto`) em vez de repetir uma cor já usada — repetir faria duas
+   * categorias diferentes parecerem a mesma.
+   *
+   * Os valores foram validados por script, não escolhidos a olho, contra as
+   * duas superfícies deste app (#ffffff e #161b1f): faixa de luminosidade,
+   * piso de croma, separação para daltonismo e piso de visão normal passam
+   * nos dois modos. Pior par adjacente: ΔE 9,1 no claro e 8,4 no escuro para
+   * daltonismo (alvo ≥ 8), e 19,6 / 19,3 na visão normal (piso ≥ 15).
+   *
+   * No claro, três tons ficam abaixo de 3:1 contra o branco. Isso é aceito
+   * sob a regra de relevo: os dois gráficos trazem o nome, a porcentagem e o
+   * valor escritos em cada linha, então a cor nunca é a única pista.
+   */
+  --cat-1: #2a78d6;
+  --cat-2: #eb6834;
+  --cat-3: #1baf7a;
+  --cat-4: #eda100;
+  --cat-5: #e87ba4;
+  --cat-6: #008300;
+  --cat-7: #4a3aa7;
+  --cat-8: #e34948;
+  --cat-resto: #6b757c;
+
+  /*
+   * A barra de progresso não segue a cor de destaque.
+   *
+   * Progresso é medida, não identidade: quem trocou o app para roxo não pediu
+   * que "89% lido" virasse roxo. Valor único nos dois temas — 4,18:1 sobre
+   * branco e 4,15:1 sobre o cartão escuro.
+   */
+  --cor-barra: #3779e5;
 
   /* Diz ao navegador de que lado estamos: caixa de seleção, campo de data,
      barra de rolagem nativa e o preenchimento automático seguem isto. */
@@ -388,14 +448,9 @@
     --txt-dim: #a9b3ba;
     --txt-mute: #808b93;
 
-    --cor-pos: #35c880;
-    --cor-neg: #f0705f;
-    --cor-warn: #e0a42a;
 
     --barra: #333c43;
     --barra-hover: #46525a;
-  --cor-violeta: #a78bfa;
-    --cor-violeta: #a78bfa;
 
     --bloco-1: #2b3036;
     --bloco-2: #1e242a;
@@ -427,15 +482,17 @@
       0 18px 44px -6px color-mix(in srgb, var(--a) 75%, transparent);
     --brilho-largo: 0 5px 18px -7px color-mix(in srgb, var(--a) 60%, transparent);
 
-    --cat-1: #9c8cf0;
-    --cat-2: #35c880;
-    --cat-3: #e0a42a;
-    --cat-4: #f0705f;
-    --cat-5: #6aa6e8;
-    --cat-6: #e086c0;
-    --cat-7: #33c4c4;
-    --cat-8: #c4a170;
-    --cat-9: #98a3aa;
+    /* Os mesmos oito matizes, degrauzados para a superfície escura — não é
+       outra paleta, e não é inversão automática. Validados contra #161b1f. */
+    --cat-1: #3987e5;
+    --cat-2: #d95926;
+    --cat-3: #199e70;
+    --cat-4: #c98500;
+    --cat-5: #d55181;
+    --cat-6: #008300;
+    --cat-7: #9085e9;
+    --cat-8: #e66767;
+    --cat-resto: #7c868d;
 
     /*
      * Sombra preta sobre fundo escuro não aparece. O que separa as camadas no
@@ -469,9 +526,6 @@
   --txt-dim: #a9b3ba;
   --txt-mute: #808b93;
 
-  --cor-pos: #35c880;
-  --cor-neg: #f0705f;
-  --cor-warn: #e0a42a;
 
   --barra: #333c43;
   --barra-hover: #46525a;
@@ -506,15 +560,17 @@
     0 18px 44px -6px color-mix(in srgb, var(--a) 75%, transparent);
   --brilho-largo: 0 5px 18px -7px color-mix(in srgb, var(--a) 60%, transparent);
 
-  --cat-1: #9c8cf0;
-  --cat-2: #35c880;
-  --cat-3: #e0a42a;
-  --cat-4: #f0705f;
-  --cat-5: #6aa6e8;
-  --cat-6: #e086c0;
-  --cat-7: #33c4c4;
-  --cat-8: #c4a170;
-  --cat-9: #98a3aa;
+  /* Os mesmos oito matizes, degrauzados para a superfície escura — não é
+     outra paleta, e não é inversão automática. Validados contra #161b1f. */
+  --cat-1: #3987e5;
+  --cat-2: #d95926;
+  --cat-3: #199e70;
+  --cat-4: #c98500;
+  --cat-5: #d55181;
+  --cat-6: #008300;
+  --cat-7: #9085e9;
+  --cat-8: #e66767;
+  --cat-resto: #7c868d;
 
   --elev-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 10px -6px rgb(0 0 0 / 0.5);
   --elev-2: 0 2px 4px rgb(0 0 0 / 0.45), 0 12px 24px -12px rgb(0 0 0 / 0.6);

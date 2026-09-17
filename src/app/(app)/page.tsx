@@ -11,6 +11,7 @@ import {
   CreditCard,
   ListChecks,
   Pin,
+  PieChart,
   Plus,
   Repeat2,
   Trash2,
@@ -435,6 +436,27 @@ export default function HomePage() {
         .filter(
           (b) =>
             b.status === "pending" && b.due_date.startsWith(today.slice(0, 7))
+        )
+        .reduce((s, b) => s + Number(b.amount), 0),
+      /*
+       * O que JA saiu do mes, e o que dele esta vencido.
+       *
+       * `totalMes` e `abertoMes` ja existiam e dizem quanto falta. Faltava a
+       * outra metade — quanto andou — e e ela que o resumo mostra: um mes com
+       * R$ 200 em aberto significa coisas muito diferentes se o total for
+       * R$ 300 ou R$ 3.000.
+       */
+      pagoMes: bills
+        .filter(
+          (b) => b.status === "paid" && b.due_date.startsWith(today.slice(0, 7))
+        )
+        .reduce((s, b) => s + Number(b.amount), 0),
+      vencidoMes: bills
+        .filter(
+          (b) =>
+            b.status === "pending" &&
+            b.due_date.startsWith(today.slice(0, 7)) &&
+            daysUntil(b.due_date) < 0
         )
         .reduce((s, b) => s + Number(b.amount), 0),
       late: pend.filter((b) => daysUntil(b.due_date) < 0),
@@ -946,6 +968,87 @@ export default function HomePage() {
             </div>
           </div>
         </Card>
+
+        {/* --------------------------- resumo do mês --------------------------- */}
+        {/*
+          A quarta peça da faixa, e ela existe por duas razões.
+
+          A primeira é o buraco: a faixa tem três cartões e duas colunas na
+          largura de tablet, então o terceiro ficava sozinho na segunda linha
+          com meia tela vazia ao lado. Com quatro, fecha 2×2. No `xl:`, onde as
+          três cabem numa linha, esta atravessa as três colunas e vira uma
+          faixa — que é a forma certa para uma fileira de números.
+
+          A segunda é o conteúdo: "Contas a pagar" diz quanto FALTA, e nunca
+          quanto andou. R$ 200 em aberto quer dizer coisas opostas num mês de
+          R$ 300 e num de R$ 3.000. Aqui a barra responde isso de um olhar.
+        */}
+        <Card className="md:col-span-2 xl:col-span-3">
+          <Head icon={<PieChart size={14} />} title={`Resumo de ${nomeMes}`} href="/contas" link="abrir contas" />
+          <div className="px-[18px] pb-[18px] pt-3">
+            {m.totalMes === 0 ? (
+              <Ghost>Nenhuma conta lançada neste mês.</Ghost>
+            ) : (
+              <>
+                {/*
+                  Uma barra só, com as três parcelas na ordem em que se lê o
+                  mês: o que saiu, o que está vencido, o que ainda vai vencer.
+                  A folga de 2px entre elas é o que deixa duas parcelas
+                  vizinhas de cores próximas ainda se separarem.
+                */}
+                <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full bg-ink-800">
+                  {[
+                    ["pago", m.pagoMes, "bg-pos"],
+                    ["vencido", m.vencidoMes, "bg-neg"],
+                    ["a vencer", Math.max(0, m.abertoMes - m.vencidoMes), "bg-[var(--cor-barra)]"],
+                  ].map(([nome, valor, cor]) =>
+                    (valor as number) > 0 ? (
+                      <span
+                        key={nome as string}
+                        className={cx("h-full first:rounded-l-full last:rounded-r-full", cor as string)}
+                        style={{ width: `${((valor as number) / m.totalMes) * 100}%` }}
+                        title={`${nome}: ${brl(valor as number)}`}
+                      />
+                    ) : null
+                  )}
+                </div>
+
+                {/*
+                  O NÚMERO vai em tinta de texto — preto no claro, branco no
+                  escuro —, e nunca na cor da série.
+
+                  Quem diz "isto é o pago" é a bolinha ao lado, que já repete a
+                  cor do pedaço da barra. Pintando o número também, a cor passa
+                  a ser dita duas vezes e o valor perde legibilidade nas duas
+                  pontas: vermelho sobre branco e vermelho sobre quase-preto são
+                  os dois piores contrastes desta tela.
+                */}
+                <dl className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                  {[
+                    ["Total do mês", m.totalMes, null],
+                    ["Pago", m.pagoMes, "bg-pos"],
+                    ["Vencido", m.vencidoMes, "bg-neg"],
+                    ["A vencer", Math.max(0, m.abertoMes - m.vencidoMes), "bg-[var(--cor-barra)]"],
+                  ].map(([rotulo, valor, ponto]) => (
+                    <div key={rotulo as string}>
+                      <dt className="flex items-center gap-1.5 text-[11.5px] text-fg-mute">
+                        {/* A bolinha liga o número ao pedaço da barra: sem ela
+                            a barra vira enfeite e a lista vira tabela. */}
+                        {ponto && (
+                          <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", ponto as string)} />
+                        )}
+                        {rotulo as string}
+                      </dt>
+                      <dd className="mt-0.5 text-[17px] font-bold tracking-[-0.03em] text-fg tnum">
+                        {brl(valor as number)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            )}
+          </div>
+        </Card>
       </div>
 
       {/* ------------------------ leitura + referências ------------------------ */}
@@ -1013,7 +1116,7 @@ export default function HomePage() {
                           <span className="mt-1.5 flex items-center gap-2">
                             <span className="h-1 min-w-[40px] flex-1 overflow-hidden rounded-full bg-ink-800">
                               <span
-                                className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
+                                className="block h-full w-full origin-left rounded-full bg-[var(--cor-barra)] transition-transform duration-300"
                                 style={{ transform: `scaleX(${pct / 100})` }}
                               />
                             </span>

@@ -1105,7 +1105,7 @@ export default function LeituraPage() {
                             {/* scaleX e não width: transform roda no compositor,
                                 então a barra desliza lisa. */}
                             <div
-                              className="h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-[300ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]"
+                              className="h-full w-full origin-left rounded-full bg-[var(--cor-barra)] transition-transform duration-[300ms] ease-[cubic-bezier(0.22,0.61,0.36,1)]"
                               style={{ transform: `scaleX(${pct / 100})` }}
                             />
                           </div>
@@ -1147,7 +1147,7 @@ export default function LeituraPage() {
                 <span
                   className={cx(
                     "block h-full w-full origin-left rounded-full transition-transform duration-[320ms]",
-                    lidosNoAno >= meta ? "bg-pos" : "bg-brand-500"
+                    lidosNoAno >= meta ? "bg-pos" : "bg-[var(--cor-barra)]"
                   )}
                   style={{
                     transform: `scaleX(${Math.min(1, lidosNoAno / meta)})`,
@@ -1344,7 +1344,7 @@ export default function LeituraPage() {
                       <span className="mt-1.5 flex items-center gap-1.5">
                         <span className="h-1 flex-1 overflow-hidden rounded-full bg-ink-800">
                           <span
-                            className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
+                            className="block h-full w-full origin-left rounded-full bg-[var(--cor-barra)] transition-transform duration-300"
                             style={{ transform: `scaleX(${pct / 100})` }}
                           />
                         </span>
@@ -1631,7 +1631,7 @@ export default function LeituraPage() {
                   <div
                     className={cx(
                       "h-full w-full origin-left rounded-full transition-transform duration-300",
-                      ver.status === "done" ? "bg-pos" : "bg-brand-500"
+                      ver.status === "done" ? "bg-pos" : "bg-[var(--cor-barra)]"
                     )}
                     style={{ transform: `scaleX(${(pctDe(ver) ?? 0) / 100})` }}
                   />
