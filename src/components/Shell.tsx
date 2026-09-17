@@ -79,9 +79,25 @@ function CaixaConta({
       prefetch={false}
       title={compacta ? nome : undefined}
       className={cx(
-        "flex items-center rounded-[16px] p-2.5 transition-colors",
-        compacta ? "justify-center" : "gap-2.5",
-        ativo ? "bg-brand-500/12" : "bg-ink-800 hover:bg-fg/[0.04]"
+        "flex items-center transition-colors",
+        /*
+         * Encolhida, a foto e o proprio botao: sem caixa em volta.
+         *
+         * A pastilha existe para carregar o NOME ao lado da foto — ela e o
+         * fundo de uma linha de texto. Sem o nome, sobrava um quadrado
+         * arredondado com um circulo dentro, e o quadrado parecia uma borda
+         * mal encaixada na foto. O anel de "estou nesta tela" vira `ring`, que
+         * acompanha o circulo em vez de desenhar outra forma atras dele.
+         */
+        compacta
+          ? cx(
+              "justify-center rounded-full",
+              ativo && "ring-2 ring-brand-500 ring-offset-2 ring-offset-ink-900"
+            )
+          : cx(
+              "gap-2.5 rounded-[16px] p-2.5",
+              ativo ? "bg-brand-500/12" : "bg-ink-800 hover:bg-fg/[0.04]"
+            )
       )}
     >
       <Iniciais nome={nome} url={foto} tamanho={30} />

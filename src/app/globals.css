@@ -11,6 +11,27 @@
    accent puro como texto não alcança 4.5:1 sobre fundo claro.
    ============================================================ */
 
+/*
+ * O painel de marca do login: os dois tons do degradê.
+ *
+ * Ele É a cor escolhida, e não um quase-preto ao lado dela. Foi assim que o
+ * tema escuro ficou possível: um painel quase-preto sobre cartão escuro não
+ * tem como se separar do cartão, e clareá-lo só o transformava num cinza a
+ * dois passos. Sendo a cor, ele se distingue nos dois temas pelo mesmo motivo
+ * — é o único bloco saturado da tela.
+ *
+ * Os tons não foram escolhidos a olho. Cada accent foi afundado em #0b1220 o
+ * suficiente para o BRANCO alcançar 4,6:1 no tom mais claro do degradê, e o
+ * pé desce mais 26%. Medido, tinta branca sobre o topo e sobre a base:
+ *
+ *   vermelho  4,68 / 7,24      laranja  4,73 / 8,48
+ *   verde     4,69 / 9,71      azul     4,63 / 7,08
+ *   roxo      6,28 / 8,83
+ *
+ * É por isso que verde e laranja afundam muito mais que roxo: eles são claros
+ * de origem. Sem afundar, branco sobre o verde puro dá 1,9:1 — e usar a tinta
+ * escura deles (`--a-ink`) quebraria no pé do degradê, que é escuro.
+ */
 :root {
   --a: #287ee7;
   --a-ink: #fff;
@@ -26,6 +47,10 @@
   --a-2-esc: #4690ea;
   --a-text-esc: #599ced;
   --a-soft-esc: #192b3f;
+
+  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
+  --painel-1: #2574d5;
+  --painel-2: #1e58a1;
 }
 :root[data-accent="red"] {
   --a: #e72828;
@@ -42,6 +67,10 @@
   --a-2-esc: #ea4646;
   --a-text-esc: #ef7171;
   --a-soft-esc: #371d20;
+
+  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
+  --painel-1: #e02728;
+  --painel-2: #a72226;
 }
 :root[data-accent="blue"] {
   --a: #287ee7;
@@ -58,6 +87,10 @@
   --a-2-esc: #4690ea;
   --a-text-esc: #599ced;
   --a-soft-esc: #192b3f;
+
+  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
+  --painel-1: #2574d5;
+  --painel-2: #1e58a1;
 }
 :root[data-accent="green"] {
   --a: #28e75e;
@@ -74,6 +107,10 @@
   --a-2-esc: #46ea75;
   --a-text-esc: #28e75e;
   --a-soft-esc: #193c29;
+
+  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
+  --painel-1: #1b8541;
+  --painel-2: #134e31;
 }
 
 /*
@@ -104,6 +141,10 @@
   --a-2-esc: #ea9e46;
   --a-text-esc: #e78e28;
   --a-soft-esc: #372d20;
+
+  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
+  --painel-1: #a16625;
+  --painel-2: #674623;
 }
 :root[data-accent="violet"] {
   --a: #7e28e7;
@@ -120,6 +161,10 @@
   --a-2-esc: #9046ea;
   --a-text-esc: #b380f1;
   --a-soft-esc: #271d3f;
+
+  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
+  --painel-1: #7e28e7;
+  --painel-2: #6022b3;
 }
 
 /* ============================================================
@@ -230,6 +275,16 @@
   --bloco-1: #26292b;
   --bloco-2: #1b1e20;
   --painel-marca: #16191b;
+  /*
+   * O veu que escurece o pe do painel de marca, para o texto branco nao
+   * disputar com a aurora do accent. Acompanha o chao do painel: era um
+   * near-black fixo, afinado para o painel claro, e no escuro ele escurecia o
+   * que ja era escuro em vez de assentar a cor.
+   */
+  --painel-veu: rgb(22 25 27 / 0.62);
+  /* A borda interna que separa o painel do cartao. No claro nao faz falta — o
+     painel e quase preto sobre branco —, entao ela e transparente ali. */
+  --painel-borda: transparent;
 
   /*
    * O véu atrás de um modal escurece, nos dois temas.
@@ -252,12 +307,31 @@
    * `color-mix` com o accent, e nao um roxo ou azul escrito aqui, porque a
    * cor e escolhida na pagina de Conta — o halo tem de acompanhar as cinco.
    *
-   * No claro ele e discreto de proposito: sobre fundo quase branco, brilho
-   * demais vira borrao sujo em volta do botao. O valor forte fica para o
-   * escuro, onde ha espaco para a luz aparecer.
+   * Duas camadas, e nao uma. Uma sombra so tinha de escolher entre ficar
+   * colada (e sumir atras do botao) ou ficar larga (e virar mancha sem
+   * centro). A curta marca o contato logo abaixo; a longa e o brilho que se
+   * espalha. Foi assim que o halo passou a APARECER -- a primeira versao,
+   * `0 6px 16px -6px`, tinha espalhamento negativo maior que a folga e ficava
+   * escondida atras do proprio botao.
+   *
+   * No claro ele e mais discreto: sobre fundo quase branco, brilho demais vira
+   * borrao sujo em volta do botao. O valor cheio fica para o escuro, onde ha
+   * espaco para a luz aparecer.
    */
-  --brilho: 0 6px 16px -6px color-mix(in srgb, var(--a) 45%, transparent);
-  --brilho-forte: 0 8px 22px -6px color-mix(in srgb, var(--a) 60%, transparent);
+  --brilho:
+    0 3px 8px -3px color-mix(in srgb, var(--a) 42%, transparent),
+    0 10px 22px -6px color-mix(in srgb, var(--a) 40%, transparent);
+  --brilho-forte:
+    0 4px 10px -3px color-mix(in srgb, var(--a) 55%, transparent),
+    0 14px 30px -6px color-mix(in srgb, var(--a) 50%, transparent);
+  /*
+   * A mesma luz, encurtada, para botao de largura inteira.
+   *
+   * O halo espalha na proporcao da peca: o que fica certo num botao de 100px
+   * vira uma mancha azul de ponta a ponta num de 400px, e no login ele chegava
+   * a acender o "Nao tem conta?" embaixo. Mesma cor, alcance menor.
+   */
+  --brilho-largo: 0 4px 14px -6px color-mix(in srgb, var(--a) 40%, transparent);
 
   /*
    * A paleta dos gráficos por categoria.
@@ -325,11 +399,33 @@
 
     --bloco-1: #2b3036;
     --bloco-2: #1e242a;
-    --painel-marca: #20262c;
+    /*
+     * No escuro o painel de marca vai para BAIXO do cartao, e nao para
+     * cima.
+     *
+     * No claro ele e quase preto sobre branco: e o contraste da tela, e o
+     * que da personalidade ao login. A primeira versao escura so clareou
+     * o mesmo chao, e ele virou um cinza a dois passos do cartao — sem
+     * separacao, sem hierarquia, e com a aurora do accent lavada por
+     * cima. Descendo, a relacao volta a ser a mesma que no claro: o
+     * painel e o bloco fundo, o cartao e a superficie, e a aurora tem
+     * escuro suficiente atras para acender.
+     *
+     * A borda interna e o que impede o painel de virar buraco: sem ela,
+     * chao mais escuro que o fundo da pagina le como recorte.
+     */
+    --painel-marca: #080c11;
+    --painel-veu: rgb(8 12 17 / 0.68);
+    --painel-borda: rgb(255 255 255 / 0.07);
     --veu: rgb(0 0 0 / 0.62);
 
-    --brilho: 0 8px 24px -8px color-mix(in srgb, var(--a) 65%, transparent);
-    --brilho-forte: 0 10px 32px -8px color-mix(in srgb, var(--a) 85%, transparent);
+    --brilho:
+      0 4px 10px -4px color-mix(in srgb, var(--a) 70%, transparent),
+      0 14px 34px -6px color-mix(in srgb, var(--a) 60%, transparent);
+    --brilho-forte:
+      0 5px 12px -4px color-mix(in srgb, var(--a) 85%, transparent),
+      0 18px 44px -6px color-mix(in srgb, var(--a) 75%, transparent);
+    --brilho-largo: 0 5px 18px -7px color-mix(in srgb, var(--a) 60%, transparent);
 
     --cat-1: #9c8cf0;
     --cat-2: #35c880;
@@ -382,11 +478,33 @@
 
   --bloco-1: #2b3036;
   --bloco-2: #1e242a;
-  --painel-marca: #20262c;
+  /*
+   * No escuro o painel de marca vai para BAIXO do cartao, e nao para
+   * cima.
+   *
+   * No claro ele e quase preto sobre branco: e o contraste da tela, e o
+   * que da personalidade ao login. A primeira versao escura so clareou
+   * o mesmo chao, e ele virou um cinza a dois passos do cartao — sem
+   * separacao, sem hierarquia, e com a aurora do accent lavada por
+   * cima. Descendo, a relacao volta a ser a mesma que no claro: o
+   * painel e o bloco fundo, o cartao e a superficie, e a aurora tem
+   * escuro suficiente atras para acender.
+   *
+   * A borda interna e o que impede o painel de virar buraco: sem ela,
+   * chao mais escuro que o fundo da pagina le como recorte.
+   */
+  --painel-marca: #080c11;
+  --painel-veu: rgb(8 12 17 / 0.68);
+  --painel-borda: rgb(255 255 255 / 0.07);
   --veu: rgb(0 0 0 / 0.62);
 
-  --brilho: 0 8px 24px -8px color-mix(in srgb, var(--a) 65%, transparent);
-  --brilho-forte: 0 10px 32px -8px color-mix(in srgb, var(--a) 85%, transparent);
+  --brilho:
+    0 4px 10px -4px color-mix(in srgb, var(--a) 70%, transparent),
+    0 14px 34px -6px color-mix(in srgb, var(--a) 60%, transparent);
+  --brilho-forte:
+    0 5px 12px -4px color-mix(in srgb, var(--a) 85%, transparent),
+    0 18px 44px -6px color-mix(in srgb, var(--a) 75%, transparent);
+  --brilho-largo: 0 5px 18px -7px color-mix(in srgb, var(--a) 60%, transparent);
 
   --cat-1: #9c8cf0;
   --cat-2: #35c880;
@@ -1309,13 +1427,28 @@ textarea::placeholder {
    */
   background-color: #fef08a;
   /*
-   * Tinta escura fixa, e nao `inherit`.
+   * Tinta escura fixa, e com `!important` — que aqui nao e preguica.
    *
-   * O fundo do marca-texto e amarelo claro nos dois temas — e cor de marcacao,
-   * nao de tema. Herdando, no escuro ele receberia texto quase branco em cima
-   * de amarelo claro e o trecho marcado seria o unico ilegivel da anotacao.
+   * O Tiptap grava o marca-texto assim:
+   *
+   *     <mark data-color="#bfdbfe" style="background-color:#bfdbfe;color:inherit">
+   *
+   * O `color: inherit` esta no proprio elemento, e estilo em linha vence
+   * qualquer regra de folha — inclusive uma escrita aqui. No tema claro isso
+   * nao aparecia, porque herdar dava preto sobre pastel. No escuro passou a
+   * herdar quase-branco, e o trecho marcado virou o unico ilegivel da
+   * anotacao: branco sobre amarelo, branco sobre azul-claro.
+   *
+   * `!important` e a unica coisa que passa por cima de estilo em linha sem
+   * mexer no documento de ninguem. E vale nos dois temas porque o fundo do
+   * marca-texto e pastel nos dois: marca-texto e tinta sobre papel, e o papel
+   * dele e claro — a mesma razao por que um marcador amarelo de verdade nao
+   * muda de cor quando a luz do quarto apaga.
+   *
+   * O valor e o mesmo `--txt` do tema claro, e nao um preto proprio, para o
+   * trecho marcado ler igual ao resto da anotacao quando o tema e claro.
    */
-  color: #23210a;
+  color: #14181a !important;
   border-radius: 4px;
   padding: 0.08em 0.15em;
   box-decoration-break: clone;
