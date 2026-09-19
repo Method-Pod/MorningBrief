@@ -135,6 +135,10 @@ export type Task = {
   title: string;
   description: string;
   client: string;
+  /* Para onde a demanda aponta no cadastro. Nulos = só o texto acima,
+     que é como ficam as linhas de antes de CLIENTES.sql. */
+  cliente_id: string | null;
+  projeto_id: string | null;
   priority: Priority;
   status: TaskStatus;
   due_date: string | null;
@@ -151,6 +155,10 @@ export type RecurringTask = {
   title: string;
   description: string;
   client: string;
+  /* Para onde a demanda aponta no cadastro. Nulos = só o texto acima,
+     que é como ficam as linhas de antes de CLIENTES.sql. */
+  cliente_id: string | null;
+  projeto_id: string | null;
   priority: Priority;
   /* Links do modelo: cada ocorrência nasce com eles. */
   links: string[] | null;
@@ -309,6 +317,57 @@ export const CORES_HEX: Record<string, string> = {
  * preciso guardar é melhor não guardar. A coluna ficou no banco por ser
  * migração destrutiva sem ganho; nada a lê nem a escreve.
  */
+/**
+ * O cliente, e o projeto dentro dele.
+ *
+ * Existem porque o campo "Cliente / projeto" da demanda era texto livre, e
+ * texto livre cria cliente novo a cada grafia — em silêncio. Na base real a
+ * Bia virou cinco: "Bia", "Bia - Canal Oficial", "Bia - Pedido Carol",
+ * "Bia - Pedido Nero" e "Bia - Setembro Amarelo", com as contagens
+ * separadas e nenhum número dizendo quantas demandas ela tem.
+ *
+ * Dois níveis, e não um: o CLIENTE é quem paga, o PROJETO é o que está
+ * sendo feito para ele. É a forma que o texto já tinha — só que agora o app
+ * enxerga os dois pedaços em vez de uma frase.
+ *
+ * Ver supabase/CLIENTES.sql, que cria as tabelas e liga o que já existe.
+ */
+export type Cliente = {
+  id: string;
+  user_id: string;
+  nome: string;
+  /** Da mesma paleta das notas e dos cartões. Ver `CORES_HEX`. */
+  cor: string;
+  created_at: string;
+};
+
+export type Projeto = {
+  id: string;
+  user_id: string;
+  cliente_id: string;
+  nome: string;
+  created_at: string;
+};
+
+/**
+ * O nome que a tela mostra para uma demanda.
+ *
+ * Prefere o cadastro; cai no texto antigo quando a demanda ainda não foi
+ * ligada a nenhum cliente — o que acontece com quem não rodou o SQL, e com
+ * a linha cujo texto não bateu com cadastro nenhum. Nos dois casos a tela
+ * continua mostrando o que a pessoa escreveu, em vez de um vazio.
+ */
+export const nomeDoCliente = (
+  t: { client: string; cliente_id: string | null; projeto_id: string | null },
+  clientes: Map<string, Cliente>,
+  projetos: Map<string, Projeto>
+): string => {
+  const c = t.cliente_id ? clientes.get(t.cliente_id) : null;
+  if (!c) return t.client || "";
+  const p = t.projeto_id ? projetos.get(t.projeto_id) : null;
+  return p ? `${c.nome} - ${p.nome}` : c.nome;
+};
+
 export type Cartao = {
   id: string;
   user_id: string;

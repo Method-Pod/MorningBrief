@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -15,6 +15,7 @@ import {
   Repeat2,
   Search,
   Trash2,
+  Users,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
@@ -31,6 +32,9 @@ import {
   type TaskStatus,
 
   type TaskItem,
+  type Cliente,
+  type Projeto,
+  nomeDoCliente,
 } from "@/lib/types";
 import { dateBR, daysUntil, todayISO } from "@/lib/format";
 import { frequencyDescription } from "@/lib/recurring";
@@ -52,6 +56,7 @@ import {
 } from "@/components/ui";
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
 import { useArrastarCartao } from "@/components/arrastarCartao";
+import { MenuSuspenso } from "@/components/MenuSuspenso";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import {
   EditorChecklist,
@@ -94,6 +99,10 @@ const blank = () => ({
   title: "",
   description: "",
   client: "",
+  /* O cadastro. Vazio = "sem cliente"; o texto acima fica só como o que a
+     linha antiga já tinha, para não sumir de quem não rodou CLIENTES.sql. */
+  cliente_id: "",
+  projeto_id: "",
   links: [] as string[],
   priority: "medium" as Priority,
   status: "todo" as TaskStatus,
@@ -109,6 +118,10 @@ const blank = () => ({
 export default function DemandasPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = useEstadoCacheado<Task[]>("tasks", []);
+  /* O CADASTRO de clientes e projetos. Diferente de `clientes`, mais
+     abaixo, que é a lista derivada das demandas para o filtro. */
+  const [cadastro, setCadastro] = useEstadoCacheado<Cliente[]>("clientes", []);
+  const [projetos, setProjetos] = useEstadoCacheado<Projeto[]>("projetos", []);
   /* Já visitou nesta sessão? Então abre com conteúdo e atualiza atrás. */
   const [loading, setLoading] = React.useState(
     () => !temCache("tasks", "task_items")
@@ -124,6 +137,7 @@ export default function DemandasPage() {
    * entrando, que é o que se quer nos dois casos.
    */
   const paramDaUrl = useSearchParams();
+  const router = useRouter();
 
   /*
    * Semeado pela busca global: `?q=` na URL entra como filtro inicial.
@@ -163,12 +177,18 @@ export default function DemandasPage() {
      * checklist simplesmente não aparece — o quadro continua funcionando. Um
      * erro ali não pode derrubar a página inteira.
      */
-    const [t, i] = await Promise.all([
+    const [t, i, c, pr] = await Promise.all([
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("task_items").select("*").order("position"),
+      /* O cadastro tolera falha pelo mesmo motivo do checklist: numa base
+         sem CLIENTES.sql a tela continua funcionando com o texto de sempre. */
+      supabase.from("clientes").select("*").order("nome"),
+      supabase.from("projetos").select("*").order("nome"),
     ]);
 
     setRows((t.data as Task[]) ?? []);
+    setCadastro((c.data as Cliente[]) ?? []);
+    setProjetos((pr.data as Projeto[]) ?? []);
 
     const porDemanda: Record<string, TaskItem[]> = {};
     ((i.data as TaskItem[]) ?? []).forEach((item) => {
@@ -176,7 +196,7 @@ export default function DemandasPage() {
     });
     setItens(porDemanda);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, setCadastro, setProjetos]);
 
   React.useEffect(() => {
     load();
@@ -198,6 +218,8 @@ export default function DemandasPage() {
       title: t.title,
       description: t.description,
       client: t.client,
+      cliente_id: t.cliente_id ?? "",
+      projeto_id: t.projeto_id ?? "",
       links: t.links ?? [],
       priority: t.priority,
       status: t.status,
@@ -240,12 +262,41 @@ export default function DemandasPage() {
 
     const links = limparLinks(form.links);
 
+    /*
+     * O texto de `client` passa a ser um retrato, não a fonte.
+     *
+     * Quem manda são `cliente_id` e `projeto_id`; o texto é gravado junto
+     * com o nome de agora e só volta a ser usado se o cadastro sumir — aí a
+     * demanda mostra o nome sob o qual ela aconteceu, em vez de um vazio.
+     */
+    const cSel = cadastro.find((c) => c.id === form.cliente_id);
+    const pSel = projetos.find((p) => p.id === form.projeto_id);
+    const textoCliente = cSel
+      ? pSel
+        ? `${cSel.nome} - ${pSel.nome}`
+        : cSel.nome
+      : form.client.trim();
+
     const base = {
       title: form.title.trim(),
       description: form.description.trim(),
-      client: form.client.trim(),
+      client: textoCliente,
       priority: form.priority,
     };
+
+    /*
+     * As colunas do cadastro só entram quando ele existe.
+     *
+     * Mandá-las sempre faria toda demanda falhar numa base onde
+     * CLIENTES.sql ainda não rodou. Mesma escolha de `links`, `weekdays` e
+     * `checklist`.
+     */
+    const comCliente = cadastro.length
+      ? {
+          cliente_id: form.cliente_id || null,
+          projeto_id: form.projeto_id || null,
+        }
+      : {};
 
     /*
      * Os links entram na criação só quando existem.
@@ -259,6 +310,7 @@ export default function DemandasPage() {
     if (editing) {
       const mudanca = {
         ...base,
+        ...comCliente,
         status: form.status,
           due_date: form.due_date || null,
           /*
@@ -352,6 +404,7 @@ export default function DemandasPage() {
         .insert({
           ...base,
           ...comLink,
+          ...comCliente,
           user_id: uid,
           frequency: form.frequency,
           /*
@@ -413,6 +466,7 @@ export default function DemandasPage() {
         .insert({
           ...base,
           ...comLink,
+          ...comCliente,
           user_id: uid,
           status: "todo",
           due_date: today,
@@ -448,6 +502,7 @@ export default function DemandasPage() {
       .insert({
       ...base,
       ...comLink,
+      ...comCliente,
       user_id: uid,
       status: form.status,
       due_date: form.due_date || null,
@@ -668,18 +723,45 @@ export default function DemandasPage() {
 
   /* ------------------------------ derivados ------------------------------ */
 
+  /*
+   * O nome que a demanda mostra: o do cadastro, ou o texto antigo.
+   *
+   * É o que junta as cinco Bias. Enquanto o nome vinha de `t.client`, cada
+   * grafia era um cliente; vindo do cadastro, as cinco apontam para a mesma
+   * linha e viram uma só — e renomear lá muda aqui sem tocar em demanda
+   * nenhuma. Quem não rodou CLIENTES.sql cai no texto e vê o de sempre.
+   */
+  const porId = React.useMemo(
+    () => new Map(cadastro.map((c) => [c.id, c])),
+    [cadastro]
+  );
+  const projetoPorId = React.useMemo(
+    () => new Map(projetos.map((p) => [p.id, p])),
+    [projetos]
+  );
+  const nomeDe = React.useCallback(
+    (t: Task) => nomeDoCliente(t, porId, projetoPorId),
+    [porId, projetoPorId]
+  );
+
+  /* Os projetos do cliente que está escolhido no formulário. */
+  const projetosDoCliente = React.useMemo(
+    () => projetos.filter((p) => p.cliente_id === form.cliente_id),
+    [projetos, form.cliente_id]
+  );
+
   const filtered = React.useMemo(() => {
     const term = q.trim().toLowerCase();
     return rows
       .filter((t) => prio === "all" || t.priority === prio)
       .filter(
-        (t) => cliente === "all" || (t.client || SEM_CLIENTE) === cliente
+        (t) => cliente === "all" || (nomeDe(t) || SEM_CLIENTE) === cliente
       )
       .filter(
         (t) =>
           !term ||
           t.title.toLowerCase().includes(term) ||
-          t.client.toLowerCase().includes(term) ||
+          nomeDe(t).toLowerCase().includes(term) ||
           t.description.toLowerCase().includes(term)
       )
       .sort((a, b) => {
@@ -687,7 +769,7 @@ export default function DemandasPage() {
           return RANK[a.priority] - RANK[b.priority];
         return (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999");
       });
-  }, [rows, q, prio, cliente]);
+  }, [rows, q, prio, cliente, nomeDe]);
 
   const byStatus = (s: TaskStatus) => filtered.filter((t) => t.status === s);
 
@@ -701,10 +783,10 @@ export default function DemandasPage() {
   const clientes = React.useMemo(() => {
     const m = new Map<string, { nome: string; abertas: number; atrasadas: number }>();
     rows.forEach((t) => {
-      const chave = t.client || SEM_CLIENTE;
+      const chave = nomeDe(t) || SEM_CLIENTE;
       const g =
         m.get(chave) ??
-        { nome: t.client || "Sem cliente", abertas: 0, atrasadas: 0 };
+        { nome: nomeDe(t) || "Sem cliente", abertas: 0, atrasadas: 0 };
       if (t.status !== "done") {
         g.abertas++;
         if (t.due_date && daysUntil(t.due_date) < 0) g.atrasadas++;
@@ -721,7 +803,7 @@ export default function DemandasPage() {
         if (a.abertas !== b.abertas) return b.abertas - a.abertas;
         return a.nome.localeCompare(b.nome, "pt-BR");
       });
-  }, [rows]);
+  }, [rows, nomeDe]);
 
   /* As demandas já filtradas, agrupadas para a visão por cliente. */
   const grupos = React.useMemo(
@@ -729,7 +811,7 @@ export default function DemandasPage() {
       clientes
         .map((c) => ({
           ...c,
-          tarefas: filtered.filter((t) => (t.client || SEM_CLIENTE) === c.chave),
+          tarefas: filtered.filter((t) => (nomeDe(t) || SEM_CLIENTE) === c.chave),
         }))
         .filter((g) => g.tarefas.length > 0),
     [clientes, filtered]
@@ -759,15 +841,32 @@ export default function DemandasPage() {
           faixas de controle numa tela de 812px.
         */}
         <div className="flex w-full items-center gap-2 sm:w-auto">
-          {/* Atalho para as regras. Sem ele a página de recorrentes só era
-              alcançável pela URL: ela saiu do menu da esquerda a pedido, mas
-              continua sendo onde se pausa, edita e gera na hora. */}
-          <Link href="/recorrentes" className="min-w-0 flex-1 sm:flex-none">
-            <Button className="w-full justify-center sm:w-auto">
-              <Repeat2 size={15} className="shrink-0" />
-              <span className="truncate">Recorrentes</span>
-            </Button>
-          </Link>
+          {/*
+            Os dois cadastros desta tela num menu só, como em Contas.
+
+            Eram um botão solto de "Recorrentes" ao lado do de criar. Com o
+            cadastro de clientes entrando, seriam três botões lado a lado no
+            cabeçalho — e dois deles levam a telas que se visita de vez em
+            quando, não a cada uso. Menu para o que é ocasional, botão para o
+            que é o gesto da tela.
+          */}
+          <MenuSuspenso
+            rotulo="Gerenciar demandas"
+            rotuloVisivel="Gerenciar"
+            className="min-w-0 flex-1 sm:flex-none"
+            itens={[
+              {
+                rotulo: "Clientes e projetos",
+                icone: <Users size={15} />,
+                aoEscolher: () => router.push("/demandas/clientes"),
+              },
+              {
+                rotulo: "Recorrentes",
+                icone: <Repeat2 size={15} />,
+                aoEscolher: () => router.push("/recorrentes"),
+              },
+            ]}
+          />
           <Button
             variant="primary"
             onClick={() => startNew()}
@@ -1276,35 +1375,48 @@ export default function DemandasPage() {
             />
           </Field>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
-            <Field label="Cliente / projeto">
-              {/*
-                Sugere o que já existe, em vez de aceitar tudo do zero.
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/*
+              Cliente e projeto vêm do cadastro, e não mais de texto livre.
 
-                O campo é texto livre e não há tabela de clientes, então cada
-                grafia nova cria um cliente novo — em silêncio. Foi o que
-                aconteceu com a Bia: hoje ela existe como "Bia",
-                "Bia - Canal Oficial" e "Bia - Setembro Amarelo", e as três
-                demandas dela aparecem como 2 + 1 + 0 no filtro, sem nenhum
-                número dizer três. Um espaço a mais basta para repetir isso.
+              O campo era um `<input>` com sugestões, e sugestão não impede
+              nada: bastava um espaço a mais para nascer um cliente novo em
+              silêncio — foi assim que a Bia virou cinco. Escolhendo de uma
+              lista, a demanda aponta para uma linha do cadastro, e renomear
+              lá muda aqui.
 
-                `datalist` porque continua sendo texto livre: cliente novo se
-                digita normalmente, e não há migração nem tabela nova. O que
-                muda é que a grafia já usada aparece antes de você redigitá-la
-                diferente. É contenção, não solução — a solução é a tabela de
-                clientes, e essa é decisão sua.
-              */}
-              <Input
-                list="clientes-ja-usados"
-                value={form.client}
-                onChange={(e) => setForm({ ...form, client: e.target.value })}
-                placeholder="Opcional"
-              />
-              <datalist id="clientes-ja-usados">
-                {clientes.map((c) => (
-                  <option key={c.chave} value={c.nome} />
+              O projeto depende do cliente: sem cliente escolhido ele não tem
+              o que oferecer, e por isso fica desabilitado em vez de mostrar
+              uma lista de projetos soltos de donos diferentes.
+            */}
+            <Field
+              label="Cliente"
+              hint={
+                cadastro.length === 0
+                  ? "Cadastre em Gerenciar › Clientes e projetos."
+                  : undefined
+              }
+            >
+              <Select
+                value={form.cliente_id}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    cliente_id: e.target.value,
+                    /* Trocar de cliente zera o projeto: manter o anterior
+                       deixaria a demanda apontando para um projeto de outro
+                       dono, que é pior que não ter projeto. */
+                    projeto_id: "",
+                  })
+                }
+              >
+                <option value="">Sem cliente</option>
+                {cadastro.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nome}
+                  </option>
                 ))}
-              </datalist>
+              </Select>
             </Field>
             <Field label="Prioridade">
               <Select
@@ -1316,6 +1428,32 @@ export default function DemandasPage() {
                 {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
                     {PRIORITY_LABEL[p]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+
+            <Field
+              label="Projeto"
+              hint={
+                !form.cliente_id
+                  ? "Escolha um cliente primeiro."
+                  : projetosDoCliente.length === 0
+                    ? "Este cliente ainda não tem projeto."
+                    : undefined
+              }
+            >
+              <Select
+                value={form.projeto_id}
+                disabled={!form.cliente_id || projetosDoCliente.length === 0}
+                onChange={(e) =>
+                  setForm({ ...form, projeto_id: e.target.value })
+                }
+              >
+                <option value="">Sem projeto</option>
+                {projetosDoCliente.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nome}
                   </option>
                 ))}
               </Select>
