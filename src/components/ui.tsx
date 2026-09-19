@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 
@@ -111,12 +111,353 @@ export function Textarea(
   );
 }
 
-export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  const { className, children, ...rest } = props;
+/* ------------------------------ Select ------------------------------ */
+
+/**
+ * O seletor, desenhado por nós e não pelo sistema operacional.
+ *
+ * O `<select>` nativo tem um problema que nenhum CSS resolve: a caixa fechada
+ * é um elemento da página e aceita estilo, mas **a lista que abre é desenhada
+ * pelo sistema**. Ela ignora o tema, a fonte, o arredondamento e a cor de
+ * destaque — no escuro abria um retângulo branco com realce azul do Windows
+ * no meio de uma tela escura. Estilizar `<option>` não resolve: os navegadores
+ * ignoram quase tudo ali, e o pouco que aceitam muda de sistema para sistema.
+ *
+ * Então a lista passa a ser nossa. O que isso custa está pago abaixo: teclado
+ * (setas, Home/End, Enter, Esc e busca por letra), papéis de acessibilidade,
+ * posicionamento e as regras de fechar.
+ *
+ * **A API é a mesma de antes, de propósito.** São 22 pontos de uso em 8 telas,
+ * todos escrevendo `<Select value={x} onChange={(e) => ... e.target.value}>`
+ * com `<option>` dentro. Trocar a assinatura obrigaria a mexer nos 22;
+ * mantendo-a, nenhum precisou ser tocado — inclusive o que usa `<optgroup>`.
+ */
+
+type ItemDoSeletor = { valor: string; rotulo: string; grupo?: string };
+
+const textoDe = (n: React.ReactNode): string => {
+  if (n === null || n === undefined || typeof n === "boolean") return "";
+  if (typeof n === "string" || typeof n === "number") return String(n);
+  if (Array.isArray(n)) return n.map(textoDe).join("");
+  if (React.isValidElement(n))
+    return textoDe((n.props as { children?: React.ReactNode }).children);
+  return "";
+};
+
+/** Lê os `<option>` e `<optgroup>` que vieram como filhos. */
+function lerOpcoes(children: React.ReactNode): ItemDoSeletor[] {
+  const saida: ItemDoSeletor[] = [];
+
+  const visitar = (nos: React.ReactNode, grupo?: string) => {
+    React.Children.forEach(nos, (no) => {
+      if (!React.isValidElement(no)) return;
+      /* Fragmentos aparecem quando a tela monta os grupos numa função. */
+      if (no.type === React.Fragment)
+        return visitar(
+          (no.props as { children?: React.ReactNode }).children,
+          grupo
+        );
+      if (no.type === "optgroup") {
+        const p = no.props as { label?: string; children?: React.ReactNode };
+        return visitar(p.children, p.label);
+      }
+      if (no.type === "option") {
+        const p = no.props as {
+          value?: string | number;
+          children?: React.ReactNode;
+        };
+        saida.push({
+          valor: String(p.value ?? ""),
+          /* O rótulo pode vir em pedaços — `{c.nome}{" (3)"}` —, então é
+             montado a partir do texto de todos eles. */
+          rotulo: textoDe(p.children),
+          grupo,
+        });
+      }
+    });
+  };
+
+  visitar(children);
+  return saida;
+}
+
+const FOLGA_SELETOR = 6;
+const ALTURA_MAXIMA = 288;
+
+export function Select({
+  className,
+  children,
+  value,
+  onChange,
+  disabled,
+  ...rest
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  const opcoes = React.useMemo(() => lerOpcoes(children), [children]);
+  const atual = String(value ?? "");
+  const iSelecionado = opcoes.findIndex((o) => o.valor === atual);
+
+  const [aberto, setAberto] = React.useState(false);
+  const [emFoco, setEmFoco] = React.useState(0);
+  const [lugar, setLugar] = React.useState<React.CSSProperties>({});
+  const [teto, setTeto] = React.useState(ALTURA_MAXIMA);
+  const [montado, setMontado] = React.useState(false);
+  const botao = React.useRef<HTMLButtonElement>(null);
+  const caixa = React.useRef<HTMLDivElement>(null);
+  /* Busca por letra: junta as teclas digitadas em sequência, como o nativo. */
+  const digitado = React.useRef({ texto: "", quando: 0 });
+  const idLista = React.useId();
+
+  React.useEffect(() => setMontado(true), []);
+
+  const escolher = (valor: string) => {
+    setAberto(false);
+    botao.current?.focus();
+    if (valor === atual) return;
+    /*
+     * O evento é montado à mão, porque não há `<select>` para emiti-lo.
+     *
+     * Os 22 pontos de uso leem `e.target.value` e nada mais; entregar isso
+     * mantém todos funcionando sem alteração. Um evento completo do React não
+     * existe aqui, e fingir um inteiro seria pior que este recorte declarado.
+     */
+    onChange?.({
+      target: { value: valor },
+      currentTarget: { value: valor },
+    } as React.ChangeEvent<HTMLSelectElement>);
+  };
+
+  const abrir = () => {
+    const b = botao.current;
+    if (!b || disabled) return;
+    const r = b.getBoundingClientRect();
+    const desejada = Math.min(ALTURA_MAXIMA, opcoes.length * 34 + 12);
+
+    /*
+     * Escolhe o lado E limita a altura ao que existe de espaço.
+     *
+     * Só escolher o lado não basta: numa janela baixa a lista de 24 meses não
+     * cabe nem abaixo nem acima, e a caixa saía pela borda da tela com as
+     * últimas opções inalcançáveis — medido, `bottom` passava de
+     * `innerHeight`. Agora, quando nenhum lado comporta a lista inteira, ela
+     * vai para o lado mais folgado e encolhe até caber; o teto de rolagem
+     * dentro dela dá conta do resto.
+     */
+    const abaixo = window.innerHeight - r.bottom - FOLGA_SELETOR * 2;
+    const acima = r.top - FOLGA_SELETOR * 2;
+    const cabeAbaixo = abaixo >= desejada || abaixo >= acima;
+    const disponivel = Math.max(120, cabeAbaixo ? abaixo : acima);
+
+    setTeto(Math.min(desejada, disponivel));
+    setLugar({
+      left: r.left,
+      width: r.width,
+      ...(cabeAbaixo
+        ? { top: r.bottom + FOLGA_SELETOR }
+        : { bottom: window.innerHeight - r.top + FOLGA_SELETOR }),
+      transformOrigin: cabeAbaixo ? "50% 0" : "50% 100%",
+    });
+    setEmFoco(iSelecionado >= 0 ? iSelecionado : 0);
+    setAberto(true);
+  };
+
+  /* Mesmas regras de dispensa do MenuSuspenso: clique fora, Escape e rolagem.
+     A rolagem entra porque a caixa é `fixed` — sem isso ela ficaria parada no
+     ar enquanto o campo vai embora. */
+  React.useEffect(() => {
+    if (!aberto) return;
+    const foraDaqui = (e: PointerEvent) => {
+      const alvo = e.target as Node;
+      if (caixa.current?.contains(alvo) || botao.current?.contains(alvo)) return;
+      setAberto(false);
+    };
+    const aoRolar = () => setAberto(false);
+    document.addEventListener("pointerdown", foraDaqui);
+    window.addEventListener("scroll", aoRolar, true);
+    window.addEventListener("resize", aoRolar);
+    return () => {
+      document.removeEventListener("pointerdown", foraDaqui);
+      window.removeEventListener("scroll", aoRolar, true);
+      window.removeEventListener("resize", aoRolar);
+    };
+  }, [aberto]);
+
+  /*
+   * Rola a lista até a opção em foco mexendo no `scrollTop` da caixa, e não
+   * com `scrollIntoView`.
+   *
+   * `scrollIntoView` rola o ancestral rolável mais próximo, e num portal no
+   * body isso é a PÁGINA: abrir o seletor dava um salto na tela atrás dele.
+   * Já aconteceu no menu do "/", e o conserto é o mesmo.
+   */
+  React.useEffect(() => {
+    if (!aberto) return;
+    const c = caixa.current;
+    const alvo = c?.querySelector<HTMLElement>(`[data-i="${emFoco}"]`);
+    if (!c || !alvo) return;
+    const topo = alvo.offsetTop;
+    const base = topo + alvo.offsetHeight;
+    if (topo < c.scrollTop) c.scrollTop = topo;
+    else if (base > c.scrollTop + c.clientHeight)
+      c.scrollTop = base - c.clientHeight;
+  }, [aberto, emFoco]);
+
+  const naTecla = (e: React.KeyboardEvent) => {
+    if (disabled) return;
+
+    if (!aberto) {
+      if (["Enter", " ", "ArrowDown", "ArrowUp"].includes(e.key)) {
+        e.preventDefault();
+        abrir();
+      }
+      return;
+    }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setAberto(false);
+      botao.current?.focus();
+      return;
+    }
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      escolher(opcoes[emFoco]?.valor ?? atual);
+      return;
+    }
+    if (e.key === "Tab") {
+      setAberto(false);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setEmFoco((i) => Math.min(i + 1, opcoes.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setEmFoco((i) => Math.max(i - 1, 0));
+      return;
+    }
+    if (e.key === "Home") {
+      e.preventDefault();
+      setEmFoco(0);
+      return;
+    }
+    if (e.key === "End") {
+      e.preventDefault();
+      setEmFoco(opcoes.length - 1);
+      return;
+    }
+
+    /* Busca por letra, como no nativo: "ur" salta para "Urgente". Um segundo
+       de pausa recomeça a palavra. */
+    if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const agora = Date.now();
+      const d = digitado.current;
+      d.texto = agora - d.quando > 1000 ? e.key : d.texto + e.key;
+      d.quando = agora;
+      const procurado = d.texto.toLowerCase();
+      const i = opcoes.findIndex((o) =>
+        o.rotulo.toLowerCase().startsWith(procurado)
+      );
+      if (i >= 0) setEmFoco(i);
+    }
+  };
+
+  const rotuloAtual = iSelecionado >= 0 ? opcoes[iSelecionado].rotulo : "";
+
   return (
-    <select className={cx(fieldBase, "h-10 pr-8", className)} {...rest}>
-      {children}
-    </select>
+    <>
+      <button
+        ref={botao}
+        type="button"
+        role="combobox"
+        aria-haspopup="listbox"
+        aria-expanded={aberto}
+        aria-controls={aberto ? idLista : undefined}
+        aria-label={rest["aria-label"]}
+        disabled={disabled}
+        /*
+         * O `<label>` do `Field` embrulha este botão, e `<button>` é um
+         * elemento rotulável — então clicar no texto "Prioridade" também
+         * abre a lista, como acontecia com o `<select>` nativo. Medido:
+         * chega exatamente uma ativação aqui, venha do botão ou do rótulo.
+         */
+        onClick={() => (aberto ? setAberto(false) : abrir())}
+        onKeyDown={naTecla}
+        className={cx(
+          fieldBase,
+          "flex h-10 items-center gap-2 pr-3 text-left",
+          aberto && "border-brand-500 bg-ink-900",
+          disabled && "cursor-not-allowed opacity-45",
+          className
+        )}
+      >
+        <span
+          className={cx("min-w-0 flex-1 truncate", !rotuloAtual && "text-fg-mute")}
+        >
+          {rotuloAtual || "Selecione"}
+        </span>
+        <ChevronDown
+          size={15}
+          className={cx(
+            "shrink-0 text-fg-mute transition-transform",
+            aberto && "rotate-180"
+          )}
+        />
+      </button>
+
+      {aberto &&
+        montado &&
+        createPortal(
+          <div
+            ref={caixa}
+            id={idLista}
+            role="listbox"
+            tabIndex={-1}
+            aria-activedescendant={`${idLista}-${emFoco}`}
+            style={{ ...lugar, maxHeight: teto }}
+            className="brota fixed z-[70] overflow-y-auto overscroll-contain rounded-[14px] border border-line bg-ink-900 p-1.5 shadow-[var(--elev-3)]"
+          >
+            {opcoes.map((o, i) => {
+              /* O rótulo do grupo entra antes da primeira opção dele. */
+              const abreGrupo = o.grupo && o.grupo !== opcoes[i - 1]?.grupo;
+              const escolhida = o.valor === atual;
+              return (
+                <React.Fragment key={`${o.grupo ?? ""}-${o.valor}-${i}`}>
+                  {abreGrupo && (
+                    <div
+                      role="presentation"
+                      className="px-2.5 pb-1 pt-2 text-[10.5px] font-bold uppercase tracking-[0.07em] text-fg-mute"
+                    >
+                      {o.grupo}
+                    </div>
+                  )}
+                  <div
+                    id={`${idLista}-${i}`}
+                    data-i={i}
+                    role="option"
+                    aria-selected={escolhida}
+                    onPointerEnter={() => setEmFoco(i)}
+                    onClick={() => escolher(o.valor)}
+                    className={cx(
+                      /* Linha alta no telefone e baixa no ponteiro: 40px é o
+                         alvo confortável para o dedo, e no mouse essa altura
+                         faria uma lista de dez opções passar da tela. */
+                      "flex cursor-pointer items-center gap-2 rounded-[10px] px-2.5 py-2.5 text-[13.5px] transition-colors sm:py-1.5",
+                      escolhida ? "font-semibold text-brand-400" : "text-fg-dim",
+                      i === emFoco && "bg-ink-800"
+                    )}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{o.rotulo}</span>
+                    {escolhida && <Check size={14} className="shrink-0" />}
+                  </div>
+                </React.Fragment>
+              );
+            })}
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 
