@@ -1001,8 +1001,8 @@ export default function DemandasPage() {
              * Coluna vazia desaparece no celular.
              *
              * No desktop as quatro ficam lado a lado e a vazia é o alvo do
-             * arrasto. Empilhadas no celular, três caixas de 220px dizendo
-             * "Arraste aqui" viravam a maior parte da rolagem — num aparelho
+             * arrasto. Empilhadas no celular, três molduras vazias de
+             * 220px viravam a maior parte da rolagem — num aparelho
              * onde arrastar entre colunas nem funciona bem. O `algumaCheia`
              * evita a tela em branco quando o filtro não deixa nada.
              */
@@ -1048,9 +1048,14 @@ export default function DemandasPage() {
 
                 <div className="flex flex-1 flex-col gap-2">
                   {items.length === 0 ? (
-                    <div className="solte flex flex-1 items-center justify-center rounded-xl border border-dashed border-line-soft py-8 text-[11px] text-fg-mute transition-colors duration-150">
-                      Arraste aqui
-                    </div>
+                    /* Sem texto: a moldura tracejada já diz que ali cabe
+                       alguma coisa, e quatro "Arraste aqui" repetidos eram
+                       ruído numa tela que ele lê o dia inteiro. Ela continua
+                       sendo o alvo do arrasto e ainda acende no destino. */
+                    <div
+                      aria-hidden
+                      className="solte flex flex-1 items-center justify-center rounded-xl border border-dashed border-line-soft py-8 transition-colors duration-150"
+                    />
                   ) : (
                     items.map((t, i) => (
                       <TaskCard

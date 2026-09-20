@@ -270,7 +270,20 @@ export function Select({
       if (caixa.current?.contains(alvo) || botao.current?.contains(alvo)) return;
       setAberto(false);
     };
-    const aoRolar = () => setAberto(false);
+    /*
+     * Fechar ao rolar vale para a PÁGINA, não para a lista.
+     *
+     * O ouvinte é de captura, então ele também recebe a rolagem de dentro da
+     * própria caixa — e era isso que fazia a lista sumir no meio do arrasto da
+     * barra de rolagem. O mesmo acontecia com as setas do teclado, que descem
+     * mexendo no `scrollTop`: passar da última opção visível fechava o menu.
+     * Rolagem que nasce dentro da caixa é ela fazendo o trabalho dela.
+     */
+    const aoRolar = (e: Event) => {
+      const alvo = e.target;
+      if (alvo instanceof Node && caixa.current?.contains(alvo)) return;
+      setAberto(false);
+    };
     document.addEventListener("pointerdown", foraDaqui);
     window.addEventListener("scroll", aoRolar, true);
     window.addEventListener("resize", aoRolar);
