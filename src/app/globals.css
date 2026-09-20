@@ -274,7 +274,17 @@
    */
   --cor-pos: #1c8d59;
   --cor-neg: #d74d42;
-  --cor-warn: #a4740b;
+  /*
+   * O âmbar saiu do ouro-oliva para o âmbar queimado.
+   *
+   * #a4740b tinha o contraste certo e a cor errada: matiz 41°, que sobre
+   * papel branco lê como caqui sujo — e é ele que pinta o botão "Lançar" do
+   * quadro de cartões, a borda do campo e o aviso "+N sem valor". #b8690d é
+   * matiz 31°, o mesmo escuro (4,15 no branco e 4,18 no escuro, contra 4,13
+   * e 4,20), com a sujeira fora. Continua longe do vermelho (matiz 4°) e do
+   * accent laranja, que é bem mais claro.
+   */
+  --cor-warn: #b8690d;
 
   --barra: #d5dbd7;
   --barra-hover: #c0c8c3;

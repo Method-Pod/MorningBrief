@@ -252,7 +252,21 @@ function Estado({
         type="button"
         onClick={lancar}
         disabled={!vale || gravando}
-        className="h-8 rounded-lg bg-warn px-2.5 text-[11.5px] font-bold text-white transition-opacity disabled:opacity-40"
+        /*
+         * Desligado ele deixa de ser âmbar, em vez de virar âmbar claro.
+         *
+         * Era `disabled:opacity-40` sobre o preenchimento: 40% de âmbar sobre
+         * o cartão branco dá um bege de barro, e é esse o estado padrão da
+         * linha — o botão só acende depois que um número é digitado. O quadro
+         * abria com um bloco encardido em cima. Cinza neutro diz "ainda não"
+         * sem inventar uma cor que não está na paleta.
+         */
+        className={cx(
+          "h-8 rounded-lg px-2.5 text-[11.5px] font-bold transition-colors",
+          vale && !gravando
+            ? "bg-warn text-white"
+            : "cursor-not-allowed bg-ink-800 text-fg-mute"
+        )}
       >
         {gravando ? "..." : corrigindo ? "Salvar" : "Lançar"}
       </button>

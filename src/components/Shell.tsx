@@ -90,26 +90,38 @@ function CaixaConta({
          * acompanha o circulo em vez de desenhar outra forma atras dele.
          */
         compacta
-          ? cx(
-              /*
-               * Selecionada, a foto ganha um anel colado nela; fora disso, nada
-               * em volta.
-               *
-               * `ring-offset` desenhava um segundo circulo separado por uma
-               * faixa da cor do fundo — de longe le como dois aneis e um
-               * recorte quadrado, nao como "esta e a tela atual". Sem o
-               * afastamento, o anel e a borda do proprio circulo.
-               */
-              "justify-center rounded-full",
-              ativo && "ring-2 ring-brand-500"
-            )
+          ? "justify-center"
           : cx(
               "gap-2.5 rounded-[16px] p-2.5",
               ativo ? "bg-brand-500/12" : "bg-ink-800 hover:bg-fg/[0.04]"
             )
       )}
     >
-      <Iniciais nome={nome} url={foto} tamanho={30} />
+      {/*
+       * O anel de "estou nesta tela" mora aqui, e nao no <Link>.
+       *
+       * No <Link> ele saia oval, e o motivo e geometrico: o link e a linha
+       * inteira da barra — largo e baixo —, e `rounded-full` num retangulo
+       * desses desenha uma elipse, nao um circulo. Num invólucro que encolhe
+       * ate a foto, o mesmo `rounded-full` da exatamente a borda dela.
+       *
+       * O link continua largo de proposito: e ele que recebe o clique, e um
+       * alvo de 30px seria pequeno demais para acertar.
+       *
+       * `ring-offset` ja foi tentado e nao volta: ele desenhava um segundo
+       * circulo separado por uma faixa da cor do fundo, que de longe le como
+       * dois aneis em vez de "esta e a tela atual".
+       */}
+      <span
+        className={cx(
+          "grid shrink-0 place-items-center rounded-full",
+          /* So encolhida: aberta, quem diz "esta e a tela atual" e a
+             pastilha atras do nome, e um anel junto seria dois avisos. */
+          compacta && ativo && "ring-2 ring-brand-500"
+        )}
+      >
+        <Iniciais nome={nome} url={foto} tamanho={30} />
+      </span>
       {!compacta && (
         <>
           <span
@@ -176,12 +188,31 @@ export function Shell({
       return !v;
     });
 
+  /*
+   * A marca: o simbolo e o nome, juntos.
+   *
+   * O simbolo ja existia, mas so aparecia com a barra encolhida — aberta
+   * sobrava o nome escrito, e o app ficava sem o desenho que esta no icone
+   * do telefone, na aba do navegador e na tela de login. Sendo o mesmo
+   * arquivo nos dois estados, encolher a barra passa a esconder o nome, e
+   * nao a trocar uma marca por outra.
+   */
   const wordmark = (
     <Link
       href="/"
-      className="block px-2.5 text-[21px] font-bold tracking-[-0.035em] text-fg"
+      className="flex items-center gap-2 px-2.5 text-[21px] font-bold tracking-[-0.035em] text-fg"
     >
-      morning<span className="font-normal text-fg-mute">brief</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/icon-dark.svg"
+        alt=""
+        width={26}
+        height={26}
+        className="block h-[26px] w-[26px] shrink-0 rounded-[8px]"
+      />
+      <span className="truncate">
+        morning<span className="font-normal text-fg-mute">brief</span>
+      </span>
     </Link>
   );
 

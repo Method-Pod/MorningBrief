@@ -171,8 +171,22 @@ function Formulario() {
               }}
             />
 
-            <p className="relative text-[17px] font-bold tracking-[-0.035em] lg:text-[18px]">
-              morning<span className="font-normal text-white/60">brief</span>
+            {/* O simbolo aqui vai sem a pastilha escura: o painel JA e um
+                bloco de cor, e um quadrado escuro colado nele leria como
+                adesivo. E o mesmo desenho do icone, so que vazado em branco,
+                que e como ele nasceu. */}
+            <p className="relative flex items-center gap-2.5 text-[17px] font-bold tracking-[-0.035em] lg:text-[18px]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/logo.svg"
+                alt=""
+                width={26}
+                height={20}
+                className="block h-[20px] w-auto shrink-0"
+              />
+              <span>
+                morning<span className="font-normal text-white/60">brief</span>
+              </span>
             </p>
 
             {/* `mt-auto` empurra a frase para o pe: e ela que fecha o bloco, e

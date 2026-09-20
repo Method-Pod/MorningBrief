@@ -745,8 +745,17 @@ export default function DemandasPage() {
   );
 
   /* Os projetos do cliente que está escolhido no formulário. */
+  /* Na mesma ordem da ficha do cliente: a lista que ele arrastou la e a
+     lista que ele ve aqui. Ver `position` em ORDEM-PROJETOS.sql. */
   const projetosDoCliente = React.useMemo(
-    () => projetos.filter((p) => p.cliente_id === form.cliente_id),
+    () =>
+      projetos
+        .filter((p) => p.cliente_id === form.cliente_id)
+        .sort(
+          (a, b) =>
+            (a.position ?? 0) - (b.position ?? 0) ||
+            a.nome.localeCompare(b.nome)
+        ),
     [projetos, form.cliente_id]
   );
 

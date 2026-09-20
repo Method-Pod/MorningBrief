@@ -2,7 +2,15 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, FolderOpen, Pencil, Plus, Trash2, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  FolderOpen,
+  GripVertical,
+  Pencil,
+  Plus,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
@@ -25,6 +33,7 @@ import {
   useConfirm,
   useNotice,
 } from "@/components/ui";
+import { useListaOrdenavel } from "@/components/arrastarLista";
 
 /**
  * Clientes e projetos: o cadastro por trás do campo da demanda.
@@ -113,6 +122,17 @@ export default function ClientesPage() {
     return { porCliente, porProjeto };
   }, [demandas]);
 
+  /*
+   * Os projetos de cada cliente, na ordem que ele arrastou.
+   *
+   * A ordem sai daqui e nao do `order` da consulta de proposito: quando uma
+   * linha muda de lugar, o que se escreve no estado e a posicao nova, e a
+   * lista se reordena sozinha. Escrever no estado a ORDEM do vetor daria os
+   * dois lugares para a mesma verdade.
+   *
+   * `?? 0` cobre a base sem a coluna: todos empatam em zero e o desempate
+   * alfabetico entrega a ordem de antes.
+   */
   const projetosDe = React.useMemo(() => {
     const m = new Map<string, Projeto[]>();
     for (const p of projetos) {
@@ -120,8 +140,55 @@ export default function ClientesPage() {
       l.push(p);
       m.set(p.cliente_id, l);
     }
+    for (const l of m.values())
+      l.sort(
+        (a, b) =>
+          (a.position ?? 0) - (b.position ?? 0) || a.nome.localeCompare(b.nome)
+      );
     return m;
   }, [projetos]);
+
+  /**
+   * Grava a ordem nova, uma linha por projeto do cliente.
+   *
+   * Reescreve TODAS as posicoes daquele cliente, e nao so as que mudaram: sao
+   * poucas, e assim uma base que tenha ficado com posicoes repetidas — dois
+   * projetos em 3, por exemplo — se conserta no primeiro arrasto.
+   */
+  const ordenarProjetos = async (ordenados: Projeto[]) => {
+    const posicoes = new Map(ordenados.map((p, i) => [p.id, i]));
+    /* Otimista: a linha ja fica no lugar novo, e o banco confirma depois. */
+    setProjetos((antes) =>
+      antes.map((p) =>
+        posicoes.has(p.id) ? { ...p, position: posicoes.get(p.id) } : p
+      )
+    );
+
+    const respostas = await Promise.all(
+      ordenados.map((p, i) =>
+        supabase
+          .from("projetos")
+          .update({ position: i })
+          .eq("id", p.id)
+          .select("id")
+      )
+    );
+
+    const comErro = respostas.find((r) => r.error);
+    if (comErro?.error) {
+      /* 42703 e "coluna nao existe": o SQL da ordem ainda nao foi rodado. */
+      notice.show(
+        comErro.error.code === "42703"
+          ? "A ordem ainda nao existe no banco. Rode supabase/ORDEM-PROJETOS.sql no Supabase."
+          : `Nao consegui gravar a ordem: ${comErro.error.message}`
+      );
+      return carregar();
+    }
+    if (respostas.some((r) => !r.data?.length)) {
+      notice.show(NADA_GRAVADO);
+      carregar();
+    }
+  };
 
   /* ------------------------------ cliente ------------------------------ */
 
@@ -372,42 +439,17 @@ export default function ClientesPage() {
 
                 <div className="px-[18px] pb-[18px] pt-2.5">
                   {meus.length > 0 && (
-                    <ul className="mb-2">
-                      {meus.map((p) => (
-                        <li
-                          key={p.id}
-                          className="group flex items-center gap-2 border-b border-line-soft py-1.5 last:border-0"
-                        >
-                          <FolderOpen size={12} className="shrink-0 text-fg-mute" />
-                          <span className="min-w-0 flex-1 truncate text-[12.5px]">
-                            {p.nome}
-                          </span>
-                          <span className="shrink-0 text-[11px] text-fg-mute tnum">
-                            {contagem.porProjeto.get(p.id) ?? 0}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditandoProjeto(p);
-                              setNomeProjeto(p.nome);
-                              setProjetoDe(null);
-                            }}
-                            aria-label={`Renomear ${p.nome}`}
-                            className="grid h-6 w-6 shrink-0 place-items-center rounded text-fg-mute transition-colors hover:text-fg"
-                          >
-                            <Pencil size={11} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => excluirProjeto(p)}
-                            aria-label={`Excluir ${p.nome}`}
-                            className="grid h-6 w-6 shrink-0 place-items-center rounded text-fg-mute transition-colors hover:text-neg"
-                          >
-                            <Trash2 size={11} />
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                    <ListaProjetos
+                      projetos={meus}
+                      abertas={contagem.porProjeto}
+                      onOrdenar={ordenarProjetos}
+                      onRenomear={(p) => {
+                        setEditandoProjeto(p);
+                        setNomeProjeto(p.nome);
+                        setProjetoDe(null);
+                      }}
+                      onExcluir={excluirProjeto}
+                    />
                   )}
                   <button
                     type="button"
@@ -529,5 +571,101 @@ export default function ClientesPage() {
       {confirm.node}
       {notice.node}
     </>
+  );
+}
+
+/* ------------------------- lista de projetos ------------------------- */
+
+/**
+ * Os projetos de um cliente, arrastáveis pelo punho.
+ *
+ * É um componente separado, e não um trecho do `map` acima, por um motivo de
+ * regra: cada lista precisa do próprio `useListaOrdenavel`, e gancho não pode
+ * ser chamado dentro de laço. Uma lista por cartão, um componente por lista.
+ *
+ * O punho substitui o ícone de pasta em vez de entrar ao lado dele. A pasta
+ * não dizia nada que o cartão já não diga — estes SÃO os projetos do cliente
+ * —, e mais um ícone por linha numa linha de cinco elementos é o que deixa a
+ * ficha parecendo um painel de controle.
+ *
+ * Com um projeto só o punho some e a pasta volta: não há para onde arrastar,
+ * e um punho que não faz nada é pior que nenhum.
+ */
+function ListaProjetos({
+  projetos,
+  abertas,
+  onOrdenar,
+  onRenomear,
+  onExcluir,
+}: {
+  projetos: Projeto[];
+  abertas: Map<string, number>;
+  onOrdenar: (ordenados: Projeto[]) => void;
+  onRenomear: (p: Projeto) => void;
+  onExcluir: (p: Projeto) => void;
+}) {
+  const { refLista, arrastando, estilo, punho } = useListaOrdenavel(
+    projetos,
+    onOrdenar
+  );
+  const daParaArrastar = projetos.length > 1;
+
+  return (
+    <ul ref={refLista} className="mb-2">
+      {projetos.map((p, i) => (
+        <li
+          key={p.id}
+          data-ordenavel
+          style={estilo(i)}
+          className={cx(
+            "flex items-center gap-2 border-b border-line-soft py-1.5 last:border-0",
+            /* Enquanto uma linha viaja, a borda dela atrapalha: ela corta o
+               desenho no meio das duas vagas. O fundo sólido é o que faz a
+               linha parecer estar POR CIMA da lista, e não dentro dela. */
+            arrastando === i &&
+              "rounded-lg border-transparent bg-ink-800 shadow-[var(--elev-2)]"
+          )}
+        >
+          {daParaArrastar ? (
+            <button
+              type="button"
+              {...punho(i)}
+              aria-label={`Mover ${p.nome}`}
+              title="Arraste para mudar a ordem"
+              className={cx(
+                "grid h-6 w-4 shrink-0 cursor-grab place-items-center rounded text-fg-mute transition-colors hover:text-fg active:cursor-grabbing",
+                arrastando === i && "cursor-grabbing text-fg"
+              )}
+            >
+              <GripVertical size={12} />
+            </button>
+          ) : (
+            <FolderOpen size={12} className="shrink-0 text-fg-mute" />
+          )}
+          <span className="min-w-0 flex-1 truncate text-[12.5px]">
+            {p.nome}
+          </span>
+          <span className="shrink-0 text-[11px] text-fg-mute tnum">
+            {abertas.get(p.id) ?? 0}
+          </span>
+          <button
+            type="button"
+            onClick={() => onRenomear(p)}
+            aria-label={`Renomear ${p.nome}`}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-fg-mute transition-colors hover:text-fg"
+          >
+            <Pencil size={11} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onExcluir(p)}
+            aria-label={`Excluir ${p.nome}`}
+            className="grid h-6 w-6 shrink-0 place-items-center rounded text-fg-mute transition-colors hover:text-neg"
+          >
+            <Trash2 size={11} />
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

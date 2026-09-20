@@ -346,6 +346,14 @@ export type Projeto = {
   user_id: string;
   cliente_id: string;
   nome: string;
+  /**
+   * A ordem manual dentro do cliente, do menor para o maior.
+   *
+   * Opcional porque ela pode nao existir: quem ainda nao rodou
+   * `supabase/ORDEM-PROJETOS.sql` recebe as linhas sem esta coluna, e a tela
+   * cai na ordem alfabetica de antes em vez de quebrar.
+   */
+  position?: number;
   created_at: string;
 };
 
