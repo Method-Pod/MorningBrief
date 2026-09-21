@@ -286,6 +286,18 @@
    */
   --cor-warn: #b8690d;
 
+  /*
+   * A borda do cartao — e por que ela e transparente aqui.
+   *
+   * No claro o cartao e branco sobre cinza E tem sombra, e sombra preta sobre
+   * papel claro aparece: dois avisos bastam, e um terceiro viraria contorno
+   * de desenho. No escuro a sombra deixa de existir — preto sobre quase-preto
+   * nao desenha nada — e sobra so a diferenca de tom, que nessa altura da
+   * escala e pequena. Era o cartao boiando sem limite, e e disso que vem a
+   * impressao de tela sem acabamento.
+   */
+  --cartao-borda: transparent;
+
   --barra: #d5dbd7;
   --barra-hover: #c0c8c3;
 
@@ -442,8 +454,8 @@
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]) {
-    --a-bg: #0f1418;
-    --a-sink: #1b2126;
+    --a-bg: #0d1115;
+    --a-sink: #1f252b;
     --a-line: #2a3238;
     --a-line-soft: #212930;
     --a-2: var(--a-2-esc);
@@ -451,13 +463,15 @@
     --a-soft: var(--a-soft-esc);
 
     --sup-cartao: #161b1f;
-    --sup-alta: #1e252a;
+    --sup-alta: #222a2f;
     --borda-forte: #3d474e;
 
     --txt: #e6eaee;
     --txt-dim: #a9b3ba;
-    --txt-mute: #808b93;
+    --txt-mute: #889299;
 
+
+    --cartao-borda: var(--a-line);
 
     --barra: #333c43;
     --barra-hover: #46525a;
@@ -520,8 +534,8 @@
 }
 
 :root[data-tema="escuro"] {
-  --a-bg: #0f1418;
-  --a-sink: #1b2126;
+  --a-bg: #0d1115;
+  --a-sink: #1f252b;
   --a-line: #2a3238;
   --a-line-soft: #212930;
   --a-2: var(--a-2-esc);
@@ -529,13 +543,15 @@
   --a-soft: var(--a-soft-esc);
 
   --sup-cartao: #161b1f;
-  --sup-alta: #1e252a;
+  --sup-alta: #222a2f;
   --borda-forte: #3d474e;
 
   --txt: #e6eaee;
   --txt-dim: #a9b3ba;
-  --txt-mute: #808b93;
+  --txt-mute: #889299;
 
+
+  --cartao-borda: var(--a-line);
 
   --barra: #333c43;
   --barra-hover: #46525a;
@@ -687,6 +703,7 @@ body {
 /* ---------- primitivas ---------- */
 @utility card {
   background: var(--sup-cartao);
+  border: 1px solid var(--cartao-borda);
   border-radius: 1.375rem;
   box-shadow: var(--elev-1);
 }
