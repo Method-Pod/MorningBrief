@@ -1449,7 +1449,7 @@ export default function AulasPage() {
                       className={cx(
                         "order-2 mt-[3px] grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-[180ms] disabled:opacity-50 sm:order-none",
                         l.feita
-                          ? "border-pos bg-pos text-white"
+                          ? "border-pos bg-pos text-sobre-cor"
                           : "border-line bg-ink-900 hover:border-brand-400"
                       )}
                     >

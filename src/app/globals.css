@@ -296,6 +296,15 @@
    * escala e pequena. Era o cartao boiando sem limite, e e disso que vem a
    * impressao de tela sem acabamento.
    */
+  /* No claro a tinta sobre as cores de significado e branca, como sempre
+     foi, e as tres pastilhas seguem coloridas. Ver o bloco do escuro. */
+  --tinta-cor: #ffffff;
+  --pri-media-txt: var(--a-text);
+  --pri-media-bg: color-mix(in srgb, var(--a) 12%, transparent);
+  --recorrente-txt: var(--cor-violeta);
+  --recorrente-bg: color-mix(in srgb, var(--cor-violeta) 12%, transparent);
+  --chip-link: var(--a-text);
+
   --cartao-borda: transparent;
 
   --barra: #d5dbd7;
@@ -465,22 +474,59 @@
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]) {
-    --a-bg: #1f2328;
-    --a-sink: #32373e;
-    --a-line: #3d444c;
-    --a-line-soft: #343a41;
+    --a-bg: #212325;
+    --a-sink: #35373a;
+    --a-line: #414347;
+    --a-line-soft: #373a3d;
     --a-2: var(--a-2-esc);
     --a-text: var(--a-text-esc);
     --a-soft: var(--a-soft-esc);
 
-    --sup-cartao: #282d32;
-    --sup-alta: #373d44;
-    --borda-forte: #525a64;
+    --sup-cartao: #2b2d2f;
+    --sup-alta: #3a3d40;
+    --borda-forte: #565a5f;
 
     --txt: #e2e6e9;
     --txt-dim: #a6b0b7;
     --txt-mute: #97a2aa;
 
+
+    /*
+     * As quatro cores de significado, abertas para o carvao.
+     *
+     * Elas nasceram para papel branco — verde #1c8d59, vermelho #d74d42,
+     * ambar #b8690d — e sobre o chao escuro chegavam a 3,3:1, escuras sobre
+     * escuro: e dai que vinha o ambar de barro e o vermelho de tijolo.
+     *
+     * O que continua FIXO, que e o que ele pediu, e o SIGNIFICADO: Alta e
+     * ambar nos dois temas, atrasada e vermelha nos dois. O que muda e so a
+     * altura do tom, porque um mesmo hexadecimal nao pode ser legivel sobre
+     * papel e sobre carvao — as duas faixas de luminosidade nao se cruzam.
+     *
+     * Medidos sobre o cartao: 6,54 / 6,28 / 6,34 / 6,13. No claro seguem
+     * exatamente como estavam.
+     */
+    --cor-pos: #3cc98d;
+    --cor-neg: #ec9993;
+    --cor-warn: #e9a13c;
+    --cor-violeta: #c49af7;
+
+    /* Tinta que vai EM CIMA dessas cores quando elas sao preenchimento.
+       Clareando-as, branco em cima caiu para 2,2:1; a tinta escura da 8. */
+    --tinta-cor: #16181a;
+
+    /*
+     * As tres pastilhas que ele mandou despir — so aqui no escuro.
+     *
+     * No claro elas continuam coloridas: ele viu as duas telas e disse que
+     * a clara estava boa. O excesso e do escuro, onde tudo brilha mais
+     * contra o chao e cinco cores na mesma linha viram um semaforo.
+     */
+    --pri-media-txt: var(--txt-dim);
+    --pri-media-bg: var(--a-sink);
+    --recorrente-txt: var(--txt-dim);
+    --recorrente-bg: var(--a-sink);
+    --chip-link: var(--txt-dim);
 
     --cartao-borda: var(--a-line);
 
@@ -546,22 +592,59 @@
 }
 
 :root[data-tema="escuro"] {
-  --a-bg: #1f2328;
-  --a-sink: #32373e;
-  --a-line: #3d444c;
-  --a-line-soft: #343a41;
+  --a-bg: #212325;
+  --a-sink: #35373a;
+  --a-line: #414347;
+  --a-line-soft: #373a3d;
   --a-2: var(--a-2-esc);
   --a-text: var(--a-text-esc);
   --a-soft: var(--a-soft-esc);
 
-  --sup-cartao: #282d32;
-  --sup-alta: #373d44;
-  --borda-forte: #525a64;
+  --sup-cartao: #2b2d2f;
+  --sup-alta: #3a3d40;
+  --borda-forte: #565a5f;
 
   --txt: #e2e6e9;
   --txt-dim: #a6b0b7;
   --txt-mute: #97a2aa;
 
+
+  /*
+   * As quatro cores de significado, abertas para o carvao.
+   *
+   * Elas nasceram para papel branco — verde #1c8d59, vermelho #d74d42,
+   * ambar #b8690d — e sobre o chao escuro chegavam a 3,3:1, escuras sobre
+   * escuro: e dai que vinha o ambar de barro e o vermelho de tijolo.
+   *
+   * O que continua FIXO, que e o que ele pediu, e o SIGNIFICADO: Alta e
+   * ambar nos dois temas, atrasada e vermelha nos dois. O que muda e so a
+   * altura do tom, porque um mesmo hexadecimal nao pode ser legivel sobre
+   * papel e sobre carvao — as duas faixas de luminosidade nao se cruzam.
+   *
+   * Medidos sobre o cartao: 6,54 / 6,28 / 6,34 / 6,13. No claro seguem
+   * exatamente como estavam.
+   */
+  --cor-pos: #3cc98d;
+  --cor-neg: #ec9993;
+  --cor-warn: #e9a13c;
+  --cor-violeta: #c49af7;
+
+  /* Tinta que vai EM CIMA dessas cores quando elas sao preenchimento.
+     Clareando-as, branco em cima caiu para 2,2:1; a tinta escura da 8. */
+  --tinta-cor: #16181a;
+
+  /*
+   * As tres pastilhas que ele mandou despir — so aqui no escuro.
+   *
+   * No claro elas continuam coloridas: ele viu as duas telas e disse que
+   * a clara estava boa. O excesso e do escuro, onde tudo brilha mais
+   * contra o chao e cinco cores na mesma linha viram um semaforo.
+   */
+  --pri-media-txt: var(--txt-dim);
+  --pri-media-bg: var(--a-sink);
+  --recorrente-txt: var(--txt-dim);
+  --recorrente-bg: var(--a-sink);
+  --chip-link: var(--txt-dim);
 
   --cartao-borda: var(--a-line);
 
@@ -646,6 +729,7 @@
   --color-neg: var(--cor-neg);
   --color-warn: var(--cor-warn);
   --color-violeta: var(--cor-violeta);
+  --color-sobre-cor: var(--tinta-cor);
 
   --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;

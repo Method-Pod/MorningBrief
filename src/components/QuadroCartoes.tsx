@@ -264,7 +264,7 @@ function Estado({
         className={cx(
           "h-8 rounded-lg px-2.5 text-[11.5px] font-bold transition-colors",
           vale && !gravando
-            ? "bg-warn text-white"
+            ? "bg-warn text-sobre-cor"
             : "cursor-not-allowed bg-ink-800 text-fg-mute"
         )}
       >

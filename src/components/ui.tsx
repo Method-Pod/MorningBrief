@@ -505,7 +505,19 @@ export function Badge({
   className,
   children,
 }: {
-  tone?: "neutral" | "brand" | "pos" | "neg" | "warn" | "violet";
+  tone?:
+    | "neutral"
+    | "brand"
+    | "pos"
+    | "neg"
+    | "warn"
+    | "violet"
+    /* Estes dois nao sao cores, sao PAPEIS: eles mudam de cor com o tema.
+       No claro sao o accent e o roxo; no escuro sao cinza, porque la cinco
+       cores na mesma linha de cartao viram um semaforo. Os valores estao em
+       `--pri-media-*` e `--recorrente-*`, no globals.css. */
+    | "media"
+    | "recorrente";
   className?: string;
   children: React.ReactNode;
 }) {
@@ -518,6 +530,10 @@ export function Badge({
     /* `violeta` é token do app, e não o violet do Tailwind: o built-in tem um
        valor só, e um tom escolhido para fundo branco fica ilegível no escuro. */
     violet: "bg-violeta/12 text-violeta border-transparent",
+    media:
+      "border-transparent bg-[var(--pri-media-bg)] text-[var(--pri-media-txt)]",
+    recorrente:
+      "border-transparent bg-[var(--recorrente-bg)] text-[var(--recorrente-txt)]",
   }[tone];
   return (
     <span

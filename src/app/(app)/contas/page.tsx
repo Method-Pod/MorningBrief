@@ -2049,7 +2049,7 @@ function Linha({
         className={cx(
           "grid h-[22px] w-[22px] shrink-0 place-items-center rounded-md border-[1.8px] transition-colors",
           paga
-            ? "border-pos bg-pos text-white"
+            ? "border-pos bg-pos text-sobre-cor"
             : "border-ink-600 text-transparent hover:border-brand-500"
         )}
       >

@@ -80,20 +80,14 @@ const PRIORITIES: Priority[] = ["low", "medium", "high", "urgent"];
 const RANK: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 /*
- * Cor de prioridade so para o que foge do normal.
- *
- * Media era a cor de destaque, e media e a prioridade da MAIORIA das
- * demandas: o quadro abria com uma parede de pastilhas coloridas, todas
- * dizendo "normal". Cor que aparece em tudo nao destaca nada — so cansa a
- * leitura, que foi exatamente a reclamacao.
- *
- * Agora baixa e media sao cinzas, e sobram coloridas as duas que pedem
- * atencao. Nenhuma prioridade sumiu da tela: a palavra continua escrita na
- * pastilha.
+ * Media e um PAPEL, e nao uma cor: ela e o accent no claro e cinza no
+ * escuro. Media e a prioridade da maioria das demandas, entao no escuro ela
+ * pintava o quadro inteiro de uma cor que queria dizer "normal". No claro
+ * isso nao incomodava, e foi o que ele disse. Ver `--pri-media-*`.
  */
-const TONE: Record<Priority, "neutral" | "brand" | "warn" | "neg"> = {
+const TONE: Record<Priority, "neutral" | "media" | "warn" | "neg"> = {
   low: "neutral",
-  medium: "neutral",
+  medium: "media",
   high: "warn",
   urgent: "neg",
 };
@@ -1171,7 +1165,7 @@ export default function DemandasPage() {
                               {PRIORITY_LABEL[t.priority]}
                             </Badge>
                             {t.origin_id && (
-                              <Badge>
+                              <Badge tone="recorrente">
                                 <Repeat2 size={10} />
                                 recorrente
                               </Badge>
@@ -1819,10 +1813,7 @@ function TaskCard({
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         <Badge tone={TONE[t.priority]}>{PRIORITY_LABEL[t.priority]}</Badge>
         {t.origin_id && (
-          /* Sem o roxo: quando o accent escolhido E roxo, esta pastilha
-             ficava da cor de outra coisa que significa outra coisa. O icone
-             de repeticao ja diz o que ela diz. */
-          <Badge>
+          <Badge tone="recorrente">
             <Repeat2 size={10} />
             recorrente
           </Badge>
