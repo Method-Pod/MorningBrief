@@ -21,6 +21,7 @@ import {
   Search,
 } from "lucide-react";
 import { Iniciais, useAvatar } from "./Avatar";
+import { naRota } from "@/lib/rota";
 import { IdentityProvider } from "./identity";
 import { cx } from "./ui";
 
@@ -240,10 +241,12 @@ export function Shell({
    */
   const adiantar = (href: string) => () => router.prefetch(href);
 
+  const aqui = (href: string) => naRota(path, href);
+
   const navegacao = (compacta: boolean) => (
     <nav className="flex flex-col gap-[3px] px-2.5">
       {NAV.map(({ href, label, icon: Icon }) => {
-        const active = href === "/" ? path === "/" : path.startsWith(href);
+        const active = aqui(href);
         return (
           <Link
             key={href}
@@ -275,7 +278,7 @@ export function Shell({
     <div className="mt-auto px-2.5 pt-4">
       <CaixaConta
         nome={nome || email.split("@")[0] || "você"}
-        ativo={path.startsWith("/conta")}
+        ativo={aqui("/conta")}
         compacta={compacta}
       />
     </div>
