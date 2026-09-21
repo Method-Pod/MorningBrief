@@ -7,7 +7,6 @@ import {
   FolderOpen,
   ImagePlus,
   Library,
-  Link2,
   Loader2,
   Pencil,
   Plus,
@@ -18,6 +17,7 @@ import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { NADA_GRAVADO, recadoDeErro } from "@/lib/erros";
+import { matizDeTexto, inicialDaCapa } from "@/lib/capa";
 import {
   BUCKET_REFERENCIAS,
   type Colecao,
@@ -48,6 +48,36 @@ import {
  * abre para garimpar, o segundo para comparar — e um site pode ser os dois, daí
  * um link poder estar em várias coleções.
  */
+
+/**
+ * Quem já foi lido e não tem prévia nenhuma.
+ *
+ * No navegador, e não no banco: é memória de tentativa. Some se ele limpar
+ * os dados do site, e o pior que acontece é uma releitura.
+ */
+const SEM_PREVIA = "referencias_sem_previa";
+
+function lerSemPrevia(): Set<string> {
+  try {
+    const cru = localStorage.getItem(SEM_PREVIA);
+    return new Set(cru ? (JSON.parse(cru) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function marcarSemPrevia(id: string) {
+  try {
+    const atual = lerSemPrevia();
+    atual.add(id);
+    /* Teto para a lista não crescer para sempre: as 300 últimas bastam, e
+       passar disso só custa uma releitura das mais antigas. */
+    const lista = [...atual].slice(-300);
+    localStorage.setItem(SEM_PREVIA, JSON.stringify(lista));
+  } catch {
+    // navegacao privada: tenta de novo na proxima visita, e tudo bem
+  }
+}
 
 const TIPOS_IMAGEM = ["image/jpeg", "image/png", "image/webp"];
 const LIMITE_MB = 3;
@@ -239,6 +269,89 @@ export default function ReferenciasPage() {
         } catch {
           /* Sem logo é sem logo: a linha cai no /favicon.ico e depois na
              bússola. Não é motivo para avisar nada. */
+        }
+      }
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [rows, supabase, setRows]);
+
+  /*
+   * Tenta de novo a prévia que faltou no cadastro.
+   *
+   * Nem todo site devolve `og:image` na primeira leitura: alguns respondem
+   * 202 enquanto montam a página, outros estavam fora do ar naquele minuto.
+   * O cadastro não insiste — ele não pode segurar o formulário —, e o
+   * resultado era um cartão sem capa para sempre, mesmo quando o site passou
+   * a responder.
+   *
+   * Três freios, porque isto sai pela rede:
+   *
+   *   - no máximo SEIS por sessão, e uma por vez. Uma parede com quarenta
+   *     referências não vira quarenta leituras de página ao abrir a tela;
+   *   - quem já foi tentado nesta sessão não repete (`tentadaPrevia`);
+   *   - quem falhou fica anotado no navegador (`SEM_PREVIA`), então um site
+   *     que bloqueia de vez não é relido a cada visita. Reabrir e salvar a
+   *     referência limpa a marca e tenta de novo, que é o gesto certo para
+   *     "tenta aí de novo".
+   *
+   * Sem coluna nova no banco de propósito: isto é memória de tentativa, não
+   * dado da referência, e não vale um arquivo de SQL para ele rodar.
+   */
+  const tentadaPrevia = React.useRef(new Set<string>());
+
+  React.useEffect(() => {
+    const semPrevia = lerSemPrevia();
+    const faltando = rows
+      .filter(
+        (r) =>
+          !!r.url &&
+          !r.image_url &&
+          /* Quem subiu a própria imagem não quer a do site. */
+          !r.image_own &&
+          !tentadaPrevia.current.has(r.id) &&
+          !semPrevia.has(r.id)
+      )
+      .slice(0, 6);
+    if (!faltando.length) return;
+
+    let vivo = true;
+    (async () => {
+      for (const r of faltando) {
+        if (!vivo) return;
+        tentadaPrevia.current.add(r.id);
+        try {
+          const resp = await fetch(`/api/link?url=${encodeURIComponent(r.url!)}`);
+          const d = await resp.json();
+          if (!vivo) return;
+
+          const campos: { image_url?: string; icon_url?: string } = {};
+          if (typeof d?.image_url === "string" && d.image_url)
+            campos.image_url = d.image_url;
+          /* De carona: se a leitura deu certo e o logo também faltava, ele
+             vem junto — a ida de rede já foi paga. */
+          if (!r.icon_url && typeof d?.icon_url === "string" && d.icon_url)
+            campos.icon_url = d.icon_url;
+
+          if (!campos.image_url) {
+            /* Sem capa mesmo. Anota para não voltar aqui toda visita. */
+            marcarSemPrevia(r.id);
+            if (!campos.icon_url) continue;
+          }
+
+          const { data } = await supabase
+            .from("referencias")
+            .update(campos)
+            .eq("id", r.id)
+            .select("id")
+            .maybeSingle();
+          if (!vivo || !data) continue;
+          setRows((v) => v.map((x) => (x.id === r.id ? { ...x, ...campos } : x)));
+        } catch {
+          /* Rede caiu, site fora do ar: não é assunto de quem está olhando a
+             parede. Fica sem capa e a capa gerada cobre. */
+          marcarSemPrevia(r.id);
         }
       }
     })();
@@ -883,32 +996,13 @@ export default function ReferenciasPage() {
                 imagem fica com o ícone, na mesma altura — o cartão sem foto não
                 encolhe e não desalinha o vizinho.
               */}
-              <a
-                href={aberturaDe(r)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={r.url ?? undefined}
-                className="relative block aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-ink-800"
-              >
-                {r.image_url && !quebradas[r.id] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={r.image_url}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    /* Falhou? Cai no ícone, como um cartão sem imagem. */
-                    onError={() =>
-                      setQuebradas((q) => ({ ...q, [r.id]: (q[r.id] ?? 0) + 1 }))
-                    }
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                  />
-                ) : (
-                  <span className="grid h-full w-full place-items-center text-brand-400/40">
-                    <Link2 size={22} />
-                  </span>
-                )}
-              </a>
+              <CapaDaReferencia
+                r={r}
+                falhas={quebradas[r.id] ?? 0}
+                aoFalhar={() =>
+                  setQuebradas((q) => ({ ...q, [r.id]: (q[r.id] ?? 0) + 1 }))
+                }
+              />
 
               {/*
                 Duas linhas de texto, não quatro.
@@ -1296,3 +1390,115 @@ const recadoDoBanco = (e: { code?: string; message: string }) => {
     return "Esse link já está salvo nas referências.";
   return recadoDeErro(e)?.texto ?? e.message;
 };
+
+/* ------------------------- a capa do cartão ------------------------- */
+
+/**
+ * A imagem do cartão, em degraus.
+ *
+ * O que havia: prévia do site ou, na falta dela, um retângulo 16:9 do mesmo
+ * cinza com o mesmo ícone de elo no meio. Três referências sem prévia lado a
+ * lado viravam três buracos iguais, e vários sites não devolvem prévia
+ * nenhuma — o Cloudflare na frente, ou simplesmente não publicam `og:image`.
+ *
+ * Os degraus, nesta ordem:
+ *
+ *   1. a prévia do site (`image_url`), que é o que se quer ver;
+ *   2. o logo que o site declara (`icon_url` — o `apple-touch-icon`, que já
+ *      é buscado e guardado no cadastro), grande e centrado;
+ *   3. o `/favicon.ico` do domínio, para quem não declara nada no `<head>`;
+ *   4. a inicial do domínio, em tipografia.
+ *
+ * Do degrau 2 em diante o fundo é tingido com um matiz tirado do próprio
+ * domínio, então cada site tem a sua cor e a parede deixa de ser uma fileira
+ * de retângulos iguais. Ver `matizDeTexto`.
+ *
+ * `falhas` é contador e não sim/não pelo mesmo motivo de `iconeDaLista`: com
+ * um booleano, a primeira imagem quebrada derrubaria os degraus seguintes de
+ * uma vez, porque o navegador não dispara `onError` duas vezes para o mesmo
+ * endereço em cache.
+ */
+function CapaDaReferencia({
+  r,
+  falhas,
+  aoFalhar,
+}: {
+  r: Referencia;
+  falhas: number;
+  aoFalhar: () => void;
+}) {
+  const dominio = dominioDe(r.url);
+  const matiz = matizDeTexto(dominio || r.name);
+
+  let doDominio: string | null = null;
+  if (r.url) {
+    try {
+      doDominio = `https://${new URL(normalizarUrl(r.url)).hostname}/favicon.ico`;
+    } catch {
+      doDominio = null;
+    }
+  }
+
+  const degraus: { src: string; tipo: "previa" | "logo" }[] = [
+    r.image_url ? { src: r.image_url, tipo: "previa" as const } : null,
+    r.icon_url ? { src: r.icon_url, tipo: "logo" as const } : null,
+    doDominio ? { src: doDominio, tipo: "logo" as const } : null,
+  ].filter(Boolean) as { src: string; tipo: "previa" | "logo" }[];
+
+  const atual = degraus[falhas] ?? null;
+
+  return (
+    <a
+      href={aberturaDe(r)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={r.url ?? undefined}
+      style={{ "--capa-h": matiz } as React.CSSProperties}
+      className={cx(
+        "relative block aspect-video w-full shrink-0 overflow-hidden rounded-xl",
+        /* A prévia ocupa o quadro inteiro, então o fundo tingido não
+           apareceria — e um degradê por trás de uma foto só atrapalharia a
+           cor dela. */
+        atual?.tipo === "previa" ? "bg-ink-800" : "capa-gerada"
+      )}
+    >
+      {atual?.tipo === "previa" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={atual.src}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={aoFalhar}
+          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+        />
+      ) : atual ? (
+        <span className="grid h-full w-full place-items-center">
+          {/*
+            O logo num quadrado arredondado, como um ícone de aplicativo.
+
+            `object-contain` e não `cover`: o apple-touch-icon costuma vir
+            com a margem já embutida, e cortá-lo comeria o desenho. O fundo
+            branco atrás é o que salva logo vazado em branco — que sem ele
+            some na própria capa, no claro e no escuro.
+          */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={atual.src}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onError={aoFalhar}
+            className="h-[52px] w-[52px] rounded-[13px] bg-white/90 object-contain p-1.5 shadow-[var(--elev-1)] transition-transform duration-300 group-hover:scale-[1.06]"
+          />
+        </span>
+      ) : (
+        <span className="grid h-full w-full place-items-center">
+          <span className="capa-letra text-[34px] font-bold leading-none tracking-[-0.04em]">
+            {inicialDaCapa(dominio, r.name)}
+          </span>
+        </span>
+      )}
+    </a>
+  );
+}

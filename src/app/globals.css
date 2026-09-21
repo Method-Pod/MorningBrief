@@ -298,6 +298,17 @@
    */
   /* No claro a tinta sobre as cores de significado e branca, como sempre
      foi, e as tres pastilhas seguem coloridas. Ver o bloco do escuro. */
+  /*
+     A capa gerada da referencia sem previa. O MATIZ vem do dominio, em
+     JavaScript (`matizDeTexto`); saturacao e claridade ficam aqui porque
+     mudam com o tema — no claro a capa e um pastel, no escuro um tom fundo.
+     Com a cor inteira vindo pronta do JS, ou ela estouraria aqui ou sumiria
+     la. */
+  --capa-l: 0.94;
+  --capa-c: 0.045;
+  --capa-txt-l: 0.48;
+  --capa-txt-c: 0.14;
+
   --tinta-cor: #ffffff;
   --pri-media-txt: var(--a-text);
   --pri-media-bg: color-mix(in srgb, var(--a) 12%, transparent);
@@ -513,6 +524,10 @@
 
     /* Tinta que vai EM CIMA dessas cores quando elas sao preenchimento.
        Clareando-as, branco em cima caiu para 2,2:1; a tinta escura da 8. */
+    --capa-l: 0.36;
+    --capa-c: 0.05;
+    --capa-txt-l: 0.8;
+    --capa-txt-c: 0.12;
     --tinta-cor: #16181a;
 
     /*
@@ -631,6 +646,10 @@
 
   /* Tinta que vai EM CIMA dessas cores quando elas sao preenchimento.
      Clareando-as, branco em cima caiu para 2,2:1; a tinta escura da 8. */
+  --capa-l: 0.36;
+  --capa-c: 0.05;
+  --capa-txt-l: 0.8;
+  --capa-txt-c: 0.12;
   --tinta-cor: #16181a;
 
   /*
@@ -798,6 +817,30 @@ body {
 }
 
 /* ---------- primitivas ---------- */
+/*
+ * A capa da referencia que nao tem prévia.
+ *
+ * Era um retangulo 16:9 do mesmo cinza com o mesmo iconezinho de elo no
+ * meio: tres cartoes lado a lado viravam tres buracos iguais. Agora o fundo
+ * e tingido com um matiz tirado do proprio dominio — `--capa-h`, escrito no
+ * elemento —, e em cima dele vai o logo do site ou, na falta dele, a inicial
+ * do dominio.
+ *
+ * Em `oklch` e nao em `hsl`, e isto nao e preferencia. A claridade do HSL nao
+ * e perceptual: com o MESMO valor, amarelo sai muito mais claro que azul.
+ * Medido varrendo a roda de 20 em 20 graus, a versao em HSL dava capa contra
+ * cartao de 1,08 no azul e 1,67 no amarelo — umas sumiam no cartao e outras
+ * saltavam —, e no claro a letra sobre a capa amarela caia a 2,98:1, que e
+ * ilegivel. Em oklch a claridade e a mesma para todo matiz: a capa fica entre
+ * 1,24 e 1,31 do cartao no escuro, e a letra entre 5,6 e 6,0.
+ */
+@utility capa-gerada {
+  background: oklch(var(--capa-l) var(--capa-c) var(--capa-h, 210));
+}
+@utility capa-letra {
+  color: oklch(var(--capa-txt-l) var(--capa-txt-c) var(--capa-h, 210));
+}
+
 @utility card {
   background: var(--sup-cartao);
   border: 1px solid var(--cartao-borda);
