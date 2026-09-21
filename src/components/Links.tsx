@@ -132,7 +132,12 @@ export function ChipsDeLink({
           onClick={(e) => e.stopPropagation()}
           title={l}
           className={cx(
-            "inline-flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 text-brand-400 transition-colors hover:bg-ink-750 hover:underline",
+            /* Cinza parado, accent no ponteiro. Um cartao do quadro tem
+               ate dois links, mais a prioridade, o cliente e a data: com o
+               link tambem colorido, a linha de baixo do cartao virava um
+               semaforo. O icone de elo e o sublinhado ao passar ja dizem
+               que da para clicar. */
+            "inline-flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 text-fg-dim transition-colors hover:bg-ink-750 hover:text-brand-400 hover:underline",
             tamanho === "sm" ? "text-[10px]" : "text-[10.5px]"
           )}
         >

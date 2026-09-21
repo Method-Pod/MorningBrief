@@ -101,7 +101,7 @@ export function useTema() {
 }
 
 /** As mesmas cores do `themeColor` do layout, para o ajuste em tempo real. */
-const COR_DA_BARRA = { claro: "#f1f4f7", escuro: "#0d1115" } as const;
+const COR_DA_BARRA = { claro: "#f1f4f7", escuro: "#1f2328" } as const;
 
 /**
  * Mantém a cor da barra do navegador de acordo com a ESCOLHA, não com o

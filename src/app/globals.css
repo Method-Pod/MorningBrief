@@ -45,8 +45,8 @@
 
   /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
   --a-2-esc: #4690ea;
-  --a-text-esc: #599ced;
-  --a-soft-esc: #192b3f;
+  --a-text-esc: #64afff;
+  --a-soft-esc: #263f59;
 
   /* O painel de marca do login. Ver o comentário em `--painel-1`. */
   --painel-1: #2574d5;
@@ -65,8 +65,8 @@
 
   /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
   --a-2-esc: #ea4646;
-  --a-text-esc: #ef7171;
-  --a-soft-esc: #371d20;
+  --a-text-esc: #ff8888;
+  --a-soft-esc: #593236;
 
   /* O painel de marca do login. Ver o comentário em `--painel-1`. */
   --painel-1: #e02728;
@@ -85,8 +85,8 @@
 
   /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
   --a-2-esc: #4690ea;
-  --a-text-esc: #599ced;
-  --a-soft-esc: #192b3f;
+  --a-text-esc: #64afff;
+  --a-soft-esc: #263f59;
 
   /* O painel de marca do login. Ver o comentário em `--painel-1`. */
   --painel-1: #2574d5;
@@ -106,7 +106,7 @@
   /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
   --a-2-esc: #46ea75;
   --a-text-esc: #28e75e;
-  --a-soft-esc: #193c29;
+  --a-soft-esc: #1d442f;
 
   /* O painel de marca do login. Ver o comentário em `--painel-1`. */
   --painel-1: #1b8541;
@@ -139,8 +139,8 @@
 
   /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
   --a-2-esc: #ea9e46;
-  --a-text-esc: #e78e28;
-  --a-soft-esc: #372d20;
+  --a-text-esc: #f1952a;
+  --a-soft-esc: #473b2b;
 
   /* O painel de marca do login. Ver o comentário em `--painel-1`. */
   --painel-1: #a16625;
@@ -159,8 +159,8 @@
 
   /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
   --a-2-esc: #9046ea;
-  --a-text-esc: #b380f1;
-  --a-soft-esc: #271d3f;
+  --a-text-esc: #cb91ff;
+  --a-soft-esc: #433468;
 
   /* O painel de marca do login. Ver o comentário em `--painel-1`. */
   --painel-1: #7e28e7;
@@ -446,38 +446,49 @@
  * terceiro nome de variável para "o valor do tema") custaria mais para ler do
  * que a repetição custa para manter. Se um dia divergirem, é aqui.
  *
- * As tintas do accent no escuro não foram escolhidas a olho: saíram do mesmo
- * critério dos tons claros — o accent como TEXTO entre 6 e 6,1:1 contra a
- * superfície do cartão (#161b1f), o verde naturalmente acima disso — e estão
- * conferidas uma a uma. Os neutros ficam entre 4,98 e 14,35:1 na mesma
- * superfície.
+ * O escuro é CARVÃO, e não quase-preto. O fundo era #0d1115 e o cartão
+ * #161b1f: 4,9 e 9,4 de L*, a escala inteira espremida no pé da curva, onde
+ * nada tem onde se separar. Agora o fundo está em 13,5 e o cartão em 18,2, e
+ * a escada tem degrau: campo +4,7, borda +10,3.
+ *
+ * O preço está declarado, porque é real: subir o chão derruba o contraste de
+ * tudo que está em cima dele. As quatro cores FIXAS — verde, vermelho, âmbar
+ * e roxo, que são as mesmas nos dois temas por escolha — caem de ~4,15 para
+ * ~3,33 aqui. Seguem acima de 3:1, que é o piso para rótulo em negrito,
+ * pastilha e bolinha, que é como elas são usadas. Mais claro que isto o chão
+ * não sobe sem elas deixarem de ser fixas.
+ *
+ * Recalculado contra o cartão novo, um a um: o texto (11,07 / 6,29 / 5,33),
+ * o accent como TEXTO (6,0 em cada accent — menos o verde, que nasce claro e
+ * fica em 8,4) e os oito matizes de categoria, cada um mantendo o contraste
+ * que tinha antes.
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]) {
-    --a-bg: #0d1115;
-    --a-sink: #1f252b;
-    --a-line: #2a3238;
-    --a-line-soft: #212930;
+    --a-bg: #1f2328;
+    --a-sink: #32373e;
+    --a-line: #3d444c;
+    --a-line-soft: #343a41;
     --a-2: var(--a-2-esc);
     --a-text: var(--a-text-esc);
     --a-soft: var(--a-soft-esc);
 
-    --sup-cartao: #161b1f;
-    --sup-alta: #222a2f;
-    --borda-forte: #3d474e;
+    --sup-cartao: #282d32;
+    --sup-alta: #373d44;
+    --borda-forte: #525a64;
 
-    --txt: #e6eaee;
-    --txt-dim: #a9b3ba;
-    --txt-mute: #889299;
+    --txt: #e2e6e9;
+    --txt-dim: #a6b0b7;
+    --txt-mute: #97a2aa;
 
 
     --cartao-borda: var(--a-line);
 
-    --barra: #333c43;
-    --barra-hover: #46525a;
+    --barra: #3e4850;
+    --barra-hover: #4e5b64;
 
-    --bloco-1: #2b3036;
-    --bloco-2: #1e242a;
+    --bloco-1: #3e454d;
+    --bloco-2: #2f3840;
     /*
      * No escuro o painel de marca vai para BAIXO do cartao, e nao para
      * cima.
@@ -493,8 +504,8 @@
      * A borda interna e o que impede o painel de virar buraco: sem ela,
      * chao mais escuro que o fundo da pagina le como recorte.
      */
-    --painel-marca: #080c11;
-    --painel-veu: rgb(8 12 17 / 0.68);
+    --painel-marca: #19212a;
+    --painel-veu: rgb(25 33 42 / 0.68);
     --painel-borda: rgb(255 255 255 / 0.07);
     --veu: rgb(0 0 0 / 0.62);
 
@@ -507,16 +518,17 @@
     --brilho-largo: 0 5px 18px -7px color-mix(in srgb, var(--a) 60%, transparent);
 
     /* Os mesmos oito matizes, degrauzados para a superfície escura — não é
-       outra paleta, e não é inversão automática. Validados contra #161b1f. */
-    --cat-1: #3987e5;
-    --cat-2: #d95926;
-    --cat-3: #199e70;
-    --cat-4: #c98500;
-    --cat-5: #d55181;
-    --cat-6: #008300;
-    --cat-7: #9085e9;
-    --cat-8: #e66767;
-    --cat-resto: #7c868d;
+       outra paleta, e não é inversão automática. Cada um foi reaberto no carvão
+       mantendo o contraste que tinha no quase-preto. */
+    --cat-1: #4198ff;
+    --cat-2: #f5652c;
+    --cat-3: #1db17e;
+    --cat-4: #e19600;
+    --cat-5: #ef5c92;
+    --cat-6: #009600;
+    --cat-7: #a397ff;
+    --cat-8: #ff7676;
+    --cat-resto: #8c979f;
 
     /*
      * Sombra preta sobre fundo escuro não aparece. O que separa as camadas no
@@ -534,30 +546,30 @@
 }
 
 :root[data-tema="escuro"] {
-  --a-bg: #0d1115;
-  --a-sink: #1f252b;
-  --a-line: #2a3238;
-  --a-line-soft: #212930;
+  --a-bg: #1f2328;
+  --a-sink: #32373e;
+  --a-line: #3d444c;
+  --a-line-soft: #343a41;
   --a-2: var(--a-2-esc);
   --a-text: var(--a-text-esc);
   --a-soft: var(--a-soft-esc);
 
-  --sup-cartao: #161b1f;
-  --sup-alta: #222a2f;
-  --borda-forte: #3d474e;
+  --sup-cartao: #282d32;
+  --sup-alta: #373d44;
+  --borda-forte: #525a64;
 
-  --txt: #e6eaee;
-  --txt-dim: #a9b3ba;
-  --txt-mute: #889299;
+  --txt: #e2e6e9;
+  --txt-dim: #a6b0b7;
+  --txt-mute: #97a2aa;
 
 
   --cartao-borda: var(--a-line);
 
-  --barra: #333c43;
-  --barra-hover: #46525a;
+  --barra: #3e4850;
+  --barra-hover: #4e5b64;
 
-  --bloco-1: #2b3036;
-  --bloco-2: #1e242a;
+  --bloco-1: #3e454d;
+  --bloco-2: #2f3840;
   /*
    * No escuro o painel de marca vai para BAIXO do cartao, e nao para
    * cima.
@@ -573,8 +585,8 @@
    * A borda interna e o que impede o painel de virar buraco: sem ela,
    * chao mais escuro que o fundo da pagina le como recorte.
    */
-  --painel-marca: #080c11;
-  --painel-veu: rgb(8 12 17 / 0.68);
+  --painel-marca: #19212a;
+  --painel-veu: rgb(25 33 42 / 0.68);
   --painel-borda: rgb(255 255 255 / 0.07);
   --veu: rgb(0 0 0 / 0.62);
 
@@ -587,16 +599,17 @@
   --brilho-largo: 0 5px 18px -7px color-mix(in srgb, var(--a) 60%, transparent);
 
   /* Os mesmos oito matizes, degrauzados para a superfície escura — não é
-     outra paleta, e não é inversão automática. Validados contra #161b1f. */
-  --cat-1: #3987e5;
-  --cat-2: #d95926;
-  --cat-3: #199e70;
-  --cat-4: #c98500;
-  --cat-5: #d55181;
-  --cat-6: #008300;
-  --cat-7: #9085e9;
-  --cat-8: #e66767;
-  --cat-resto: #7c868d;
+     outra paleta, e não é inversão automática. Cada um foi reaberto no carvão
+       mantendo o contraste que tinha no quase-preto. */
+  --cat-1: #4198ff;
+  --cat-2: #f5652c;
+  --cat-3: #1db17e;
+  --cat-4: #e19600;
+  --cat-5: #ef5c92;
+  --cat-6: #009600;
+  --cat-7: #a397ff;
+  --cat-8: #ff7676;
+  --cat-resto: #8c979f;
 
   --elev-1: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 10px -6px rgb(0 0 0 / 0.5);
   --elev-2: 0 2px 4px rgb(0 0 0 / 0.45), 0 12px 24px -12px rgb(0 0 0 / 0.6);
