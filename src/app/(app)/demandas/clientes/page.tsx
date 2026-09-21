@@ -15,13 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
 import { useEstadoCacheado, temCache } from "@/lib/cachePagina";
-import {
-  CORES_HEX,
-  NOTE_COLORS,
-  type Cliente,
-  type Projeto,
-  type Task,
-} from "@/lib/types";
+import { type Cliente, type Projeto, type Task } from "@/lib/types";
 import {
   Button,
   Card,
@@ -52,7 +46,7 @@ import { useListaOrdenavel } from "@/components/arrastarLista";
  * O que esta tela NÃO faz: criar demanda. Ela é a ficha do cliente.
  */
 
-const VAZIO_CLIENTE = { nome: "", cor: "blue" };
+const VAZIO_CLIENTE = { nome: "" };
 
 export default function ClientesPage() {
   const supabase = React.useMemo(() => createClient(), []);
@@ -201,7 +195,7 @@ export default function ClientesPage() {
 
   const editarCliente = (c: Cliente) => {
     setEditando(c);
-    setForm({ nome: c.nome, cor: c.cor });
+    setForm({ nome: c.nome });
     setErro("");
     setAbertoCliente(true);
   };
@@ -212,7 +206,10 @@ export default function ClientesPage() {
     setSalvando(true);
     setErro("");
 
-    const campos = { nome, cor: form.cor };
+    /* So o nome. A coluna `cor` continua no banco, com o padrao dela, e
+       nao e mais escrita daqui: apagar coluna e irreversivel, e ela nao
+       atrapalha ninguem parada. */
+    const campos = { nome };
     let falha: { code?: string; message?: string } | null = null;
 
     if (editando) {
@@ -403,10 +400,11 @@ export default function ClientesPage() {
             return (
               <Card key={c.id}>
                 <div className="flex items-start gap-2.5 px-[18px] pt-[18px]">
-                  <span
-                    className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: CORES_HEX[c.cor] ?? CORES_HEX.blue }}
-                  />
+                  {/* Uma cor por cliente virou seis escolhas na hora de
+                      cadastrar, para uma bolinha de 10px que ninguem usa para
+                      achar nada — a ficha e ordenada por nome. Agora ela e a
+                      cor de destaque do app, como o resto. */}
+                  <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-brand-500" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[14px] font-bold">
                       {c.nome}
@@ -492,26 +490,6 @@ export default function ClientesPage() {
               placeholder="Bia"
               autoFocus
             />
-          </Field>
-          <Field label="Cor">
-            <div className="flex flex-wrap gap-2">
-              {NOTE_COLORS.map((cor) => (
-                <button
-                  key={cor}
-                  type="button"
-                  onClick={() => setForm({ ...form, cor })}
-                  aria-label={cor}
-                  aria-pressed={form.cor === cor}
-                  className={cx(
-                    "h-8 w-8 rounded-full transition-transform",
-                    form.cor === cor
-                      ? "ring-2 ring-brand-500"
-                      : "opacity-70 hover:opacity-100"
-                  )}
-                  style={{ background: CORES_HEX[cor] }}
-                />
-              ))}
-            </div>
           </Field>
           {editando && (
             <p className="text-[12px] leading-relaxed text-fg-mute">
