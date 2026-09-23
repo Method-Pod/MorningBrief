@@ -401,7 +401,10 @@ export default function ContasPage() {
       description: desc,
       amount: form.valorVariavel && !Number.isFinite(valor) ? 0 : valor,
       due_date: form.due_date,
-      category: form.category,
+      /* Nunca em branco. Conta sem categoria some dos agrupamentos e da
+         soma por categoria — e enquanto o seletor esteve quebrado, dava
+         para gravar uma sem perceber. `Outros` e o padrao do formulario. */
+      category: form.category || CATEGORIA_PADRAO,
       status: form.status,
       notes: form.notes.trim(),
       recurring: form.recurring,
@@ -1633,8 +1636,12 @@ export default function ContasPage() {
               >
                 {/* a categoria da conta em edição pode não estar mais na lista,
                     se foi excluída; incluí-la evita o select cair no primeiro
-                    item e trocar a categoria sem a pessoa pedir */}
-                {(categorias.nomes.includes(form.category)
+                    item e trocar a categoria sem a pessoa pedir.
+
+                    O `form.category &&` é a trava contra a linha em branco:
+                    conta sem categoria entrava aqui como uma opção vazia no
+                    topo da lista — um item clicável que não diz nada. */}
+                {(!form.category || categorias.nomes.includes(form.category)
                   ? categorias.nomes
                   : [form.category, ...categorias.nomes]
                 ).map((c) => (

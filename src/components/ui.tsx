@@ -4,6 +4,8 @@ import { Check, ChevronDown, X } from "lucide-react";
 import * as React from "react";
 import { createPortal } from "react-dom";
 
+import { lerOpcoes } from "@/lib/opcoes";
+
 export const cx = (...v: (string | false | null | undefined)[]) =>
   v.filter(Boolean).join(" ");
 
@@ -132,54 +134,6 @@ export function Textarea(
  * com `<option>` dentro. Trocar a assinatura obrigaria a mexer nos 22;
  * mantendo-a, nenhum precisou ser tocado — inclusive o que usa `<optgroup>`.
  */
-
-type ItemDoSeletor = { valor: string; rotulo: string; grupo?: string };
-
-const textoDe = (n: React.ReactNode): string => {
-  if (n === null || n === undefined || typeof n === "boolean") return "";
-  if (typeof n === "string" || typeof n === "number") return String(n);
-  if (Array.isArray(n)) return n.map(textoDe).join("");
-  if (React.isValidElement(n))
-    return textoDe((n.props as { children?: React.ReactNode }).children);
-  return "";
-};
-
-/** Lê os `<option>` e `<optgroup>` que vieram como filhos. */
-function lerOpcoes(children: React.ReactNode): ItemDoSeletor[] {
-  const saida: ItemDoSeletor[] = [];
-
-  const visitar = (nos: React.ReactNode, grupo?: string) => {
-    React.Children.forEach(nos, (no) => {
-      if (!React.isValidElement(no)) return;
-      /* Fragmentos aparecem quando a tela monta os grupos numa função. */
-      if (no.type === React.Fragment)
-        return visitar(
-          (no.props as { children?: React.ReactNode }).children,
-          grupo
-        );
-      if (no.type === "optgroup") {
-        const p = no.props as { label?: string; children?: React.ReactNode };
-        return visitar(p.children, p.label);
-      }
-      if (no.type === "option") {
-        const p = no.props as {
-          value?: string | number;
-          children?: React.ReactNode;
-        };
-        saida.push({
-          valor: String(p.value ?? ""),
-          /* O rótulo pode vir em pedaços — `{c.nome}{" (3)"}` —, então é
-             montado a partir do texto de todos eles. */
-          rotulo: textoDe(p.children),
-          grupo,
-        });
-      }
-    });
-  };
-
-  visitar(children);
-  return saida;
-}
 
 const FOLGA_SELETOR = 6;
 const ALTURA_MAXIMA = 288;
