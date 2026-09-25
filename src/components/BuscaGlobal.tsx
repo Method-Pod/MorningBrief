@@ -5,10 +5,13 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
+  CalendarDays,
+  FolderOpen,
   GraduationCap,
   Image as ImagemIcone,
   ListChecks,
   Search,
+  Users,
   Wallet,
   FileText,
 } from "lucide-react";
@@ -25,7 +28,7 @@ import { cx } from "./ui";
  * achou, abrir Anotações, esperar, buscar de novo. E não havia nenhum atalho
  * de teclado no app inteiro.
  *
- * Aqui é uma pergunta só, para as seis tabelas que guardam coisa com nome.
+ * Aqui é uma pergunta só, para as nove tabelas que guardam coisa com nome.
  * Num sistema que se usa todo dia, o custo de três cliques e duas esperas é
  * pago dezenas de vezes por dia.
  *
@@ -129,7 +132,8 @@ export function BuscaGlobal() {
     let vivo = true;
     const id = setTimeout(async () => {
       const like = `%${t}%`;
-      const [tarefas, notas, contas, refs, livros, aulas] = await Promise.all([
+      const [tarefas, notas, contas, refs, livros, aulas, clientes, projetos, eventos] =
+        await Promise.all([
         supabase
           .from("tasks")
           .select("id,title,client,status")
@@ -148,6 +152,28 @@ export function BuscaGlobal() {
           .ilike("title", like)
           .limit(POR_TIPO),
         supabase.from("lessons").select("id,title").ilike("title", like).limit(POR_TIPO),
+        /*
+         * Cliente, projeto e evento entraram depois, e por um motivo medido:
+         * a busca alcançava seis das doze areas do app. Procurar "Bia" achava
+         * as demandas dela, mas nao o cartao dela; procurar o nome de uma
+         * reuniao nao achava nada.
+         *
+         * As tres toleram falha, como leitura e referencias ja faziam: quem
+         * nao rodou CLIENTES.sql recebe erro nessas consultas, e o resto da
+         * busca tem que continuar respondendo.
+         */
+        supabase.from("clientes").select("id,nome").ilike("nome", like).limit(POR_TIPO),
+        supabase
+          .from("projetos")
+          .select("id,nome,cliente_id")
+          .ilike("nome", like)
+          .limit(POR_TIPO),
+        supabase
+          .from("events")
+          .select("id,title,start_at")
+          .ilike("title", like)
+          .order("start_at", { ascending: false })
+          .limit(POR_TIPO),
       ]);
       if (!vivo) return;
 
@@ -216,6 +242,34 @@ export function BuscaGlobal() {
           destino: "/aulas",
           icone: <GraduationCap size={15} />,
         })),
+        /* O cliente leva para as demandas DELE, e nao para o cadastro: quem
+           procura "Bia" quer ver o que tem da Bia, nao editar o cartao. */
+        ...((clientes.data as { id: string; nome: string }[]) ?? []).map((r) => ({
+          id: `cl${r.id}`,
+          titulo: r.nome,
+          onde: "Cliente",
+          destino: `/demandas?q=${encodeURIComponent(r.nome)}`,
+          icone: <Users size={15} />,
+        })),
+        ...((projetos.data as { id: string; nome: string }[]) ?? []).map((r) => ({
+          id: `pj${r.id}`,
+          titulo: r.nome,
+          onde: "Projeto",
+          destino: `/demandas?q=${encodeURIComponent(r.nome)}`,
+          icone: <FolderOpen size={15} />,
+        })),
+        /* `?dia=` abre o calendario no mes do evento. Sem isso o resultado
+           largava a pessoa no mes corrente, com o evento achado em outro. */
+        ...((eventos.data as { id: string; title: string; start_at: string }[]) ?? []).map(
+          (r) => ({
+            id: `ev${r.id}`,
+            titulo: r.title,
+            detalhe: r.start_at ? dataCurta(r.start_at.slice(0, 10)) : null,
+            onde: "Agenda",
+            destino: `/calendario?dia=${r.start_at.slice(0, 10)}`,
+            icone: <CalendarDays size={15} />,
+          })
+        ),
       ];
       setAchados(lista);
       setAtivo(0);

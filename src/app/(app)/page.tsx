@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   AlertCircle,
   BookOpen,
+  GraduationCap,
   Library,
   CalendarDays,
   CheckCircle2,
@@ -41,6 +42,7 @@ import {
   inicioDeOntem,
   localDay,
   localTime,
+  semanaDe,
   todayISO,
   valorDigitado,
 } from "@/lib/format";
@@ -80,6 +82,13 @@ type Livro = {
 };
 
 type Habito = { id: string; name: string; color: string };
+
+type Aula = {
+  id: string;
+  title: string;
+  canal: string | null;
+  thumb_url: string | null;
+};
 
 type Ref = {
   id: string;
@@ -147,6 +156,15 @@ export default function HomePage() {
    * preciso lembrar sozinho de abrir outra aba, o que anula o sentido de
    * existir um brief: ele deveria ser o único lugar que se olha ao acordar.
    */
+  const [aulas, setAulas] = useEstadoCacheado<Aula[]>("painel_aulas", []);
+  const [aulasNaSemana, setAulasNaSemana] = useEstadoCacheado<number>(
+    "painel_aulas_semana",
+    0
+  );
+  const [metaAulas, setMetaAulas] = useEstadoCacheado<number>(
+    "painel_aulas_meta",
+    0
+  );
   const [habitos, setHabitos] = useEstadoCacheado<Habito[]>("painel_habitos", []);
   const [marcados, setMarcados] = useEstadoCacheado<string[]>("painel_habitos_hoje", []);
   const [generated, setGenerated] = React.useState(0);
@@ -159,7 +177,7 @@ export default function HomePage() {
   const today = todayISO();
 
   const load = React.useCallback(async () => {
-    const [b, t, r, e, n, lv, rf, hb, hl] = await Promise.all([
+    const [b, t, r, e, n, lv, rf, hb, hl, au, auF, auM] = await Promise.all([
       supabase.from("bills").select("*").order("due_date"),
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("recurring_tasks").select("*").order("created_at"),
@@ -217,6 +235,27 @@ export default function HomePage() {
          hábitos simplesmente não vê o cartão. */
       supabase.from("habits").select("id,name,color").eq("active", true),
       supabase.from("habit_logs").select("habit_id").eq("day", today),
+      /*
+       * Aulas: as que faltam ver, as vistas na semana e a meta.
+       *
+       * A tela de Aulas e a segunda maior do app e o Inicio nunca soube dela
+       * — todas as outras oito areas tinham cartao aqui. Tolera falha como
+       * leitura e referencias: quem nao rodou AULAS.sql nao ve o cartao.
+       *
+       * A contagem da semana vem crua e e filtrada no navegador, com o mesmo
+       * `localDay` + `semanaDe` que a tela de Aulas usa. `feita_em` e
+       * timestamptz e volta em UTC: uma aula marcada as 21h30 de domingo em
+       * Sao Paulo esta gravada como segunda em UTC, e comparar a data crua
+       * jogaria ela para a semana seguinte.
+       */
+      supabase
+        .from("lessons")
+        .select("id,title,canal,thumb_url")
+        .eq("feita", false)
+        .order("created_at", { ascending: false })
+        .limit(6),
+      supabase.from("lessons").select("feita_em").eq("feita", true),
+      supabase.from("lesson_goals").select("per_week").maybeSingle(),
     ]);
     // numeric do Postgres vem como string no JSON; normaliza na fronteira
     setBills(
@@ -243,6 +282,14 @@ export default function HomePage() {
     setLendo((lv.data as Livro[]) ?? []);
     setRefs((rf.data as Ref[]) ?? []);
     setHabitos((hb.data as Habito[]) ?? []);
+    setAulas((au.data as Aula[]) ?? []);
+    const daSemana = new Set(semanaDe(today));
+    setAulasNaSemana(
+      ((auF.data as { feita_em: string | null }[]) ?? []).filter(
+        (x) => x.feita_em && daSemana.has(localDay(x.feita_em))
+      ).length
+    );
+    setMetaAulas(((auM.data as { per_week: number } | null)?.per_week) ?? 0);
     setMarcados(((hl.data as { habit_id: string }[]) ?? []).map((x) => x.habit_id));
     return (r.data as RecurringTask[]) ?? [];
   }, [supabase]);
@@ -258,6 +305,10 @@ export default function HomePage() {
    * Em caso de falha, desfaz o que foi mostrado — é a única forma honesta de
    * ser otimista: assumir sucesso e corrigir a tela se não foi.
    */
+  /* O cartao aparece se ha aula na fila OU meta definida: quem zerou a fila
+     ainda quer ver que fez 3 de 5 na semana. */
+  const temAulas = aulas.length > 0 || metaAulas > 0;
+
   const alternarHabito = React.useCallback(
     async (habitId: string) => {
       const tinha = marcados.includes(habitId);
@@ -1080,8 +1131,18 @@ export default function HomePage() {
         lugar nenhum da tela de entrada. Só aparecem quando têm o que mostrar —
         cartão vazio em painel é espaço morto.
       */}
-      {(lendo.length > 0 || refs.length > 0) && (
-        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+      {(lendo.length > 0 || refs.length > 0 || temAulas) && (
+        <div
+          className={cx(
+            "mt-4 grid grid-cols-1 gap-4",
+            /* Tres colunas so quando ha os tres cartoes. Com dois, a linha
+               volta a ser a de antes — coluna vazia num painel e o espaco
+               morto que ele ja mandou tirar uma vez. */
+            temAulas && lendo.length > 0
+              ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.35fr)]"
+              : "xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]"
+          )}
+        >
           {lendo.length > 0 && (
             <Card>
               <Head
@@ -1150,6 +1211,89 @@ export default function HomePage() {
                     </Link>
                   );
                 })}
+              </div>
+            </Card>
+          )}
+
+          {temAulas && (
+            <Card>
+              <Head
+                icon={<GraduationCap size={14} />}
+                title="Aulas"
+                href="/aulas"
+                link="ver todas"
+              />
+              <div className="flex flex-col px-[18px] pb-[18px] pt-3">
+                {aulas.slice(0, 2).map((a) => (
+                  <Link
+                    key={a.id}
+                    href="/aulas"
+                    className="group flex items-center gap-3 border-b border-line-soft py-2.5 last:border-0"
+                  >
+                    {/* 16:9 fixo, que é a proporção da miniatura do YouTube.
+                        Sem trava, aula com miniatura e aula sem fariam as
+                        duas linhas dançarem — mesma razão da capa na estante. */}
+                    <span className="relative block aspect-video w-[54px] shrink-0 overflow-hidden rounded-md bg-ink-800">
+                      {a.thumb_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={a.thumb_url}
+                          alt=""
+                          loading="lazy"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="grid h-full w-full place-items-center text-brand-400/40">
+                          <GraduationCap size={14} />
+                        </span>
+                      )}
+                    </span>
+
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-semibold group-hover:text-brand-400">
+                        {a.title}
+                      </span>
+                      {a.canal && (
+                        <span className="mt-0.5 block truncate text-[11px] text-fg-mute">
+                          {a.canal}
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                ))}
+
+                {/*
+                  A meta da semana, com o mesmo número da tela de Aulas.
+
+                  Só aparece quando existe meta: barra de progresso sem alvo
+                  não mede nada. E o verde ao fechar é o mesmo critério de lá,
+                  para os dois lugares não discordarem sobre "cumpri".
+                */}
+                {metaAulas > 0 && (
+                  <div className="mt-3 flex items-center gap-2 text-[11px] text-fg-mute">
+                    <span className="font-semibold text-fg-dim tnum">
+                      {aulasNaSemana}/{metaAulas}
+                    </span>
+                    <span>esta semana</span>
+                    <span className="ml-auto h-1 w-[56px] overflow-hidden rounded-full bg-ink-800">
+                      <span
+                        className={cx(
+                          "block h-full w-full origin-left rounded-full transition-transform duration-300",
+                          aulasNaSemana >= metaAulas ? "bg-pos" : "bg-brand-500"
+                        )}
+                        style={{
+                          transform: `scaleX(${Math.min(1, aulasNaSemana / metaAulas)})`,
+                        }}
+                      />
+                    </span>
+                  </div>
+                )}
+
+                {aulas.length === 0 && (
+                  <p className="py-1 text-[12px] text-fg-mute">
+                    Nenhuma aula na fila.
+                  </p>
+                )}
               </div>
             </Card>
           )}

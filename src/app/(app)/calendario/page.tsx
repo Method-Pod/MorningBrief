@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   ChevronLeft,
@@ -89,8 +90,24 @@ export default function CalendarioPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const today = todayISO();
 
+  /*
+   * `?dia=AAAA-MM-DD` abre o calendario naquele dia.
+   *
+   * Quem chega pela busca global procurou um evento pelo nome e clicou nele.
+   * Sem este parametro, a tela abria no mes corrente e o evento achado ficava
+   * em outro mes — o resultado da busca levava para perto, nao para o lugar.
+   *
+   * Vale so na abertura: depois disso quem manda no mes sao as setas, e
+   * reagir ao parametro para sempre prenderia a navegacao.
+   */
+  const paramDaUrl = useSearchParams();
+  const diaPedido = paramDaUrl.get("dia");
+  const inicial = /^\d{4}-\d{2}-\d{2}$/.test(diaPedido ?? "")
+    ? (diaPedido as string)
+    : today;
+
   const [cursor, setCursor] = React.useState(() => {
-    const d = new Date(today + "T00:00:00");
+    const d = new Date(inicial + "T00:00:00");
     return { y: d.getFullYear(), m: d.getMonth() };
   });
   const [events, setEvents] = useEstadoCacheado<CalendarEvent[]>("events", []);
@@ -100,7 +117,7 @@ export default function CalendarioPage() {
   const [loading, setLoading] = React.useState(
     () => !temCache("events", "bills", "tasks")
   );
-  const [selected, setSelected] = React.useState(today);
+  const [selected, setSelected] = React.useState(inicial);
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<CalendarEvent | null>(null);
   const [form, setForm] = React.useState(blank(today));

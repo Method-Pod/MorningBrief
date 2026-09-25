@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { currentIdentity } from "@/lib/session";
 import { Shell } from "@/components/Shell";
+import { AvisoDeVersao } from "@/components/AvisoDeVersao";
 
 export default async function AppLayout({
   children,
@@ -31,6 +32,9 @@ export default async function AppLayout({
   return (
     <Shell email={quem.email} nome={quem.nome}>
       {children}
+      {/* Aqui dentro, e nao no layout raiz: na tela de login nao ha nada para
+          atualizar, e a rota de versao responde 401 para quem nao entrou. */}
+      <AvisoDeVersao />
     </Shell>
   );
 }
