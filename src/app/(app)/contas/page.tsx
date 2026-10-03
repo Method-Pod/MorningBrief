@@ -1469,96 +1469,72 @@ export default function ContasPage() {
         )}
       </Card>
 
-      {/* -------------------- calendário + cartões -------------------- */}
+      {/* -------------------- calendário, cartões e categorias -------------------- */}
       {/*
-        Sem o cartão "Contas fixas": as fixas entram sozinhas no dia 1º de
-        cada mês, e o botão "Lançar próximo mês" que ele tinha deixou de ter
-        função — era um clique pedido para algo que agora não precisa de
-        ninguém. A série se gerencia em Gerenciar → Gerenciar contas.
+        Duas colunas: à esquerda, estreita, o calendário com os cartões
+        embaixo; à direita, os dois gráficos por categoria.
+
+        O calendário tem dias quadrados (`aspect-square`), então a altura dele
+        acompanha a largura: na metade da tela cada dia virava um quadrado de
+        120px e o cartão passava de 750px de altura — "muito grande", nas
+        palavras dele. Preso em 340px ele volta ao tamanho de um calendário.
+        E nenhum cartão estica para igualar a altura do vizinho: o quadro de
+        cartões esticado era uma moldura enorme com uma linha dentro.
       */}
-      <div
-        className={cx(
-          /*
-           * `grid-cols-[minmax(0,1fr)]` na largura de telefone, e não só as
-           * colunas do `xl:`.
-           *
-           * Sem coluna declarada, a grade cria uma trilha `auto`, e trilha
-           * `auto` cresce até o conteúdo pedir — ela não se prende à largura
-           * da tela. Medido num telefone de 375px: a grade media 327px e o
-           * cartão dos cartões saía com 391px, empurrando a página para o
-           * lado. Com `minmax(0, 1fr)` a trilha não passa da tela, o cartão
-           * encolhe junto e o nome comprido corta com reticências, que é o
-           * que o `truncate` dele já esperava poder fazer.
-           *
-           * No `xl:` nada muda: as três colunas de baixo continuam mandando.
-           */
-          "mt-4 grid grid-cols-[minmax(0,1fr)] gap-4",
-          cartoes.length > 0
-            ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-            : "xl:grid-cols-[minmax(0,420px)]"
-        )}
-      >
-        <Card>
-          <Cabeca titulo="Calendário de pagamentos" sub="Clique num dia para filtrar" />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <CalendarioPagamentos
-              contas={rows}
-              dia={dia}
-              onDia={setDia}
-              mes={mes}
-              onMes={trocarMes}
-            />
-          </div>
-        </Card>
-
-        {/*
-          Os cartões, terceira faixa e só quando existem.
-
-          Sem cartão cadastrado o quadro nem aparece. Uma tela que já é densa
-          não ganha uma moldura vazia para anunciar um recurso que ninguém
-          pediu para usar; quem quiser começar entra por "Cartões", no alto.
-
-          Sem `self-start`: o cartão estica até a altura da faixa e o conteúdo
-          se distribui dentro dele — lista em cima, total no pé. Ver
-          QuadroCartoes.
-        */}
-        {cartoes.length > 0 && (
-          <Card className="flex flex-col">
-            <Cabeca titulo="Cartões" sub={`Fatura de ${rotuloMes(mes)}`} />
-            <QuadroCartoes
-              cartoes={cartoes}
-              contas={doMes}
-              onLancar={lancarFatura}
-              onCriar={criarFatura}
-            />
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Card>
+            <Cabeca titulo="Calendário de pagamentos" sub="Clique num dia para filtrar" />
+            <div className="px-[18px] pb-[18px] pt-3">
+              <CalendarioPagamentos
+                contas={rows}
+                dia={dia}
+                onDia={setDia}
+                mes={mes}
+                onMes={trocarMes}
+              />
+            </div>
           </Card>
-        )}
-      </div>
 
-      {/* ------------------------------ análises ------------------------------ */}
-      <div className="mt-4 grid gap-4 xl:grid-cols-2">
-        <Card>
-          <Cabeca titulo="Gastos por categoria" sub={`Vencimentos de ${nomeMes}`} />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <ParticipacaoCategoria
-              dados={porCategoria.map((c) => ({
-                categoria: c.categoria,
-                valor: c.total,
-              }))}
-              total={resumoMes.total}
+          {/* Os cartões só aparecem quando existem: sem cartão cadastrado, uma
+              moldura vazia só anunciaria um recurso que ninguém pediu. */}
+          {cartoes.length > 0 && (
+            <Card className="flex flex-col">
+              <Cabeca titulo="Cartões" sub={`Fatura de ${rotuloMes(mes)}`} />
+              <QuadroCartoes
+                cartoes={cartoes}
+                contas={doMes}
+                onLancar={lancarFatura}
+                onCriar={criarFatura}
+              />
+            </Card>
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-col gap-4">
+          <Card>
+            <Cabeca titulo="Gastos por categoria" sub={`Vencimentos de ${nomeMes}`} />
+            <div className="px-[18px] pb-[18px] pt-3">
+              <ParticipacaoCategoria
+                dados={porCategoria.map((c) => ({
+                  categoria: c.categoria,
+                  valor: c.total,
+                }))}
+                total={resumoMes.total}
+              />
+            </div>
+          </Card>
+
+          <Card>
+            <Cabeca
+              titulo="Pago vs pendente por categoria"
+              sub={`Vencimentos de ${nomeMes}`}
             />
-          </div>
-        </Card>
-
-        <Card>
-          <Cabeca
-            titulo="Pago vs pendente por categoria"
-            sub={`Vencimentos de ${nomeMes}`}
-          />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <PagoPendenteCategoria dados={porCategoria} />
-          </div>
-        </Card>
+            <div className="px-[18px] pb-[18px] pt-3">
+              <PagoPendenteCategoria dados={porCategoria} />
+            </div>
+          </Card>
+        </div>
       </div>
 
       <Card className="mt-4">
