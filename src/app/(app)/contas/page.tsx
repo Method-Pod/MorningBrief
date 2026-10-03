@@ -149,7 +149,7 @@ export default function ContasPage() {
   const [loading, setLoading] = React.useState(
     () => !temCache("bills")
   );
-  const [filtro, setFiltro] = React.useState<Filtro>("todas");
+  const [filtro, setFiltro] = React.useState<Filtro>("todas");  // semeado logo abaixo, ver `filtroDaUrl`
   const [ordem, setOrdem] = React.useState<Ordem>("vencimento");
   /*
    * `useSearchParams`, e não `window.location.search`.
@@ -172,6 +172,26 @@ export default function ContasPage() {
    * seguinte.
    */
   const [q, setQ] = React.useState(() => paramDaUrl.get("q") ?? "");
+
+  /*
+   * `?filtro=` semeia a pastilha de situacao, pelo mesmo motivo do `?q=`.
+   *
+   * Os numeros do Resumo do mes, no Inicio, passaram a ser links: clicar em
+   * "Vencido" tem que abrir esta tela ja em Atrasadas. Sem isto o clique
+   * levava para a lista inteira e a pessoa refazia na mao o filtro que
+   * acabou de pedir.
+   *
+   * Num efeito, e nao no `useState` de cima, porque `filtro` e declarado
+   * antes de `paramDaUrl` existir. Roda uma vez, na montagem: depois disso
+   * quem manda nas pastilhas e o clique, e reagir ao parametro para sempre
+   * prenderia o filtro no valor da URL.
+   */
+  React.useEffect(() => {
+    const pedido = paramDaUrl.get("filtro");
+    if (pedido && FILTROS.some((f) => f.v === pedido))
+      setFiltro(pedido as Filtro);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [dia, setDia] = React.useState<string | null>(null);
   /** "AAAA-MM" em foco. A lista, o resumo, os gráficos e o calendário seguem. */
   const [mes, setMes] = React.useState(() => todayISO().slice(0, 7));

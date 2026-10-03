@@ -22,6 +22,7 @@ import {
   Repeat,
 } from "lucide-react";
 import { Clima } from "@/components/Clima";
+import { Explicacao, Ressalva } from "@/components/Explicacao";
 import { createClient } from "@/lib/supabase/client";
 import { nenhumaLinha } from "@/lib/erros";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
@@ -647,8 +648,22 @@ export default function HomePage() {
         <div className="flex flex-col rounded-[22px] bg-gradient-to-br from-[var(--bloco-1)] to-[var(--bloco-2)] p-[22px] text-white">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/60">
+              <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/60">
                 Seu dia
+                {/* Sobre bloco escuro a tinta do botao e a do bloco, nao a da
+                    pagina — senao ele some no claro, onde este bloco continua
+                    escuro. */}
+                <Explicacao className="text-white/50 hover:bg-white/10 hover:text-white">
+                  <p>
+                    Conta as demandas com <b>vencimento hoje</b>: quantas estao
+                    concluidas, sobre o total do dia.
+                  </p>
+                  <Ressalva>
+                    Demanda sem data nao entra, e atrasada de outro dia tambem
+                    nao. Por isso da para ter 0 de 0 num dia cheio de trabalho —
+                    o dia esta vazio de <i>vencimentos</i>, nao de tarefa.
+                  </Ressalva>
+                </Explicacao>
               </p>
               <p className="mt-2 text-[40px] font-bold leading-none tracking-[-0.04em]">
                 {m.feitas}
@@ -1055,7 +1070,27 @@ export default function HomePage() {
               : "xl:col-span-3"
           }
         >
-          <Head icon={<PieChart size={14} />} title={`Resumo de ${nomeMes}`} href="/contas" link="abrir contas" />
+          <Head
+            icon={<PieChart size={14} />}
+            title={`Resumo de ${nomeMes}`}
+            href="/contas"
+            link="abrir contas"
+            explicacao={
+              <Explicacao>
+                <p>
+                  Soma as contas com <b>vencimento dentro de {nomeMes}</b>.
+                  Pago e o que esta marcado como pago; vencido e o que continua
+                  em aberto com a data ja passada; a vencer e o resto do que
+                  esta em aberto. As tres fecham o total.
+                </p>
+                <Ressalva>
+                  O recorte e a data de VENCIMENTO, nao a de pagamento. Uma
+                  conta de setembro que voce pagou em outubro conta em
+                  setembro.
+                </Ressalva>
+              </Explicacao>
+            }
+          />
           <div className="px-[18px] pb-[18px] pt-3">
             {m.totalMes === 0 ? (
               <Ghost>Nenhuma conta lançada neste mês.</Ghost>
@@ -1094,28 +1129,55 @@ export default function HomePage() {
                   pontas: vermelho sobre branco e vermelho sobre quase-preto são
                   os dois piores contrastes desta tela.
                 */}
-                <dl className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-                  {[
-                    ["Total do mês", m.totalMes, null],
-                    ["Pago", m.pagoMes, "bg-pos"],
-                    ["Vencido", m.vencidoMes, "bg-neg"],
-                    ["A vencer", Math.max(0, m.abertoMes - m.vencidoMes), "bg-[var(--cor-barra)]"],
-                  ].map(([rotulo, valor, ponto]) => (
-                    <div key={rotulo as string}>
-                      <dt className="flex items-center gap-1.5 text-[11.5px] text-fg-mute">
-                        {/* A bolinha liga o número ao pedaço da barra: sem ela
-                            a barra vira enfeite e a lista vira tabela. */}
-                        {ponto && (
-                          <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", ponto as string)} />
-                        )}
-                        {rotulo as string}
-                      </dt>
-                      <dd className="mt-0.5 text-[17px] font-bold tracking-[-0.03em] text-fg tnum">
-                        {brl(valor as number)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                {/*
+                  Cada valor e uma PORTA, nao um numero parado.
+
+                  Ler "Vencido R$ 320" levanta uma pergunta imediata — quais? —
+                  e a resposta estava a tres passos: abrir Contas, achar a
+                  pastilha Atrasadas, clicar. Agora o proprio numero leva para
+                  a lista ja filtrada. Numero que responde uma pergunta e faz
+                  nascer outra deveria levar para a resposta.
+                */}
+                {/*
+                  Deixou de ser <dl>: lista de definicao so aceita dt/dd (ou
+                  div) como filha, e um <a> no meio e marcacao invalida. Com o
+                  valor virando link, o que isto e passou a ser um grupo de
+                  atalhos — e e assim que esta escrito.
+                */}
+                <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                  {([
+                    ["Total do mês", m.totalMes, null, "todas"],
+                    ["Pago", m.pagoMes, "bg-pos", "pagas"],
+                    ["Vencido", m.vencidoMes, "bg-neg", "atrasadas"],
+                    [
+                      "A vencer",
+                      Math.max(0, m.abertoMes - m.vencidoMes),
+                      "bg-[var(--cor-barra)]",
+                      "pendentes",
+                    ],
+                  ] as [string, number, string | null, string][]).map(
+                    ([rotulo, valor, ponto, filtro]) => (
+                      <Link
+                        key={rotulo}
+                        href={`/contas?filtro=${filtro}`}
+                        prefetch={false}
+                        className="group -m-1 rounded-lg p-1 transition-colors hover:bg-ink-800"
+                      >
+                        <span className="flex items-center gap-1.5 text-[11.5px] text-fg-mute">
+                          {/* A bolinha liga o número ao pedaço da barra: sem ela
+                              a barra vira enfeite e a lista vira tabela. */}
+                          {ponto && (
+                            <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", ponto)} />
+                          )}
+                          {rotulo}
+                        </span>
+                        <span className="mt-0.5 block text-[17px] font-bold tracking-[-0.03em] text-fg tnum group-hover:text-brand-400">
+                          {brl(valor)}
+                        </span>
+                      </Link>
+                    )
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -1432,17 +1494,31 @@ function Head({
   title,
   href,
   link,
+  explicacao,
 }: {
   icon: React.ReactNode;
   title: string;
   href: string;
   link: string;
+  /** O botao de "como calculamos", quando o cartao mostra numero derivado. */
+  explicacao?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-3.5 px-[18px] pt-[17px]">
       <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
-        {icon}
+        {/*
+          O icone dentro de uma pastilha, e nao solto ao lado do texto.
+
+          Solto, ele e mais um cinza do mesmo tamanho da letra e some na
+          linha; com o fundo, ele vira a ancora visual do cartao e a fileira
+          de cabecalhos passa a se ler de relance. A cor e o accent a 10%,
+          entao a pastilha acompanha o tema sem virar mais uma cor na tela.
+        */}
+        <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-brand-500/12 text-brand-400">
+          {icon}
+        </span>
         {title}
+        {explicacao}
       </span>
       {/*
         `prefetch={false}` pelo mesmo motivo da barra lateral: são sete
