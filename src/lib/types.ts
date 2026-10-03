@@ -204,6 +204,15 @@ export type CalendarEvent = {
    */
   recurrence: EventRecurrence;
   series_id: string | null;
+  /*
+   * Ocorrência de repetição excluída sozinha. Ver supabase/PRIVACIDADE-E-AGENDA.sql.
+   *
+   * A linha fica, escondida, em vez de ser apagada: a manutenção estende a
+   * série a partir da ocorrência mais recente, e apagar a última fazia a
+   * anterior virar "a mais recente" — e a excluída renascia no dia seguinte.
+   * Ausente em base sem o SQL.
+   */
+  cancelado?: boolean | null;
 };
 
 export type EventRecurrence = "none" | "weekly" | "biweekly" | "monthly";

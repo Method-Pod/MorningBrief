@@ -44,6 +44,7 @@ import {
   valorDigitado,
 } from "@/lib/format";
 import { textoDaNota } from "@/lib/notas";
+import { fechamentoDoMes, mesAnterior, nomeDoMes } from "@/lib/brief";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import { ultimaVirada } from "@/lib/viradaDoDia";
 import {
@@ -225,7 +226,7 @@ export default function HomePage() {
       )
     );
     setRecurring((r.data as RecurringTask[]) ?? []);
-    setEvents((e.data as CalendarEvent[]) ?? []);
+    setEvents(((e.data as CalendarEvent[]) ?? []).filter((x) => !x.cancelado));
     setNotes((n.data as Note[]) ?? []);
     if (!rf.error) setRefs((rf.data as Ref[]) ?? []);
     return (r.data as RecurringTask[]) ?? [];
@@ -741,6 +742,9 @@ export default function HomePage() {
       </Card>
 
 
+      {/* ------------------------ fechamento do mês ------------------------ */}
+      <Fechamento contas={bills} hoje={today} />
+
       {/* --------------------------- resumo do mês --------------------------- */}
       {/*
         Faixa, e não cartão.
@@ -1159,6 +1163,73 @@ function ValorDaFatura({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Como o mês anterior fechou — só na primeira semana do mês.
+ *
+ * Só para ler: nada a marcar, nada a preencher. Some sozinho no dia 8, quando
+ * o assunto já é o mês corrente. E só o lado das contas: o app não registra o
+ * que entra, por escolha dele.
+ */
+function Fechamento({ contas, hoje }: { contas: Bill[]; hoje: string }) {
+  if (Number(hoje.slice(8, 10)) > 7) return null;
+  const f = fechamentoDoMes(contas, mesAnterior(hoje.slice(0, 7)));
+  if (f.total === 0) return null;
+
+  const variacao =
+    f.totalAnterior && f.totalAnterior > 0
+      ? Math.round(((f.total - f.totalAnterior) / f.totalAnterior) * 100)
+      : null;
+
+  return (
+    <Card className="mt-4">
+      <Head
+        icon={<PieChart size={14} />}
+        title={`Fechamento de ${nomeDoMes(f.mes)}`}
+        href="/contas"
+        link="ver contas"
+      />
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-[18px] pb-[18px] pt-3 sm:grid-cols-4">
+        <div>
+          <span className="block text-[11.5px] text-fg-mute">Pago</span>
+          <b className="text-[19px] font-bold tracking-[-0.04em] tnum">{brl(f.pago)}</b>
+          <span className="block text-[11px] text-fg-mute">
+            {f.qtdPagas} conta{f.qtdPagas === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div>
+          <span className="block text-[11.5px] text-fg-mute">Ficou em aberto</span>
+          <b
+            className={cx(
+              "text-[19px] font-bold tracking-[-0.04em] tnum",
+              f.qtdAbertas > 0 && "text-neg"
+            )}
+          >
+            {brl(f.aberto)}
+          </b>
+          <span className="block text-[11px] text-fg-mute">
+            {f.qtdAbertas ? `${f.qtdAbertas} conta${f.qtdAbertas === 1 ? "" : "s"}` : "nada"}
+          </span>
+        </div>
+        <div className="col-span-2">
+          <span className="block text-[11.5px] text-fg-mute">Onde mais pesou</span>
+          <span className="mt-0.5 block text-[13px] font-medium leading-snug">
+            {f.categorias
+              .map((c) => `${c.categoria} ${brl(c.valor)}`)
+              .join(" · ")}
+          </span>
+          {variacao !== null && (
+            <span className="mt-0.5 block text-[11px] text-fg-mute">
+              {variacao === 0
+                ? `igual a ${nomeDoMes(mesAnterior(f.mes))}`
+                : `${variacao > 0 ? "+" : ""}${variacao}% em relação a ${nomeDoMes(mesAnterior(f.mes))}`}
+            </span>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 

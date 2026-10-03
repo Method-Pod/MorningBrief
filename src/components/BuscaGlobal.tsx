@@ -170,7 +170,10 @@ export function BuscaGlobal() {
           .limit(POR_TIPO),
         supabase
           .from("events")
-          .select("id,title,start_at")
+          /* `*` e não a lista de colunas: `cancelado` só existe depois de
+             PRIVACIDADE-E-AGENDA.sql, e pedir uma coluna ausente derrubaria
+             a busca inteira. */
+          .select("*")
           .ilike("title", like)
           .order("start_at", { ascending: false })
           .limit(POR_TIPO),
@@ -260,7 +263,9 @@ export function BuscaGlobal() {
         })),
         /* `?dia=` abre o calendario no mes do evento. Sem isso o resultado
            largava a pessoa no mes corrente, com o evento achado em outro. */
-        ...((eventos.data as { id: string; title: string; start_at: string }[]) ?? []).map(
+        ...((eventos.data as { id: string; title: string; start_at: string; cancelado?: boolean }[]) ?? [])
+          .filter((r) => !r.cancelado)
+          .map(
           (r) => ({
             id: `ev${r.id}`,
             titulo: r.title,

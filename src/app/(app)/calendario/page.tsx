@@ -132,7 +132,9 @@ export default function CalendarioPage() {
       supabase.from("bills").select("*"),
       supabase.from("tasks").select("*"),
     ]);
-    setEvents((e.data as CalendarEvent[]) ?? []);
+    /* A ocorrência excluída sozinha continua no banco, marcada — ver
+       `cancelado` em lib/types. Daqui para a tela ela não existe. */
+    setEvents(((e.data as CalendarEvent[]) ?? []).filter((x) => !x.cancelado));
     setBills((b.data as Bill[]) ?? []);
     setTasks((t.data as Task[]) ?? []);
     setLoading(false);
@@ -446,6 +448,20 @@ export default function CalendarioPage() {
         ? `Excluir só esta ocorrência de "${e.title}"? As outras repetições ficam.`
         : `Excluir "${e.title}"?`,
       async () => {
+        /*
+         * Ocorrência de repetição é marcada, não apagada: apagada, se fosse a
+         * última da série, a manutenção das 6h a recriava no dia seguinte.
+         * Sem a coluna no banco (SQL não rodado), volta ao jeito antigo.
+         */
+        if (e.series_id) {
+          const { error: semColuna } = await supabase
+            .from("events")
+            .update({ cancelado: true })
+            .eq("id", e.id);
+          if (!semColuna) return load();
+          if (!/cancelado|PGRST204|42703/.test(semColuna.message + (semColuna.code ?? "")))
+            return notice.check(semColuna, "excluir o evento");
+        }
         const { error } = await supabase.from("events").delete().eq("id", e.id);
         if (!notice.check(error, "excluir o evento")) load();
       }

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { AbasCrescimento } from "@/components/AbasCrescimento";
 import { useSearchParams } from "next/navigation";
 import {
   BookOpen,
@@ -1009,6 +1010,7 @@ export default function LeituraPage() {
 
   return (
     <div className="space-y-5 rise">
+      <AbasCrescimento />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="titulo-pagina">Leitura</h1>

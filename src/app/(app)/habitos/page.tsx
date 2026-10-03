@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { AbasCrescimento } from "@/components/AbasCrescimento";
 import {
   Check,
   ChevronLeft,
@@ -268,6 +269,7 @@ export default function HabitosPage() {
 
   return (
     <div className="rise">
+      <AbasCrescimento className="mb-5" />
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3.5">
         <div>
           <h1 className="titulo-pagina">Hábitos</h1>

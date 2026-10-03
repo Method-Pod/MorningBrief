@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  Bell,
   Check,
   Download,
   KeyRound,
@@ -16,6 +17,13 @@ import {
   User,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { currentUserId } from "@/lib/session";
+import {
+  desligarPush,
+  ligarPush,
+  situacaoPush,
+  type SituacaoPush,
+} from "@/lib/push";
 import { dateTimeBR } from "@/lib/format";
 import { sairDaConta } from "@/lib/sair";
 import { TEMAS, useTema } from "@/components/tema";
@@ -251,6 +259,9 @@ export default function ContaPage() {
           </div>
         </Card>
 
+        {/* ------------------------- notificação da manhã ------------------------- */}
+        <NotificacaoDaManha />
+
         {/* ------------------------------ seus dados ------------------------------ */}
         <ExportarDados />
 
@@ -288,6 +299,147 @@ export default function ContaPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/* ------------------------- notificação da manhã ------------------------- */
+
+/*
+ * Liga o brief das 6h neste aparelho.
+ *
+ * Cada aparelho liga o seu: a inscrição de push é do navegador, não da conta.
+ * No iPhone ela só existe no app adicionado à tela de início — a tela explica
+ * o caminho em vez de mostrar um botão que não funcionaria.
+ */
+function NotificacaoDaManha() {
+  const supabase = React.useMemo(() => createClient(), []);
+  const [situacao, setSituacao] = React.useState<SituacaoPush | null>(null);
+  const [ocupado, setOcupado] = React.useState(false);
+  const [recado, setRecado] = React.useState<{ ok: boolean; texto: string } | null>(null);
+
+  const reler = React.useCallback(async () => {
+    try {
+      setSituacao(await situacaoPush());
+    } catch {
+      setSituacao("sem-suporte");
+    }
+  }, []);
+  React.useEffect(() => {
+    reler();
+  }, [reler]);
+
+  const ligar = async () => {
+    setOcupado(true);
+    setRecado(null);
+    try {
+      const uid = await currentUserId(supabase);
+      if (!uid) return setRecado({ ok: false, texto: "Sua sessão expirou. Entre de novo." });
+      const r = await ligarPush(supabase, uid);
+      setRecado(
+        r.ok
+          ? { ok: true, texto: "Ligada. Amanhã às 6h o brief chega neste aparelho." }
+          : { ok: false, texto: r.erro }
+      );
+    } catch (e) {
+      setRecado({ ok: false, texto: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setOcupado(false);
+      reler();
+    }
+  };
+
+  const desligar = async () => {
+    setOcupado(true);
+    setRecado(null);
+    try {
+      await desligarPush(supabase);
+      setRecado({ ok: true, texto: "Desligada neste aparelho." });
+    } finally {
+      setOcupado(false);
+      reler();
+    }
+  };
+
+  const testar = async () => {
+    setOcupado(true);
+    setRecado(null);
+    try {
+      const resp = await fetch("/api/brief", { method: "POST" });
+      const dados = (await resp.json()) as { enviados?: number; erro?: string };
+      setRecado(
+        resp.ok
+          ? { ok: true, texto: `Enviado para ${dados.enviados} aparelho${dados.enviados === 1 ? "" : "s"}.` }
+          : { ok: false, texto: dados.erro ?? "Não deu para enviar." }
+      );
+    } catch {
+      setRecado({ ok: false, texto: "Sem conexão com o app." });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <Card>
+      <Cabeca icon={<Bell size={14} />} titulo="Notificação da manhã" />
+      <div className="px-[18px] pb-[18px] pt-3">
+        <p className="text-[13px] text-fg-mute">
+          Todo dia às 6h chega um resumo no celular: demandas do dia, contas que
+          vencem e a agenda. No dia 1º, também como o mês anterior fechou.
+        </p>
+
+        {situacao === "precisa-instalar" && (
+          <div className="mt-3 rounded-[14px] bg-ink-800 px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-dim">
+            <p className="font-semibold text-fg">No iPhone, primeiro adicione o app à tela de início:</p>
+            <ol className="mt-1.5 list-decimal space-y-0.5 pl-4">
+              <li>No Safari, toque em Compartilhar (o quadrado com a seta).</li>
+              <li>Escolha &ldquo;Adicionar à Tela de Início&rdquo;.</li>
+              <li>Abra o Morning Brief pelo ícone novo e volte aqui em Conta.</li>
+            </ol>
+            <p className="mt-1.5 text-fg-mute">Precisa do iOS 16.4 ou mais novo.</p>
+          </div>
+        )}
+        {situacao === "sem-suporte" && (
+          <p className="mt-3 text-[12.5px] text-fg-mute">
+            Este navegador não recebe notificação. Abra o app pelo celular.
+          </p>
+        )}
+        {situacao === "bloqueada" && (
+          <p className="mt-3 text-[12.5px] text-warn">
+            A notificação está bloqueada para o app. Libere em Ajustes → Notificações → Morning Brief.
+          </p>
+        )}
+
+        {recado && (
+          <p
+            className={cx(
+              "mt-3 rounded-[14px] px-3.5 py-3 text-xs font-medium",
+              recado.ok ? "bg-pos/12 text-pos" : "bg-neg/12 text-neg"
+            )}
+          >
+            {recado.texto}
+          </p>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2.5">
+          {situacao === "desligada" && (
+            <Button variant="primary" onClick={ligar} disabled={ocupado}>
+              <Bell size={15} />
+              {ocupado ? "Ligando..." : "Ligar neste aparelho"}
+            </Button>
+          )}
+          {situacao === "ligada" && (
+            <>
+              <Button onClick={testar} disabled={ocupado}>
+                {ocupado ? "Enviando..." : "Receber agora"}
+              </Button>
+              <Button variant="ghost" onClick={desligar} disabled={ocupado}>
+                Desligar neste aparelho
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </Card>
   );
 }
 

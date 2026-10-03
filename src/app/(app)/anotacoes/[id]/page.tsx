@@ -86,12 +86,21 @@ export default function NotaPage() {
     async (mudanca: Partial<Note>) => {
       if (!id) return;
       setEstado("gravando");
-      const { data, error } = await supabase
-        .from("notes")
-        .update({ ...mudanca, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .select("id")
-        .maybeSingle();
+      const tentar = () =>
+        supabase
+          .from("notes")
+          .update({ ...mudanca, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select("id")
+          .maybeSingle();
+      let { data, error } = await tentar();
+      /* Uma segunda tentativa antes de desistir: uma oscilação de rede no
+         meio da escrita perdia o trecho de vez, porque nada gravava de novo
+         até a próxima tecla. */
+      if (error) {
+        await new Promise((ok) => setTimeout(ok, 1500));
+        ({ data, error } = await tentar());
+      }
       if (error) {
         setEstado("erro");
         setFalta(recadoDeErro(error)?.texto ?? error.message);
@@ -115,6 +124,37 @@ export default function NotaPage() {
     if (!nota || t === nota.title) return;
     gravar({ title: t });
   };
+
+  /*
+   * O título também grava quando a aba some, e o navegador segura a saída
+   * enquanto algo está gravando.
+   *
+   * O título só gravava ao sair do campo: fechar a aba com o cursor nele
+   * perdia o nome novo. E com uma gravação no meio do caminho, fechar a aba
+   * cortava a requisição — o pedido de confirmação do navegador dá o tempo
+   * que ela precisa.
+   */
+  const tituloRef = React.useRef(titulo);
+  tituloRef.current = titulo;
+  const pendente = estado === "gravando" || (!!nota && titulo.trim() !== nota.title);
+  React.useEffect(() => {
+    const aoEsconder = () => {
+      if (document.visibilityState !== "hidden" || !nota) return;
+      const t = tituloRef.current.trim();
+      if (t !== nota.title) gravar({ title: t });
+    };
+    const aoSair = (e: BeforeUnloadEvent) => {
+      if (!pendente) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    document.addEventListener("visibilitychange", aoEsconder);
+    window.addEventListener("beforeunload", aoSair);
+    return () => {
+      document.removeEventListener("visibilitychange", aoEsconder);
+      window.removeEventListener("beforeunload", aoSair);
+    };
+  }, [nota, gravar, pendente]);
 
   const fixar = () => {
     if (!nota) return;

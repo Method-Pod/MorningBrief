@@ -5,13 +5,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { BuscaGlobal } from "./BuscaGlobal";
 import * as React from "react";
 import {
-  BookOpen,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
-  GraduationCap,
   ListChecks,
-  Repeat2,
   LayoutDashboard,
   Library,
   Menu,
@@ -19,7 +16,9 @@ import {
   Wallet,
   X,
   Search,
+  Sprout,
 } from "lucide-react";
+import { ROTAS_CRESCIMENTO } from "./AbasCrescimento";
 import { Iniciais, useAvatar } from "./Avatar";
 import { naRota } from "@/lib/rota";
 import { IdentityProvider } from "./identity";
@@ -43,9 +42,10 @@ const NAV = [
    */
   { href: "/", label: "Início", icon: LayoutDashboard },
   { href: "/demandas", label: "Demandas", icon: ListChecks },
-  { href: "/habitos", label: "Hábitos", icon: Repeat2 },
-  { href: "/leitura", label: "Leitura", icon: BookOpen },
-  { href: "/aulas", label: "Aulas", icon: GraduationCap },
+  /* Hábitos, Aulas e Leitura num item só, a pedido dele: as três telas
+     ganham uma barra própria no topo (AbasCrescimento) e o item acende em
+     qualquer uma delas. */
+  { href: "/habitos", label: "Crescimento", icon: Sprout, tambem: ROTAS_CRESCIMENTO },
   { href: "/contas", label: "Contas a pagar", icon: Wallet },
   { href: "/referencias", label: "Referências", icon: Library },
   { href: "/anotacoes", label: "Anotações", icon: StickyNote },
@@ -248,8 +248,8 @@ export function Shell({
 
   const navegacao = (compacta: boolean) => (
     <nav className="flex flex-col gap-[3px] px-2.5">
-      {NAV.map(({ href, label, icon: Icon }) => {
-        const active = aqui(href);
+      {NAV.map(({ href, label, icon: Icon, tambem }) => {
+        const active = aqui(href) || !!tambem?.some(aqui);
         return (
           <Link
             key={href}

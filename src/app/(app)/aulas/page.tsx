@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { AbasCrescimento } from "@/components/AbasCrescimento";
 import { MenuSuspenso } from "@/components/MenuSuspenso";
 import {
   Check,
@@ -948,6 +949,7 @@ export default function AulasPage() {
 
   return (
     <div className="space-y-5 rise">
+      <AbasCrescimento />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="titulo-pagina">Aulas</h1>

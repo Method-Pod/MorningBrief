@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { chamadaDoCron } from "@/lib/segredoCron";
+import { enviarBrief } from "@/lib/enviarBrief";
 import {
   limparAulasAssistidas,
   limparConcluidas,
@@ -165,6 +166,24 @@ export async function GET(req: Request) {
       .filter(([k, v]) => k !== "usuario" && v === null)
       .map(([k]) => k);
     if (falharam.length) falhas.push(`${linha.usuario}: ${falharam.join(", ")}`);
+
+    /*
+     * O brief da manhã, por último: ele lê o que a manutenção acabou de criar,
+     * e diz se ela falhou. Um erro no envio não derruba a manutenção — ela já
+     * aconteceu —, mas aparece no relatório e no log.
+     */
+    let brief: Awaited<ReturnType<typeof enviarBrief>> = null;
+    try {
+      brief = await enviarBrief(supabase, {
+        userId: u.id,
+        hoje,
+        falhou: falharam.length > 0,
+      });
+    } catch (e) {
+      console.error("[cron] brief", e);
+    }
+    (linha as Record<string, unknown>).brief = brief;
+    if (brief === null) falhas.push(`${linha.usuario}: brief`);
   }
 
   /*

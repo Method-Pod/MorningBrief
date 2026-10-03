@@ -321,6 +321,7 @@ export function Editor({
         class: "nota-corpo",
         /* Português para o corretor do navegador acertar. */
         lang: "pt-BR",
+        spellcheck: "true",
       },
     },
     onUpdate: ({ editor: ed }) => {
@@ -435,14 +436,38 @@ export function Editor({
    */
   React.useEffect(() => {
     if (!editor) return;
-    return () => {
-      /* Só grava se havia escrita pendente de verdade — `relogio` só existe
-         depois de uma mudança que passou pela comparação acima. */
+
+    /* Só grava se havia escrita pendente de verdade — `relogio` só existe
+       depois de uma mudança que passou pela comparação acima. */
+    const gravarPendente = () => {
       if (!relogio.current) return;
       clearTimeout(relogio.current);
       relogio.current = null;
       const agora = editor.getHTML();
-      if (agora !== inicial.current) aoMudar.current(agora);
+      if (agora !== inicial.current) {
+        aoMudar.current(agora);
+        inicial.current = agora;
+      }
+    };
+
+    /*
+     * E também quando a aba some, não só quando a tela troca.
+     *
+     * Trocar de tela dentro do app desmonta o editor e cai no retorno abaixo.
+     * Fechar a aba, recarregar (inclusive pelo aviso de versão nova) ou
+     * mandar o app para o fundo no celular não desmonta nada: o que estava na
+     * espera de 900ms morria junto com a página. `visibilitychange` é o
+     * último aviso confiável que o navegador dá — no celular, é o único.
+     */
+    const aoEsconder = () => {
+      if (document.visibilityState === "hidden") gravarPendente();
+    };
+    document.addEventListener("visibilitychange", aoEsconder);
+    window.addEventListener("pagehide", gravarPendente);
+    return () => {
+      document.removeEventListener("visibilitychange", aoEsconder);
+      window.removeEventListener("pagehide", gravarPendente);
+      gravarPendente();
     };
   }, [editor]);
 
@@ -574,10 +599,12 @@ export function Editor({
 
       setRevisao({
         achados,
-        aviso: dados.cortou
-          ? "A nota é longa e só a primeira parte foi revisada."
-          : achados.length === 0 && dados.total > 0
-            ? "O corretor só achou questões de estilo, que esta revisão não mostra."
+        /* A revisão agora é só local (ver api/ortografia): ela pega os erros
+           clássicos, e a ortografia palavra a palavra é do corretor do
+           aparelho, que sublinha em vermelho enquanto se digita. */
+        aviso:
+          achados.length === 0
+            ? "Nenhum dos erros clássicos. Palavra a palavra, quem corrige é o corretor do seu aparelho — o texto não sai do app."
             : null,
       });
     } catch {

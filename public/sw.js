@@ -140,3 +140,48 @@ async function podar(cache) {
     await cache.delete(podaveis[i]);
   }
 }
+
+/*
+ * A notificação da manhã.
+ *
+ * Quem manda é a automação das 6h (api/cron), uma vez por dia. O corpo vem
+ * em JSON com título e texto; se vier qualquer outra coisa, mostra o texto
+ * cru em vez de engolir a mensagem. O iPhone exige que TODO push vire uma
+ * notificação visível — um push sem notificação faz ele cortar a inscrição.
+ */
+self.addEventListener("push", (evento) => {
+  let dados = {};
+  try {
+    dados = evento.data ? evento.data.json() : {};
+  } catch {
+    dados = { corpo: evento.data ? evento.data.text() : "" };
+  }
+  const titulo = dados.titulo || "Morning Brief";
+  evento.waitUntil(
+    self.registration.showNotification(titulo, {
+      body: dados.corpo || "",
+      icon: "/app-icon-192.png",
+      badge: "/app-icon-192.png",
+      /* Uma por dia: a de hoje substitui a de ontem em vez de empilhar. */
+      tag: "brief-da-manha",
+      data: { url: dados.url || "/" },
+    })
+  );
+});
+
+/* Tocar na notificação abre o app — ou traz para a frente o que já está aberto. */
+self.addEventListener("notificationclick", (evento) => {
+  evento.notification.close();
+  const destino = (evento.notification.data && evento.notification.data.url) || "/";
+  evento.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((abertas) => {
+      for (const c of abertas) {
+        if ("focus" in c) {
+          c.navigate(destino);
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(destino);
+    })
+  );
+});
