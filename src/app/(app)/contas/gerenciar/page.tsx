@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Plus, Repeat2, Search, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
@@ -21,6 +21,7 @@ import {
   cx,
   useConfirm,
   useNotice,
+  ErroDeCarga,
 } from "@/components/ui";
 
 type Tipo = "fixa" | "parcelada" | "abatida" | "avulsa";
@@ -28,7 +29,7 @@ type Filtro = "todas" | Tipo;
 
 const FILTROS: { v: Filtro; label: string }[] = [
   { v: "todas", label: "Todas" },
-  { v: "fixa", label: "Fixas" },
+  { v: "fixa", label: "Recorrentes" },
   { v: "parcelada", label: "Parceladas" },
   { v: "abatida", label: "Abatidas" },
   { v: "avulsa", label: "Avulsas" },
@@ -118,8 +119,20 @@ export default function GerenciarPage() {
   const notice = useNotice();
   const categorias = useCategorias(supabase);
 
+  const [erroCarga, setErroCarga] = React.useState("");
+
   const carregar = React.useCallback(async () => {
-    const { data } = await supabase.from("bills").select("*").order("due_date");
+    const { data, error } = await supabase
+      .from("bills")
+      .select("*")
+      .order("due_date");
+    /* Falha não vira "nenhuma conta ainda": mantém a lista e avisa. */
+    if (error) {
+      setErroCarga(error.message);
+      setCarregando(false);
+      return;
+    }
+    setErroCarga("");
     setRows(((data as Bill[]) ?? []).map(numero));
     setCarregando(false);
   }, [supabase]);
@@ -172,6 +185,13 @@ export default function GerenciarPage() {
           faltam: faltamDe(ordenadas, recente.installment_total),
         };
       })
+      /*
+       * Conta que já acabou sai daqui: parcelada com todas as parcelas pagas,
+       * avulsa paga, abatida quitada. Ela continua em Contas a pagar, no mês
+       * dela, como histórico — esta tela é para o que ainda vai acontecer.
+       * Fixa fica sempre: ela não acaba sozinha.
+       */
+      .filter((s) => s.tipo === "fixa" || s.emAberto.length > 0)
       .sort((a, b) => a.descricao.localeCompare(b.descricao, "pt-BR"));
   }, [rows]);
 
@@ -275,6 +295,10 @@ export default function GerenciarPage() {
         </div>
       </div>
 
+      {erroCarga && (
+        <ErroDeCarga detalhe={erroCarga} onTentar={carregar} className="mt-4" />
+      )}
+
       <Card className="mt-4 overflow-hidden">
         <div className="flex flex-wrap gap-1.5 px-[18px] pt-[18px]">
           {FILTROS.map((f) => (
@@ -323,9 +347,11 @@ export default function GerenciarPage() {
 
         {carregando ? null : !visiveis.length ? (
           <p className="border-t border-line-soft px-[18px] py-10 text-center text-[13px] text-fg-mute">
-            {rows.length
+            {series.length
               ? "Nenhuma conta com esses filtros."
-              : "Nenhuma conta ainda. Crie a primeira em Contas a pagar."}
+              : rows.length
+                ? "Nada em andamento: as contas que restam já foram pagas."
+                : "Nenhuma conta ainda. Crie a primeira em Contas a pagar."}
           </p>
         ) : (
           <ul className="border-t border-line-soft">
@@ -344,11 +370,12 @@ export default function GerenciarPage() {
       </Card>
 
       <p className="mt-3 px-1 text-[11.5px] leading-relaxed text-fg-mute">
-        Cada bolha é um mês da conta:{" "}
+        Contas recorrentes entram sozinhas todo dia 1º do mês. Nas parceladas,
+        cada bolha é uma parcela:{" "}
         <span className="font-semibold text-warn">em aberto</span> ou{" "}
-        <span className="font-semibold text-pos">paga</span>. Clique numa bolha
-        para abrir aquele mês. Lançamentos já pagos não são alterados junto —
-        são histórico.
+        <span className="font-semibold text-pos">paga</span> — clique para abrir
+        aquele mês. Contas já quitadas saem desta lista e continuam no histórico
+        de Contas a pagar.
       </p>
 
       <Editor
@@ -436,7 +463,22 @@ function LinhaSerie({
         um mês específico quando ele foge do padrão dos outros.
       */}
       <div className="flex flex-wrap items-center gap-1 xl:col-start-2 xl:row-start-1">
-        {s.contas.map((b) => {
+        {/*
+          Recorrente é uma área só, e não um mês por bolha. A fila de bolhas
+          de uma fixa só cresce — ago, set, out, nov... — e não diz nada que
+          "Recorrente" não diga melhor: ela se repete e não tem fim. O mês
+          em aberto mais próximo é o que importa, e é ele que o clique abre.
+        */}
+        {s.tipo === "fixa" ? (
+          <button
+            onClick={onEditarSerie}
+            aria-label={`Editar a recorrência de ${s.descricao}`}
+            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand-500/12 px-3 text-[11px] font-bold uppercase tracking-wide text-brand-400 transition-colors hover:bg-brand-500/20 lg:h-[26px]"
+          >
+            <Repeat2 size={12} strokeWidth={2.5} />
+            Recorrente
+          </button>
+        ) : s.contas.map((b) => {
           const paga = b.status === "paid";
           const falta = restanteDe(b);
           return (
@@ -572,7 +614,10 @@ function Editor({
     const desc = descricao.trim();
     const v = paraNumero(valor);
     if (!desc) return setErro("Informe a descrição.");
-    if (!Number.isFinite(v) || v <= 0)
+    /* Fatura e afins (valor variável) aceitam zero: é o "a informar" delas.
+       Antes esta tela recusava, e editar a série da fatura era impossível. */
+    const variavel = !!conta.valor_variavel;
+    if (!Number.isFinite(v) || v < 0 || (v === 0 && !variavel))
       return setErro("Informe um valor maior que zero.");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimento))
       return setErro("Informe o vencimento deste lançamento.");
@@ -583,6 +628,20 @@ function Editor({
       return setErro("O valor já abatido não pode ser negativo.");
     if (pago != null && pago > v + 0.001)
       return setErro(`O já abatido (${brl(pago)}) passa do valor (${brl(v)}).`);
+
+    /*
+     * O banco não aceita um valor menor do que o já abatido (regra de
+     * ABATIDAS.sql). Os outros meses da série recebem o valor novo junto, e
+     * um deles já abatido acima disso fazia parte das gravações falhar no
+     * meio — umas gravavam, outras não. Melhor recusar antes, dizendo qual.
+     */
+    const barrado = alvos.find(
+      (b) => b.id !== conta.id && b.paid_amount != null && Number(b.paid_amount) > v + 0.001
+    );
+    if (barrado)
+      return setErro(
+        `${dataCurta(barrado.due_date)} já tem ${brl(Number(barrado.paid_amount))} abatidos, mais que o valor novo. Salve só este lançamento ou ajuste aquele mês.`
+      );
 
     const total = parcelaTotal.trim() === "" ? null : Number(parcelaTotal);
     if (total != null && (!Number.isFinite(total) || total < 1))
@@ -656,10 +715,35 @@ function Editor({
       else if (!data?.length) falhas.push(NADA_GRAVADO);
     }
 
+    /*
+     * A série acompanha, inclusive os meses pagos, em duas coisas só: o nome
+     * e se ela continua. Desmarcar "fixa" só nos meses em aberto deixava os
+     * pagos marcados, e a série renascia deles; renomear só os abertos
+     * deixava uma série com o nome velho gerando o mês seguinte. O valor dos
+     * pagos continua intocado — é histórico.
+     */
+    if (!falhas.length && !soEste && serie.tipo === "fixa") {
+      const mudancas = {
+        ...(!fixa ? { recurring: false } : {}),
+        ...(desc !== conta.description ? { description: desc } : {}),
+      };
+      if (Object.keys(mudancas).length) {
+        const { error } = await supabase
+          .from("bills")
+          .update(mudancas)
+          .eq("description", conta.description)
+          .eq("recurring", true);
+        if (error) falhas.push(error.message);
+      }
+    }
+
     setOcupado(false);
     if (falhas.length) {
       const m = falhas[0];
-      if (m.includes("paid_amount"))
+      /* Só quando a coluna falta de fato. Antes qualquer erro que citasse
+         paid_amount — inclusive a regra do valor abatido — mandava rodar um
+         SQL que já tinha sido rodado. */
+      if (m.includes("paid_amount") && /column|could not find/i.test(m))
         return setErro(
           "A coluna de abatimento ainda não existe. Rode supabase/ABATIDAS.sql no SQL Editor."
         );
@@ -791,7 +875,14 @@ function Editor({
               onChange={(e) => setFixa(e.target.checked)}
               className="h-4 w-4 accent-[var(--a)]"
             />
-            <span className="text-sm font-semibold text-fg-dim">Conta fixa</span>
+            <span className="text-sm font-semibold text-fg-dim">
+              Recorrente
+              <span className="ml-1 text-[11px] font-normal text-fg-mute">
+                {serie.tipo === "fixa" && !fixa
+                  ? "(desmarcar encerra: o próximo mês não entra mais)"
+                  : "(entra sozinha todo dia 1º do mês)"}
+              </span>
+            </span>
           </label>
         </section>
 

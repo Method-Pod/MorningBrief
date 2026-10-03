@@ -147,9 +147,20 @@ export default function RecorrentesPage() {
       /* A coluna de vários dias só entra quando há mais de um. Ver o comentário
          equivalente em demandas: sem isso, um banco sem DIAS-DA-SEMANA.sql
          deixaria de aceitar qualquer regra recorrente. */
-      ...(form.frequency === "weekly" && form.weekdays.length > 1
+      /*
+       * Mas a regra que JÁ tem a lista precisa recebê-la sempre.
+       *
+       * Desmarcar dias até sobrar um não gravava nada: a lista só ia no
+       * payload com mais de um dia, a do banco ficava como estava — e é ela
+       * que manda (`diasDaSemanaDe`), então a regra seguia disparando nos dias
+       * desmarcados. Saindo do semanal, a lista é apagada pelo mesmo motivo.
+       */
+      ...(form.frequency === "weekly" &&
+      (form.weekdays.length > 1 || editing?.weekdays != null)
         ? { weekdays: form.weekdays }
-        : {}),
+        : form.frequency !== "weekly" && editing?.weekdays != null
+          ? { weekdays: null }
+          : {}),
     };
 
     let error;
@@ -199,12 +210,28 @@ export default function RecorrentesPage() {
   };
 
   const toggleActive = async (r: RecurringTask) => {
-    setRows((v) =>
-      v.map((x) => (x.id === r.id ? { ...x, active: !x.active } : x))
-    );
+    /*
+     * Retomar começa de hoje, sem cobrar o período pausado.
+     *
+     * A reposição volta até sete dias para cobrir o app fechado — e via a
+     * pausa do mesmo jeito: pausar uma diária por uma semana e retomar
+     * despejava até oito demandas atrasadas de uma vez. Marcar ontem como a
+     * última geração faz a regra recomeçar a partir de hoje.
+     */
+    const ontem = new Date(today + "T12:00:00");
+    ontem.setDate(ontem.getDate() - 1);
+    const ontemISO = ontem.toISOString().slice(0, 10);
+    const retomando = !r.active;
+    const mudanca = {
+      active: !r.active,
+      ...(retomando && (!r.last_run_on || r.last_run_on < ontemISO)
+        ? { last_run_on: ontemISO }
+        : {}),
+    };
+    setRows((v) => v.map((x) => (x.id === r.id ? { ...x, ...mudanca } : x)));
     const { data: gravadas, error } = await supabase
       .from("recurring_tasks")
-      .update({ active: !r.active })
+      .update(mudanca)
       .eq("id", r.id)
       .select("id");
     /* Recarrega só quando falhou, para desfazer. Recarregar sempre jogaria a
@@ -225,6 +252,9 @@ export default function RecorrentesPage() {
         title: r.title,
         description: r.description,
         client: r.client,
+        /* O vínculo com o cadastro, como na geração automática. */
+        ...(r.cliente_id ? { cliente_id: r.cliente_id } : {}),
+        ...(r.projeto_id ? { projeto_id: r.projeto_id } : {}),
         priority: r.priority,
         status: "todo",
         due_date: today,
@@ -292,7 +322,8 @@ export default function RecorrentesPage() {
         ? `"${r.title}" já tinha sido gerada hoje — está em Demandas.`
         : erroMarca || !marcou?.length
           ? `"${r.title}" foi criada em Demandas, mas não consegui marcar a recorrência como já gerada hoje — ela pode gerar de novo. Recarregue e confira.`
-          : `"${r.title}" foi criada em Demandas.`
+          : `"${r.title}" foi criada em Demandas.`,
+      jaExistia ? "info" : erroMarca || !marcou?.length ? "erro" : "ok"
     );
     load();
   };

@@ -8,6 +8,7 @@ import {
   ocorrenciasDeEvento,
   fimDaJanelaDeEventos,
   estenderEventosRecorrentes,
+  diaDaSerie,
 } from "../src/lib/manutencao.ts";
 
 const conta = (x) => ({
@@ -35,7 +36,7 @@ const conta = (x) => ({
 test("lanca o mes seguinte de cada conta fixa, uma vez", async () => {
   const sb = fakeSupabase({ bills: [conta({})] });
   assert.equal(
-    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-09-14" }),
+    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-10-01" }),
     1
   );
 
@@ -46,7 +47,7 @@ test("lanca o mes seguinte de cada conta fixa, uma vez", async () => {
 
   /* Rodar de novo nao duplica. */
   assert.equal(
-    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-09-14" }),
+    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-10-01" }),
     0
   );
   assert.equal(sb.banco.tabelas.bills.length, 2);
@@ -65,7 +66,7 @@ test("fatura de cartao nasce zerada, e nao com o valor do mes passado", async ()
       }),
     ],
   });
-  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-09-14" });
+  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-10-01" });
 
   const nova = sb.banco.tabelas.bills.find((b) => b.due_date === "2026-10-10");
   assert.equal(Number(nova.amount), 0, "o valor de setembro nao vai para outubro");
@@ -76,7 +77,7 @@ test("fatura de cartao nasce zerada, e nao com o valor do mes passado", async ()
 
 test("a serie encolhe o dia quando o mes seguinte e curto", async () => {
   const sb = fakeSupabase({ bills: [conta({ due_date: "2026-01-31" })] });
-  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-01-15" });
+  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-02-01" });
   assert.ok(sb.banco.tabelas.bills.some((b) => b.due_date === "2026-02-28"));
 });
 
@@ -87,7 +88,7 @@ test("nao mexe em conta de outro usuario", async () => {
       conta({ user_id: "u2", description: "Internet" }),
     ],
   });
-  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-09-14" });
+  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-10-01" });
   assert.equal(sb.banco.tabelas.bills.filter((b) => b.user_id === "u2").length, 1);
 });
 
@@ -100,8 +101,8 @@ test("duas pessoas com conta de mesmo nome nao se atrapalham", async () => {
       conta({ user_id: "u2", description: "Aluguel", due_date: "2026-09-05" }),
     ],
   });
-  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-09-14" });
-  await lancarProximoMesDasFixas(sb, { userId: "u2", hoje: "2026-09-14" });
+  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-10-01" });
+  await lancarProximoMesDasFixas(sb, { userId: "u2", hoje: "2026-10-01" });
 
   assert.ok(
     sb.banco.tabelas.bills.some(
@@ -119,7 +120,7 @@ test("erro de leitura devolve null, e nao 0", async () => {
   const sb = fakeSupabase({ bills: [conta({})] });
   sb.banco.errosPorTabela["select:bills"] = { code: "42P01", message: "no table" };
   assert.equal(
-    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-09-14" }),
+    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-10-01" }),
     null
   );
 });
@@ -219,7 +220,11 @@ test("insert que falha devolve a reivindicacao da regra", async () => {
     tasks: [],
   });
   sb.banco.errosPorTabela["insert:tasks"] = { code: "42703", message: "no column" };
-  await reporRecorrentesPerdidas(sb, { userId: "u1", hoje: "2026-09-14" });
+  assert.equal(
+    await reporRecorrentesPerdidas(sb, { userId: "u1", hoje: "2026-09-14" }),
+    null,
+    "falha devolve null, e nao 0 — senao o dia e marcado como feito"
+  );
   assert.equal(
     sb.banco.tabelas.recurring_tasks[0].last_run_on,
     "2026-09-13",
@@ -326,4 +331,97 @@ test("estender parte da ultima ocorrencia da serie", async () => {
   assert.ok(
     sb.banco.tabelas.events.some((e) => e.start_at > "2026-09-21T13:00:00.000Z")
   );
+});
+
+/* ------------------- contas fixas: defeitos da auditoria ------------------- */
+
+test("dia 31 volta a ser 31 depois de passar por fevereiro", async () => {
+  /* A ultima caiu em 28/02 porque fevereiro e curto. Marco tem que voltar
+     para 31, e nao herdar o 28 para sempre. */
+  const sb = fakeSupabase({
+    bills: [
+      conta({ due_date: "2026-01-31", status: "paid" }),
+      conta({ due_date: "2026-02-28" }),
+    ],
+  });
+  await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-03-01" });
+  assert.ok(sb.banco.tabelas.bills.some((b) => b.due_date === "2026-03-31"));
+  assert.ok(!sb.banco.tabelas.bills.some((b) => b.due_date === "2026-03-28"));
+});
+
+test("diaDaSerie so corrige quando a ultima caiu no fim do mes", () => {
+  assert.equal(diaDaSerie(["2026-01-31", "2026-02-28"], "2026-02-28"), 31);
+  assert.equal(diaDaSerie(["2026-03-31", "2026-04-30"], "2026-04-30"), 31);
+  /* Mudou de dia de proposito, no meio do mes: vale o dia novo. */
+  assert.equal(diaDaSerie(["2026-01-31", "2026-02-15"], "2026-02-15"), 15);
+});
+
+test("desmarcar fixa na conta mais recente encerra a serie", async () => {
+  /* Antes: a de setembro, paga e ainda fixa, virava a ultima e outubro
+     era lancado de novo. */
+  const sb = fakeSupabase({
+    bills: [
+      conta({ due_date: "2026-09-10", status: "paid" }),
+      conta({ due_date: "2026-10-10", recurring: false }),
+    ],
+  });
+  assert.equal(
+    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-11-01" }),
+    0
+  );
+  assert.equal(sb.banco.tabelas.bills.length, 2);
+});
+
+test("conta parcelada marcada como fixa para na ultima parcela", async () => {
+  const sb = fakeSupabase({
+    bills: [
+      conta({
+        description: "Perfumes",
+        due_date: "2026-09-10",
+        installment_no: 5,
+        installment_total: 5,
+      }),
+    ],
+  });
+  assert.equal(
+    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-10-01" }),
+    0
+  );
+});
+
+test("lancamento avulso de mesmo nome no mes alvo impede a duplicata", async () => {
+  const sb = fakeSupabase({
+    bills: [
+      conta({ due_date: "2026-09-10" }),
+      conta({ due_date: "2026-10-12", recurring: false }),
+    ],
+  });
+  assert.equal(
+    await lancarProximoMesDasFixas(sb, { userId: "u1", hoje: "2026-10-01" }),
+    0
+  );
+});
+
+test("mensal parte do dia da serie quando a ultima foi encolhida", () => {
+  const o = ocorrenciasDeEvento({
+    inicio: "2026-02-28T12:00:00.000Z",
+    fim: null,
+    recorrencia: "monthly",
+    limite: new Date("2026-03-31T23:59:59Z"),
+    diaDoMes: 31,
+  });
+  assert.equal(new Date(o[0].start_at).getDate(), 31);
+});
+
+test("recorrente gera a demanda com o cliente e o projeto do cadastro", async () => {
+  const sb = fakeSupabase({
+    recurring_tasks: [
+      regra({ cliente_id: "c1", projeto_id: "p1", last_run_on: "2026-09-13" }),
+    ],
+    tasks: [],
+  });
+  await reporRecorrentesPerdidas(sb, { userId: "u1", hoje: "2026-09-14" });
+  const t = sb.banco.tabelas.tasks[0];
+  assert.equal(t.cliente_id, "c1");
+  assert.equal(t.projeto_id, "p1");
 });

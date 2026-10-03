@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CalendarPlus, ChevronLeft, ChevronRight, Repeat2 } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Bill } from "@/lib/types";
 import { brl, dataCurta, daysUntil, todayISO } from "@/lib/format";
 import { cx } from "./ui";
@@ -208,22 +208,12 @@ export function CalendarioPagamentos({
   );
 }
 
-/* ==================== gerenciar contas fixas ==================== */
-
-/** Mesma data no mês seguinte, encolhida quando o mês é curto. */
-export const proximoMes = (iso: string) => {
-  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
-  // m é 1-based; new Date(y, m+1, 0) dá o último dia do mês seguinte
-  const ultimo = new Date(y, m + 1, 0).getDate();
-  return `${m === 12 ? y + 1 : y}-${pad(m === 12 ? 1 : m + 1)}-${pad(
-    Math.min(d, ultimo)
-  )}`;
-};
+/* ==================== datas ==================== */
 
 /**
  * A mesma data, `n` meses adiante, encolhida quando o mês de destino é curto.
  *
- * Conta sempre a partir da data original, e não chamando proximoMes n vezes: o
+ * Conta sempre a partir da data original, e não somando um mês por vez: o
  * encadeamento perde o dia no caminho. Uma parcela dia 31 viraria 28 em
  * fevereiro e daí em diante ficaria no dia 28 para sempre, quando o certo é
  * voltar ao 31 em março.
@@ -236,74 +226,3 @@ export const mesesAdiante = (iso: string, n: number) => {
   const ultimo = new Date(ano, mes, 0).getDate();
   return `${ano}-${pad(mes)}-${pad(Math.min(d, ultimo))}`;
 };
-
-export function ContasFixas({
-  contas,
-  onLancar,
-  ocupado,
-}: {
-  contas: Bill[];
-  onLancar: (b: Bill) => void;
-  ocupado: string | null;
-}) {
-  /* Uma linha por descrição: a mais recente representa a série.
-     O memo fica antes de qualquer return: hook não pode ser condicional. */
-  const series = React.useMemo(() => {
-    const mapa = new Map<string, Bill>();
-    contas
-      .filter((b) => b.recurring)
-      .forEach((b) => {
-        const atual = mapa.get(b.description);
-        if (!atual || b.due_date > atual.due_date) mapa.set(b.description, b);
-      });
-    return [...mapa.values()].sort((a, b) =>
-      a.description.localeCompare(b.description, "pt-BR")
-    );
-  }, [contas]);
-
-  if (!series.length)
-    return (
-      <p className="py-8 text-center text-[12.5px] text-fg-mute">
-        Nenhuma conta marcada como fixa. Marque “Conta fixa” ao criar.
-      </p>
-    );
-
-  return (
-    <ul className="flex flex-col">
-      {series.map((b) => {
-        const proxima = proximoMes(b.due_date);
-        const jaExiste = contas.some(
-          (x) => x.description === b.description && x.due_date.slice(0, 10) === proxima
-        );
-        return (
-          <li
-            key={b.id}
-            className="flex items-center gap-3 border-b border-line-soft py-2.5 last:border-0"
-          >
-            <Repeat2 size={14} className="shrink-0 text-brand-400" />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold">{b.description}</p>
-              <p className="text-[11px] text-fg-mute tnum">
-                última: {dataCurta(b.due_date)} · {brl(b.amount)}
-              </p>
-            </div>
-            {jaExiste ? (
-              <span className="shrink-0 text-[11px] font-semibold text-pos">
-                {dataCurta(proxima)} já lançada
-              </span>
-            ) : (
-              <button
-                onClick={() => onLancar(b)}
-                disabled={ocupado === b.id}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-[10px] bg-ink-800 px-2.5 py-1.5 text-[11.5px] font-semibold text-fg-dim transition-colors hover:bg-brand-500/12 hover:text-brand-400 disabled:opacity-50"
-              >
-                <CalendarPlus size={12} />
-                {ocupado === b.id ? "Lançando..." : "Lançar próximo mês"}
-              </button>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}

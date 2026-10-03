@@ -86,13 +86,24 @@ export async function updateSession(request: NextRequest) {
    * o login com sessão válida. getSession lê o cookie, é local, e só corre
    * quando a verificação já falhou.
    */
-  if (!autenticado) {
+  const path = request.nextUrl.pathname;
+
+  /*
+   * Mas nunca para as rotas /api: getSession só lê o cookie, sem conferir a
+   * assinatura, e um cookie montado à mão passaria. Nas páginas isso não
+   * expõe dado — o RLS do banco recusa o token falso —, mas as rotas /api
+   * rodam no servidor com as chaves do YouTube e do Google Books e leem
+   * sites de fora. Ali só vale sessão verificada.
+   */
+  if (!autenticado && !path.startsWith("/api/")) {
     const { data } = await supabase.auth.getSession();
     autenticado = !!data.session;
   }
 
-  const path = request.nextUrl.pathname;
-  const isPublic = PUBLIC_PATHS.some((p) => path.startsWith(p));
+  /* Prefixo com a barra: "/auth" sozinho liberava também "/authqualquer". */
+  const isPublic = PUBLIC_PATHS.some(
+    (p) => path === p || path.startsWith(p + "/")
+  );
 
   if (!autenticado && !isPublic) {
     /*

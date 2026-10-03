@@ -79,6 +79,17 @@ export const dateTimeBR = (iso: string | null | undefined) => {
  * 3. **Só ponto, com qualquer outra quantidade de dígitos** → é decimal:
  *    `1234.56` → 1234.56, `1234.5` → 1234.5
  *
+ * E os casos que a regra acima ainda errava, achados na auditoria:
+ *
+ * - **Vírgula e ponto juntos** → o que vem por último é o decimal. O formato
+ *   americano `1,234.56` virava R$ 1,23 — mil vezes menos.
+ * - **`0.500`** → zero antes do ponto não é milhar de nada: é 0,50, e não 500.
+ * - **Vários pontos sem o último grupo de três** (`1.234.56`) → o último é
+ *   decimal: 1234,56, e não 1,234.
+ *
+ * O resultado sai arredondado a centavos: é o que o banco guarda, e a soma
+ * na tela não pode mostrar uma fração que o banco depois joga fora.
+ *
  * Devolve `NaN` quando não sobra número, para quem chama decidir o que dizer.
  */
 export const valorDigitado = (entrada: string | number): number => {
@@ -90,14 +101,38 @@ export const valorDigitado = (entrada: string | number): number => {
     .trim();
   if (!cru) return NaN;
 
-  if (cru.includes(",")) {
-    return parseFloat(cru.replace(/\./g, "").replace(",", "."));
+  const centavos = (n: number) =>
+    Number.isFinite(n) ? Math.round(n * 100) / 100 : NaN;
+  /* "1.234" + "56" → 1234.56; o sinal fica no começo do inteiro. */
+  const montar = (inteiro: string[], decimal: string) =>
+    parseFloat(inteiro.join("") + (decimal ? "." + decimal : ""));
+
+  const ponto = cru.lastIndexOf(".");
+  const virgula = cru.lastIndexOf(",");
+
+  if (ponto >= 0 && virgula >= 0) {
+    const dec = ponto > virgula ? "." : ",";
+    const mil = dec === "." ? "," : ".";
+    return centavos(parseFloat(cru.split(mil).join("").replace(dec, ".")));
   }
 
-  const pedacos = cru.split(".");
-  const ehMilhar = pedacos.length > 1 && pedacos[pedacos.length - 1].length === 3;
+  if (virgula >= 0) {
+    const p = cru.split(",");
+    /* Várias vírgulas, todas com três dígitos depois: milhar em inglês. */
+    if (p.length > 2 && p.slice(1).every((x) => x.length === 3))
+      return centavos(montar(p, ""));
+    return centavos(montar(p.slice(0, -1), p[p.length - 1]));
+  }
 
-  return parseFloat(ehMilhar ? pedacos.join("") : cru);
+  if (ponto >= 0) {
+    const p = cru.split(".");
+    const ultimo = p[p.length - 1];
+    const inteiro = p.slice(0, -1).join("").replace("-", "");
+    const ehMilhar = ultimo.length === 3 && /[1-9]/.test(inteiro);
+    return centavos(ehMilhar ? montar(p, "") : montar(p.slice(0, -1), ultimo));
+  }
+
+  return centavos(parseFloat(cru));
 };
 
 /**
@@ -268,3 +303,49 @@ export const rotuloDeLink = (v: string) => {
     return v.trim().slice(0, 28);
   }
 };
+
+/*
+ * Entidades HTML com nome que aparecem em título de site.
+ *
+ * O leitor de metatags só conhecia as do XML (&amp; &lt; &quot;...) e as
+ * numéricas. "Kodety &mdash; Crie sites HTML com IA" entrou assim no banco e
+ * aparecia com o código na tela, em Referências e no Início.
+ */
+const ENTIDADES: Record<string, string> = {
+  nbsp: " ",
+  mdash: "—",
+  ndash: "–",
+  hellip: "…",
+  lsquo: "‘",
+  rsquo: "’",
+  ldquo: "“",
+  rdquo: "”",
+  laquo: "«",
+  raquo: "»",
+  middot: "·",
+  bull: "•",
+  copy: "©",
+  reg: "®",
+  trade: "™",
+  quot: '"',
+  apos: "'",
+  lt: "<",
+  gt: ">",
+};
+
+/**
+ * Desfaz as entidades HTML de um texto — numéricas e com nome.
+ *
+ * `&amp;` fica para o fim, senão `&amp;lt;` viraria "<". Serve para o que o
+ * servidor lê de outros sites e para o que já foi gravado com entidade antes
+ * desta correção: os dois passam por aqui antes de chegar à tela.
+ */
+export function decodificarEntidades(v: string) {
+  return v
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&([a-z]+);/gi, (inteiro, nome: string) =>
+      nome.toLowerCase() === "amp" ? inteiro : (ENTIDADES[nome.toLowerCase()] ?? inteiro)
+    )
+    .replace(/&amp;/g, "&");
+}

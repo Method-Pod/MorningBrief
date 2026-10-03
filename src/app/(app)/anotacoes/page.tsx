@@ -427,7 +427,10 @@ export default function AnotacoesPage() {
     );
 
   const linha = (n: NotaDaLista) => (
-    <li key={n.id} className="group flex items-center gap-2.5">
+    <li
+      key={n.id}
+      className="card group flex items-center gap-2.5 px-4 transition-colors hover:bg-ink-850 sm:px-5"
+    >
       <Link
         href={`/anotacoes/${n.id}`}
         className="flex min-w-0 flex-1 items-center gap-2.5 py-2.5"
@@ -632,9 +635,10 @@ export default function AnotacoesPage() {
           />
         </Card>
       ) : (
-        <Card className="px-4 sm:px-5">
-          <ul className="divide-y divide-line-soft">{vista.map(linha)}</ul>
-        </Card>
+        /* Cada nota no seu próprio cartão, com um respiro entre elas. Numa
+           moldura só, separadas por um fio, elas se liam como uma tabela
+           contínua — pedido dele: separar. */
+        <ul className="flex flex-col gap-2">{vista.map(linha)}</ul>
       )}
 
       {/* ------------------------- edição rápida ------------------------- */}

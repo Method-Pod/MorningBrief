@@ -34,6 +34,21 @@ test("valorDigitado entende os dois jeitos de escrever dinheiro", () => {
   assert.ok(Number.isNaN(valorDigitado("R$")));
 });
 
+test("valorDigitado acerta os formatos que ainda erravam", () => {
+  /* Americano com milhar: virava R$ 1,23. */
+  assert.equal(valorDigitado("1,234.56"), 1234.56);
+  assert.equal(valorDigitado("$1,234,567.89"), 1234567.89);
+  /* Zero antes do ponto nao e milhar: virava 500. */
+  assert.equal(valorDigitado("0.500"), 0.5);
+  /* Varios pontos sem grupo de tres no fim: virava 1,234. */
+  assert.equal(valorDigitado("1.234.56"), 1234.56);
+  /* Milhar com virgula em ingles, sem decimal. */
+  assert.equal(valorDigitado("1,234,567"), 1234567);
+  /* Sai em centavos. */
+  assert.equal(valorDigitado("10,999"), 11);
+  assert.equal(valorDigitado("2.345"), 2345);
+});
+
 test("brl nunca escreve NaN na tela", () => {
   assert.equal(brl(0).replace(/\u00a0/g, " "), "R$ 0,00");
   assert.equal(brl(NaN).replace(/\u00a0/g, " "), "R$ 0,00");

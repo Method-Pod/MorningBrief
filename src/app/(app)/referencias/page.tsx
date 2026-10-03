@@ -14,6 +14,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { decodificarEntidades } from "@/lib/format";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { NADA_GRAVADO, recadoDeErro } from "@/lib/erros";
@@ -201,7 +202,14 @@ export default function ReferenciasPage() {
       return;
     }
     setFalta(null);
-    setRows((r.data as Referencia[]) ?? []);
+    /* Títulos gravados antes de o leitor conhecer &mdash; e afins vinham
+       com o código cru; desfaz na leitura, e editar regrava limpo. */
+    setRows(
+      ((r.data as Referencia[]) ?? []).map((x) => ({
+        ...x,
+        name: decodificarEntidades(x.name),
+      }))
+    );
     setColecoes((c.data as Colecao[]) ?? []);
     setLigacoes((l.data as ReferenciaColecao[]) ?? []);
     setLoading(false);

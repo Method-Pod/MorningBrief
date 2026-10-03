@@ -34,10 +34,11 @@ import {
   type TaskItem,
   type Cliente,
   type Projeto,
+  type RecurringTask,
   nomeDoCliente,
 } from "@/lib/types";
 import { dateBR, daysUntil, todayISO } from "@/lib/format";
-import { frequencyDescription } from "@/lib/recurring";
+import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import {
   Badge,
   Button,
@@ -53,6 +54,7 @@ import {
   useNotice,
   cx,
   EsqueletoLista,
+  ErroDeCarga,
 } from "@/components/ui";
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
 import { useArrastarCartao } from "@/components/arrastarCartao";
@@ -174,6 +176,7 @@ export default function DemandasPage() {
   const today = todayISO();
   const confirm = useConfirm();
   const notice = useNotice();
+  const [erroCarga, setErroCarga] = React.useState("");
 
   const load = React.useCallback(async () => {
     /*
@@ -192,6 +195,14 @@ export default function DemandasPage() {
       supabase.from("projetos").select("*").order("nome"),
     ]);
 
+    /* Sem as demandas não há tela: avisa e mantém o que já estava, em vez
+       de mostrar "Nenhuma demanda ainda" por causa de uma queda de rede. */
+    if (t.error) {
+      setErroCarga(t.error.message);
+      setLoading(false);
+      return;
+    }
+    setErroCarga("");
     setRows((t.data as Task[]) ?? []);
     setCadastro((c.data as Cliente[]) ?? []);
     setProjetos((pr.data as Projeto[]) ?? []);
@@ -405,6 +416,30 @@ export default function DemandasPage() {
       const weekly = form.frequency === "weekly" || form.frequency === "biweekly";
       const monthly = ["monthly", "quarterly", "yearly"].includes(form.frequency);
 
+      /*
+       * Só materializa hoje se a regra cai hoje.
+       *
+       * Criava a demanda de hoje sempre: uma mensal do dia 20 criada no dia 3
+       * nascia com uma demanda no dia 3 — e no dia 20 vinha outra. E gravar
+       * "rodou hoje" pulava a primeira de uma quinzenal ou trimestral. Fora do
+       * dia, a regra nasce sem nada e a primeira sai na data dela.
+       */
+      const regraNova = {
+        active: true,
+        last_run_on: null,
+        frequency: form.frequency,
+        weekday: weekly
+          ? form.frequency === "weekly"
+            ? Math.min(...form.weekdays)
+            : Number(form.weekday)
+          : null,
+        weekdays: form.frequency === "weekly" ? form.weekdays : null,
+        day_of_month: monthly
+          ? Math.min(31, Math.max(1, Number(form.day_of_month) || 1))
+          : null,
+      } as unknown as RecurringTask;
+      const venceHoje = isDueOn(regraNova, today);
+
       const { data: rule, error: ruleError } = await supabase
         .from("recurring_tasks")
         .insert({
@@ -438,7 +473,7 @@ export default function DemandasPage() {
             ? Math.min(31, Math.max(1, Number(form.day_of_month) || 1))
             : null,
           active: true,
-          last_run_on: today,
+          last_run_on: venceHoje ? today : null,
           /* O modelo só entra quando há itens: sem a migração, mandá-lo faria
              toda recorrente falhar, inclusive as sem checklist. */
           /* O modelo guarda só os títulos: cada ocorrência nasce desmarcada. */
@@ -465,6 +500,19 @@ export default function DemandasPage() {
             "Links precisam de supabase/LINK-NA-DEMANDA.sql no banco. Rode o arquivo ou deixe os campos vazios."
           );
         return setErr(ruleError?.message ?? "Não foi possível criar a recorrência.");
+      }
+
+      if (!venceHoje) {
+        const primeira = nextOccurrence(regraNova, today);
+        setBusy(false);
+        setOpen(false);
+        notice.show(
+          primeira
+            ? `Recorrência criada. A primeira demanda sai em ${dateBR(primeira).slice(0, 5)}.`
+            : "Recorrência criada.",
+          "ok"
+        );
+        return load();
       }
 
       const { data: hoje1, error: taskError } = await supabase
@@ -844,8 +892,16 @@ export default function DemandasPage() {
         <div>
           <h1 className="titulo-pagina">Demandas</h1>
           <p className="mt-1 text-sm text-fg-mute">
-            {openCount} aberta{openCount === 1 ? "" : "s"}
-            {lateCount > 0 && <span className="text-neg"> · {lateCount} atrasada{lateCount === 1 ? "" : "s"}</span>}
+            {/* Enquanto carrega, não diz "0 abertas": era um número falso
+                piscando antes do verdadeiro. */}
+            {loading ? (
+              "carregando…"
+            ) : (
+              <>
+                {openCount} aberta{openCount === 1 ? "" : "s"}
+                {lateCount > 0 && <span className="text-neg"> · {lateCount} atrasada{lateCount === 1 ? "" : "s"}</span>}
+              </>
+            )}
           </p>
         </div>
         {/*
@@ -899,8 +955,11 @@ export default function DemandasPage() {
           inteira acima dos filtros. */}
       <p className="mb-3 flex items-center gap-1.5 text-[11px] text-fg-mute sm:mb-4 sm:gap-2 sm:text-[12px]">
         <Info size={12} className="shrink-0" />
-        Concluídas saem às 6h da manhã.
+        {/* "Apagadas", e não "saem": elas não vão para lugar nenhum. */}
+        Concluídas são apagadas às 6h da manhã seguinte.
       </p>
+
+      {erroCarga && <ErroDeCarga detalhe={erroCarga} onTentar={load} />}
 
       <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
         {/* Cada tira rola de lado. Antes cada uma tomava uma faixa própria no
@@ -929,11 +988,15 @@ export default function DemandasPage() {
         {/* Dropdown e não Segmented: cliente é lista aberta — com seis canais
             os botões já quebrariam a linha dos filtros. O número é o que está
             em aberto, que é a pergunta real ("o que devo pro canal X"). */}
+        {/* No celular, cliente e busca dividem uma linha: eram duas faixas
+            cheias, e somadas aos filtros davam ~540px de controles antes da
+            primeira demanda. */}
+        <div className="flex w-full gap-2.5 sm:contents">
         {clientes.length > 1 && (
           <Select
             value={cliente}
             onChange={(e) => setCliente(e.target.value)}
-            className="w-full sm:w-[200px]"
+            className="min-w-0 flex-1 sm:w-[200px] sm:flex-none"
             aria-label="Filtrar por cliente"
           >
             {/*
@@ -977,7 +1040,7 @@ export default function DemandasPage() {
           </Select>
         )}
 
-        <div className="relative ml-auto w-full sm:w-64">
+        <div className="relative min-w-0 flex-1 sm:ml-auto sm:w-64 sm:flex-none">
           <Search
             size={14}
             className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
@@ -985,9 +1048,11 @@ export default function DemandasPage() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Buscar demanda ou cliente..."
+            placeholder="Buscar..."
+            aria-label="Buscar demanda ou cliente"
             className="pl-9"
           />
+        </div>
         </div>
       </div>
 

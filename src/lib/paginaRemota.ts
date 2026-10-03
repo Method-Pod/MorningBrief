@@ -21,6 +21,7 @@
  */
 
 import { enderecoPublico } from "./enderecoSeguro";
+import { decodificarEntidades } from "./format";
 
 /**
  * Chrome de Android.
@@ -186,13 +187,7 @@ export const metatag = (html: string, nome: string) => {
  * assim deixaria "Papo &amp; Elite" escrito na tela.
  */
 export function decodificarHtml(v: string) {
-  return v
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCharCode(parseInt(n, 16)))
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    /* `&amp;` fica para o fim, senão `&amp;lt;` viraria "<". */
-    .replace(/&amp;/g, "&");
+  /* As com nome (&mdash;, &nbsp;...) ficavam cruas. A regra mora em
+     lib/format para a tela também poder desfazer o que já foi gravado. */
+  return decodificarEntidades(v);
 }

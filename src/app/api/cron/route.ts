@@ -118,6 +118,7 @@ export async function GET(req: Request) {
     );
 
   const relatorio: Record<string, unknown>[] = [];
+  const falhas: string[] = [];
 
   for (const u of usuarios) {
     const opcoes = { userId: u.id, hoje };
@@ -139,14 +140,14 @@ export async function GET(req: Request) {
       estenderEventosRecorrentes(supabase, opcoes),
     ]);
 
-    const [concluidas, pagas, eventosAntigos] = await Promise.all([
+    const [concluidas, pagas, eventosAntigos, aulas] = await Promise.all([
       limparConcluidas(supabase, { userId: u.id }),
       limparPagasDeMesesAnteriores(supabase, opcoes),
       limparEventosPassados(supabase, opcoes),
       limparAulasAssistidas(supabase, { userId: u.id }),
     ]);
 
-    relatorio.push({
+    const linha = {
       usuario: u.email ?? u.id,
       demandasRecorrentesCriadas: demandas,
       contasFixasLancadas: fixas,
@@ -154,13 +155,30 @@ export async function GET(req: Request) {
       demandasConcluidasApagadas: concluidas,
       contasPagasApagadas: pagas,
       eventosPassadosApagados: eventosAntigos,
-    });
+      aulasAssistidasApagadas: aulas,
+    };
+    relatorio.push(linha);
+
+    /* null = a rotina falhou (cada uma devolve null no erro, 0 quando não
+       havia nada a fazer). */
+    const falharam = Object.entries(linha)
+      .filter(([k, v]) => k !== "usuario" && v === null)
+      .map(([k]) => k);
+    if (falharam.length) falhas.push(`${linha.usuario}: ${falharam.join(", ")}`);
   }
 
-  return NextResponse.json({
-    ok: true,
-    hoje,
-    usuarios: usuarios.length,
-    relatorio,
-  });
+  /*
+   * Falha aparece como falha.
+   *
+   * A rota respondia 200 com `ok: true` mesmo quando uma rotina devolvia null,
+   * e não escrevia nada no log: se a manutenção parasse — contas fixas sem
+   * lançar, demandas recorrentes sem nascer —, ninguém ficaria sabendo. Agora
+   * o resultado vai para o log da Vercel sempre, e uma falha responde 500,
+   * que é o que faz a Vercel marcar a execução do cron como falha.
+   */
+  const ok = falhas.length === 0;
+  const corpo = { ok, hoje, usuarios: usuarios.length, falhas, relatorio };
+  if (ok) console.log("[cron] manutenção ok", JSON.stringify(corpo));
+  else console.error("[cron] manutenção com falha", JSON.stringify(corpo));
+  return NextResponse.json(corpo, { status: ok ? 200 : 500 });
 }

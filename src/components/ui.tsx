@@ -782,6 +782,54 @@ export function Empty({
   );
 }
 
+/* ---------------------------- Erro de carga ---------------------------- */
+
+/*
+ * A faixa que diz "não carregou" — em vez de a tela mostrar vazio.
+ *
+ * As consultas das telas ignoravam o erro: uma falha de rede virava lista
+ * vazia e R$ 0,00, apresentados como se fossem a verdade. Numa tela de
+ * dinheiro isso é pior do que quebrar, porque ninguém desconfia de um zero
+ * bem formatado. Com a faixa, a tela continua mostrando o que já tinha e
+ * avisa que aquilo pode estar velho.
+ */
+export function ErroDeCarga({
+  detalhe,
+  onTentar,
+  className,
+}: {
+  detalhe?: string;
+  onTentar?: () => void;
+  className?: string;
+}) {
+  return (
+    <div
+      role="alert"
+      className={cx(
+        "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] border border-neg/30 bg-neg/10 px-4 py-3 text-[13px] text-fg",
+        className
+      )}
+    >
+      <span className="h-2 w-2 shrink-0 rounded-full bg-neg" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <strong className="font-semibold">Não deu para carregar.</strong>{" "}
+        <span className="text-fg-dim">
+          O que aparece pode estar desatualizado
+          {detalhe ? ` (${detalhe})` : ""}.
+        </span>
+      </span>
+      {onTentar && (
+        <button
+          onClick={onTentar}
+          className="rounded-[10px] bg-neg/15 px-3 py-1.5 text-[12.5px] font-semibold text-neg transition-colors hover:bg-neg/25"
+        >
+          Tentar de novo
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------ Skeleton ------------------------------ */
 
 export function Skeleton({ className }: { className?: string }) {
@@ -929,12 +977,33 @@ export function useConfirm() {
  * Supabase: se o RLS ou a rede recusasse, a lista recarregava igual e a pessoa
  * achava que tinha dado certo. Agora a falha aparece.
  */
+/*
+ * O tom do aviso.
+ *
+ * Era um só, vermelho, para tudo: "12 aulas importadas" saía na mesma cor de
+ * "não foi possível salvar", e vermelho em acerto ensina a ignorar vermelho.
+ * Agora erro é vermelho, acerto é verde e informação é neutra. A tinta em
+ * cima das cores é `sobre-cor`, que é escura no tema escuro — branco sobre o
+ * rosa do escuro dava 2:1, ilegível.
+ */
+export type TomDoAviso = "erro" | "ok" | "info";
+
+const TOM_DO_AVISO: Record<TomDoAviso, string> = {
+  erro: "bg-neg text-sobre-cor",
+  ok: "bg-pos text-sobre-cor",
+  info: "bg-ink-850 text-fg border border-line",
+};
+
 export function useNotice() {
-  const [msg, setMsg] = React.useState("");
+  const [aviso, setAviso] = React.useState<{ msg: string; tom: TomDoAviso }>({
+    msg: "",
+    tom: "erro",
+  });
+  const msg = aviso.msg;
 
   React.useEffect(() => {
     if (!msg) return;
-    const id = setTimeout(() => setMsg(""), 5000);
+    const id = setTimeout(() => setAviso((a) => ({ ...a, msg: "" })), 5000);
     return () => clearTimeout(id);
   }, [msg]);
 
@@ -944,7 +1013,10 @@ export function useNotice() {
    * usa; um `load` com `notice` nas dependências viraria um laço de releituras
    * sem fim. Estáveis, o laço não tem como nascer.
    */
-  const show = React.useCallback((m: string) => setMsg(m), []);
+  const show = React.useCallback(
+    (m: string, tom: TomDoAviso = "erro") => setAviso({ msg: m, tom }),
+    []
+  );
 
   /** Passa o erro do Supabase; devolve true quando houve falha. */
   const check = React.useCallback(
@@ -965,8 +1037,11 @@ export function useNotice() {
     msg && mounted
       ? createPortal(
           <div
-            role="status"
-            className="fixed bottom-5 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full bg-neg px-4 py-3 text-center text-xs font-medium text-white shadow-[var(--elev-3)] pop"
+            role={aviso.tom === "erro" ? "alert" : "status"}
+            className={cx(
+              "fixed bottom-5 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full px-4 py-3 text-center text-xs font-semibold shadow-[var(--elev-3)] pop",
+              TOM_DO_AVISO[aviso.tom]
+            )}
           >
             {msg}
           </div>,

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Check,
+  Download,
   KeyRound,
   LogOut,
   Mail,
@@ -64,8 +65,8 @@ export default function ContaPage() {
 
   /*
    * Troca de senha por link no e-mail, não por campo aqui.
-   * A senha nova nunca passa por esta tela: o Supabase manda o link e a
-   * pessoa define no fluxo dele.
+   * O link leva a /auth/nova-senha, que é onde a senha nova é escrita. Antes
+   * ele voltava para /login, que não tinha esse campo — o link não servia.
    */
   const trocarSenha = async () => {
     if (!perfil?.email) return;
@@ -73,7 +74,7 @@ export default function ContaPage() {
     setAviso("");
     setEnviando(true);
     const { error } = await supabase.auth.resetPasswordForEmail(perfil.email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/auth/nova-senha`,
     });
     setEnviando(false);
     if (error) return setErro(error.message);
@@ -250,6 +251,9 @@ export default function ContaPage() {
           </div>
         </Card>
 
+        {/* ------------------------------ seus dados ------------------------------ */}
+        <ExportarDados />
+
         {/* ------------------------------ segurança ------------------------------ */}
         <Card>
           <Cabeca icon={<KeyRound size={14} />} titulo="Acesso" />
@@ -284,6 +288,150 @@ export default function ContaPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+/* ------------------------------ exportar ------------------------------ */
+
+/*
+ * Todas as tabelas do app. Uma tabela que ainda não exista no banco (SQL não
+ * rodado) entra no arquivo como erro, sem impedir as outras.
+ */
+const TABELAS = [
+  "bills",
+  "cartoes",
+  "bill_categories",
+  "tasks",
+  "task_items",
+  "clientes",
+  "projetos",
+  "recurring_tasks",
+  "events",
+  "habits",
+  "habit_logs",
+  "notes",
+  "note_categories",
+  "note_in_category",
+  "referencias",
+  "colecoes",
+  "referencia_colecao",
+  "books",
+  "reading_sessions",
+  "reading_goals",
+  "lessons",
+  "courses",
+  "subjects",
+  "lesson_goals",
+  "channels",
+] as const;
+
+/*
+ * Cópia de tudo num arquivo .json, baixado no aparelho.
+ *
+ * Até aqui não havia como tirar os dados do app: sem lixeira, com a limpeza
+ * das 6h apagando de verdade, um clique errado ou um defeito virava perda
+ * sem volta. O arquivo é o backup que o próprio dono guarda. Lê de 1000 em
+ * 1000 porque esse é o teto de linhas por consulta do Supabase.
+ */
+function ExportarDados() {
+  const supabase = React.useMemo(() => createClient(), []);
+  const [ocupado, setOcupado] = React.useState(false);
+  const [resultado, setResultado] = React.useState<
+    { ok: true; linhas: number; falhas: string[] } | { ok: false; erro: string } | null
+  >(null);
+
+  const exportar = async () => {
+    setOcupado(true);
+    setResultado(null);
+    try {
+      const tabelas: Record<string, unknown[] | { erro: string }> = {};
+      const falhas: string[] = [];
+      let linhas = 0;
+      for (const t of TABELAS) {
+        const todas: unknown[] = [];
+        let erro = "";
+        for (let de = 0; ; de += 1000) {
+          const { data, error } = await supabase
+            .from(t)
+            .select("*")
+            .range(de, de + 999);
+          if (error) {
+            erro = error.message;
+            break;
+          }
+          todas.push(...(data ?? []));
+          if (!data || data.length < 1000) break;
+        }
+        if (erro) {
+          tabelas[t] = { erro };
+          falhas.push(t);
+        } else {
+          tabelas[t] = todas;
+          linhas += todas.length;
+        }
+      }
+      const hoje = new Date().toISOString().slice(0, 10);
+      const arquivo = new Blob(
+        [
+          JSON.stringify(
+            { app: "morning-brief", exportado_em: new Date().toISOString(), tabelas },
+            null,
+            2
+          ),
+        ],
+        { type: "application/json" }
+      );
+      const url = URL.createObjectURL(arquivo);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `morning-brief-${hoje}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setResultado({ ok: true, linhas, falhas });
+    } catch (e) {
+      setResultado({ ok: false, erro: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <Card>
+      <Cabeca icon={<Download size={14} />} titulo="Seus dados" />
+      <div className="px-[18px] pb-[18px] pt-3">
+        <p className="text-[13px] text-fg-mute">
+          Baixa uma cópia de tudo — contas, demandas, agenda, notas, livros,
+          aulas — num arquivo .json. Guarde num lugar seguro: é o seu backup.
+        </p>
+
+        {resultado?.ok && (
+          <p
+            className={cx(
+              "mt-3 rounded-[14px] px-3.5 py-3 text-xs font-medium",
+              resultado.falhas.length ? "bg-warn/12 text-warn" : "bg-pos/12 text-pos"
+            )}
+          >
+            {resultado.linhas.toLocaleString("pt-BR")} registros exportados.
+            {resultado.falhas.length > 0 &&
+              ` Não deu para ler: ${resultado.falhas.join(", ")}.`}
+          </p>
+        )}
+        {resultado && !resultado.ok && (
+          <p className="mt-3 rounded-[14px] bg-neg/12 px-3.5 py-3 text-xs font-medium text-neg">
+            A exportação falhou: {resultado.erro}
+          </p>
+        )}
+
+        <div className="mt-4">
+          <Button onClick={exportar} disabled={ocupado}>
+            <Download size={15} />
+            {ocupado ? "Exportando..." : "Exportar tudo"}
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
 

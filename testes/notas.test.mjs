@@ -99,4 +99,9 @@ test("decodificarHtml desfaz as entidades na ordem certa", () => {
   assert.equal(decodificarHtml("&quot;x&quot;"), '"x"');
   /* `&amp;lt;` e um "&lt;" escrito literalmente: nao pode virar "<". */
   assert.equal(decodificarHtml("&amp;lt;"), "&lt;");
+  /* As com nome ficavam cruas: "Kodety &mdash; Crie sites" na tela. */
+  assert.equal(decodificarHtml("Kodety &mdash; Crie sites"), "Kodety — Crie sites");
+  assert.equal(decodificarHtml("A&nbsp;B &hellip;"), "A B …");
+  /* Desconhecida fica como esta, em vez de sumir. */
+  assert.equal(decodificarHtml("&naoexiste;"), "&naoexiste;");
 });

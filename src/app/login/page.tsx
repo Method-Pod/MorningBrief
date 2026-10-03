@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-type Modo = "entrar" | "criar" | "recuperar";
+type Modo = "entrar" | "recuperar";
 
 const MENSAGENS: Record<string, string> = {
   "Invalid login credentials": "E-mail ou senha incorretos.",
@@ -36,11 +36,6 @@ const TEXTOS: Record<Modo, { titulo: string; sub: string; acao: string }> = {
     sub: "Entre para ver o brief de hoje.",
     acao: "Entrar",
   },
-  criar: {
-    titulo: "Criar conta",
-    sub: "Leva menos de um minuto.",
-    acao: "Criar conta",
-  },
   recuperar: {
     titulo: "Recuperar acesso",
     sub: "Enviamos um link para você definir uma senha nova.",
@@ -51,10 +46,38 @@ const TEXTOS: Record<Modo, { titulo: string; sub: string; acao: string }> = {
 const campo =
   "h-12 w-full rounded-[14px] border border-line bg-ink-900 text-[15px] outline-none transition-colors focus:border-brand-500";
 
+/*
+ * Para onde ir depois de entrar, só se for um caminho deste app.
+ *
+ * O `next` vinha direto da URL para o router: um link com
+ * `?next=https://outro-site` levava a pessoa para fora logo depois de digitar
+ * a senha. `//host` é a mesma armadilha escrita sem o protocolo.
+ */
+function destinoSeguro(bruto: string | null) {
+  if (!bruto || !bruto.startsWith("/") || bruto.startsWith("//") || bruto.startsWith("/\\"))
+    return "/";
+  return bruto;
+}
+
 function Formulario() {
   const router = useRouter();
   const params = useSearchParams();
-  const proximo = params.get("next") || "/";
+  const proximo = destinoSeguro(params.get("next"));
+
+  /*
+   * Se o Supabase não aceitar /auth/nova-senha como destino do link, ele
+   * manda para o endereço padrão do site, e o middleware traz a pessoa para
+   * cá com o `?code=` ainda na URL. O cliente troca o código ao iniciar e
+   * avisa PASSWORD_RECOVERY: é a deixa para seguir para a tela da senha nova
+   * em vez de deixar a pessoa num formulário de entrar que não serve.
+   */
+  React.useEffect(() => {
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+    const { data } = createClient().auth.onAuthStateChange((evento) => {
+      if (evento === "PASSWORD_RECOVERY") router.replace("/auth/nova-senha");
+    });
+    return () => data.subscription.unsubscribe();
+  }, [router]);
 
   const configurado =
     !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -93,27 +116,10 @@ function Formulario() {
         return;
       }
 
-      if (modo === "criar") {
-        const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
-          password: senha,
-        });
-        if (error) throw error;
-        if (data.session) {
-          router.replace(proximo);
-          router.refresh();
-          return;
-        }
-        setOk(
-          "Conta criada. Confirme pelo link que enviamos ao seu e-mail para entrar."
-        );
-        setModo("entrar");
-      }
-
       if (modo === "recuperar") {
         const { error } = await supabase.auth.resetPasswordForEmail(
           email.trim(),
-          { redirectTo: `${window.location.origin}/login` }
+          { redirectTo: `${window.location.origin}/auth/nova-senha` }
         );
         if (error) throw error;
         setOk("Link enviado. Confira sua caixa de entrada.");
@@ -250,7 +256,7 @@ function Formulario() {
                 <label className="block">
                   <span className="mb-1.5 flex items-baseline justify-between">
                     <span className="text-[12.5px] font-semibold text-fg-dim">
-                      {modo === "criar" ? "Crie uma senha" : "Sua senha"}
+                      Sua senha
                     </span>
                     {modo === "entrar" && (
                       <button
@@ -265,9 +271,7 @@ function Formulario() {
                   <span className="relative block">
                     <input
                       type={vendo ? "text" : "password"}
-                      autoComplete={
-                        modo === "criar" ? "new-password" : "current-password"
-                      }
+                      autoComplete="current-password"
                       required
                       minLength={6}
                       value={senha}
@@ -284,11 +288,6 @@ function Formulario() {
                       {vendo ? <EyeOff size={17} /> : <Eye size={17} />}
                     </button>
                   </span>
-                  {modo === "criar" && (
-                    <span className="mt-1.5 block text-[11.5px] text-fg-mute">
-                      Mínimo 6 caracteres.
-                    </span>
-                  )}
                 </label>
               )}
 
@@ -321,29 +320,20 @@ function Formulario() {
               </button>
             </form>
 
-            <p className="mt-7 text-center text-[13px] text-fg-mute">
-              {modo === "entrar" ? (
-                <>
-                  Não tem conta?{" "}
-                  <button
-                    onClick={() => trocaModo("criar")}
-                    className="font-bold text-fg underline"
-                  >
-                    Criar agora
-                  </button>
-                </>
-              ) : (
-                <>
-                  Já tem conta?{" "}
-                  <button
-                    onClick={() => trocaModo("entrar")}
-                    className="font-bold text-fg underline"
-                  >
-                    Entrar
-                  </button>
-                </>
-              )}
-            </p>
+            {/* Sem "Criar conta": o app é de uma pessoa só, e o convite para
+                criar conta abria a porta para qualquer um que achasse o
+                endereço ganhar login, espaço nos buckets e as cotas das
+                chaves do Google. */}
+            {modo !== "entrar" && (
+              <p className="mt-7 text-center text-[13px] text-fg-mute">
+                <button
+                  onClick={() => trocaModo("entrar")}
+                  className="font-bold text-fg underline"
+                >
+                  Voltar para entrar
+                </button>
+              </p>
+            )}
           </div>
         </div>
       </div>

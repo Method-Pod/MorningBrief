@@ -363,7 +363,8 @@ export default function CalendarioPage() {
             error = { message: NADA_GRAVADO };
           if (!error && irmas?.length)
             notice.show(
-              `Alterado em ${irmas.length + 1} ocorrências da repetição.`
+              `Alterado em ${irmas.length + 1} ocorrências da repetição.`,
+              "ok"
             );
         }
       }
@@ -421,7 +422,8 @@ export default function CalendarioPage() {
 
       if (!error && extras.length)
         notice.show(
-          `${extras.length + 1} ocorrências criadas, até o fim do mês que vem.`
+          `${extras.length + 1} ocorrências criadas, até o fim do mês que vem.`,
+          "ok"
         );
     }
     setBusy(false);

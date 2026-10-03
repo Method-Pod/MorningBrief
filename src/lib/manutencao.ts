@@ -18,21 +18,43 @@ const paraISO = (d: Date) =>
  * roda também no servidor, na rota do cron, e importar de um componente
  * "use client" arrastaria React para lá.
  */
-const mesesAdiante = (iso: string, n: number) => {
+const mesesAdiante = (iso: string, n: number, dia?: number) => {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
   const alvo = m - 1 + n;
   const ano = y + Math.floor(alvo / 12);
   const mes = (alvo % 12) + 1;
   const ultimo = new Date(ano, mes, 0).getDate();
-  return `${ano}-${pad(mes)}-${pad(Math.min(d, ultimo))}`;
+  return `${ano}-${pad(mes)}-${pad(Math.min(dia ?? d, ultimo))}`;
 };
+
+const ultimoDiaDoMes = (iso: string) => {
+  const [y, m] = iso.slice(0, 10).split("-").map(Number);
+  return new Date(y, m, 0).getDate();
+};
+
+/**
+ * O dia do mês em que uma série mensal realmente vence.
+ *
+ * O próximo lançamento parte do último, e o último pode ter sido encolhido:
+ * uma conta do dia 31 cai em 28 de fevereiro, e calcular março a partir dali
+ * dava 28 de março, 28 de abril — o dia 31 sumia para sempre depois do
+ * primeiro mês curto.
+ *
+ * Quando a última ocorrência caiu no último dia do mês dela, pode ser que ela
+ * tenha sido encolhida; aí o dia certo é o maior dia visto na série. Fora
+ * desse caso, vale o dia da última — que é também o que respeita uma conta
+ * que a pessoa mudou de dia de propósito.
+ *
+ * Exportada para o teste.
+ */
+export function diaDaSerie(datas: string[], ultima: string): number {
+  const dia = Number(ultima.slice(8, 10));
+  if (dia !== ultimoDiaDoMes(ultima)) return dia;
+  return Math.max(dia, ...datas.map((d) => Number(d.slice(8, 10))));
+}
 
 const mesDe = (iso: string) => iso.slice(0, 7);
 
-const mesSeguinte = (mes: string) => {
-  const [y, m] = mes.split("-").map(Number);
-  return m === 12 ? `${y + 1}-01` : `${y}-${pad(m + 1)}`;
-};
 
 const distanciaEmMeses = (de: string, para: string) => {
   const [ay, am] = de.split("-").map(Number);
@@ -46,16 +68,31 @@ export const JANELA_REPOSICAO = 7;
 /* ------------------------------ contas fixas ------------------------------ */
 
 /**
- * Garante que cada conta fixa tenha o lançamento do mês que vem.
+ * Garante que cada conta fixa tenha o lançamento do mês corrente.
  *
- * Só o mês que vem, e não vários de uma vez: lançar seis meses à frente enche
- * o banco de linhas que ninguém vai olhar hoje e deixa a lista pesada. Como
- * isto roda todo dia, na virada de cada mês o seguinte aparece sozinho — o
- * resultado prático é uma fila sempre de um mês, sem acumular.
+ * O mês entra no dia 1º: a automação das 6h roda todo dia, e no primeiro dia
+ * do mês ela encontra as fixas sem o lançamento do mês e cria. Nos outros dias
+ * não há nada a fazer — e, se o dia 1º falhar, o dia 2 cobre.
+ *
+ * Antes o lançamento vinha um mês adiantado, e a tela ainda oferecia um botão
+ * "Lançar próximo mês". O pedido foi o contrário: o mês aparece sozinho no
+ * dia 1º, sem clique nenhum.
  *
  * A série é identificada pela descrição, que é o que liga os lançamentos neste
  * modelo. O novo lançamento copia valor, categoria e observações do mais
  * recente da série, e nasce em aberto.
+ *
+ * Quem decide se a série continua é o lançamento MAIS RECENTE dela, fixo ou
+ * não. Antes só as fixas eram lidas: desmarcar "fixa" na conta de novembro
+ * não parava nada, porque a de outubro, já paga, continuava fixa e virava a
+ * "última" — e novembro era lançado de novo, duplicado. Agora:
+ *
+ * - a mais recente não é fixa → a série acabou;
+ * - a mais recente é parcela → a série é de parcelas, e parcela tem fim
+ *   (uma conta marcada "fixa" e "parcelada" seguia cobrando depois da última);
+ * - qualquer lançamento com a mesma descrição no mês alvo, fixo ou não,
+ *   conta como "já tem" — é o que impede a duplicata quando alguém lançou o
+ *   mês na mão.
  *
  * Devolve quantos lançamentos foram criados, ou null se falhou.
  */
@@ -64,28 +101,37 @@ export async function lancarProximoMesDasFixas(
   opcoes: { userId?: string; hoje?: string } = {}
 ): Promise<number | null> {
   const hoje = opcoes.hoje ?? todayISO();
-  const alvo = mesSeguinte(mesDe(hoje));
+  const alvo = mesDe(hoje);
 
-  let consulta = supabase.from("bills").select("*").eq("recurring", true);
+  let consulta = supabase.from("bills").select("*");
   if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
   const { data, error } = await consulta;
   if (error) return null;
 
   const contas = (data as Bill[]) ?? [];
-  if (!contas.length) return 0;
+  if (!contas.some((b) => b.recurring)) return 0;
 
-  /* Última ocorrência de cada série, e se o mês alvo já existe. */
-  const ultima = new Map<string, Bill>();
-  const jaTem = new Set<string>();
+  /* Por pessoa e descrição: numa passada sem filtro de usuário, o "Aluguel"
+     de um não pode esconder o do outro. */
+  const chave = (b: Bill) => `${b.user_id}\u0000${b.description}`;
+  const series = new Map<string, Bill[]>();
   contas.forEach((b) => {
-    if (mesDe(b.due_date) === alvo) jaTem.add(b.description);
-    const atual = ultima.get(b.description);
-    if (!atual || b.due_date > atual.due_date) ultima.set(b.description, b);
+    const lista = series.get(chave(b));
+    if (lista) lista.push(b);
+    else series.set(chave(b), [b]);
   });
 
-  const novas = [...ultima.values()]
-    .filter((b) => !jaTem.has(b.description))
-    .map((b) => {
+  const novas = [...series.values()]
+    .map((lista) => {
+      if (lista.some((b) => mesDe(b.due_date) === alvo)) return null;
+      const b = lista.reduce((a, c) =>
+        c.due_date > a.due_date || (c.due_date === a.due_date && c.recurring) ? c : a
+      );
+      if (!b.recurring || b.installment_total != null) return null;
+      return { b, dia: diaDaSerie(lista.map((x) => x.due_date), b.due_date) };
+    })
+    .filter((x): x is { b: Bill; dia: number } => x !== null)
+    .map(({ b, dia }) => {
       const n = distanciaEmMeses(mesDe(b.due_date), alvo);
       /*
        * n <= 0 significa que a série já passou do mês alvo — acontece quando
@@ -108,7 +154,7 @@ export async function lancarProximoMesDasFixas(
          * informar". Ver `semValorAinda` em lib/types.
          */
         amount: b.valor_variavel ? 0 : Number(b.amount),
-        due_date: mesesAdiante(b.due_date, n),
+        due_date: mesesAdiante(b.due_date, n, dia),
         category: b.category,
         status: "pending",
         notes: b.notes,
@@ -130,8 +176,9 @@ export async function lancarProximoMesDasFixas(
     .insert(novas)
     .select("id");
 
-  /* 23505: o índice único pegou uma corrida entre duas abas. Já existe, tudo
-     bem — não é falha. */
+  /* 23505: o índice único de supabase/CONTAS-SEM-DUPLICATA.sql pegou uma
+     corrida entre o cron e uma aba aberta. Já existe, tudo bem — não é
+     falha. Sem o índice, a corrida passa e a conta sai duas vezes. */
   if (erroInsert) return erroInsert.code === "23505" ? 0 : null;
   return criadas?.length ?? 0;
 }
@@ -187,15 +234,19 @@ export async function reporRecorrentesPerdidas(
    * garante que duas abas não criem a mesma demanda duas vezes.
    */
   const porRegra = await Promise.all(regras.map((r) => umaRegra(supabase, r, hoje)));
-  return porRegra.reduce((s, n) => s + n, 0);
+  /* Uma regra que falhou faz a passada inteira contar como falha: antes ela
+     virava 0, igual a "nada a fazer", e o dia era marcado como feito. */
+  if (porRegra.some((n) => n === null)) return null;
+  return porRegra.reduce<number>((s, n) => s + (n ?? 0), 0);
 }
 
-/** Repõe o que uma regra perdeu. Devolve quantas demandas nasceram. */
+/** Repõe o que uma regra perdeu. Devolve quantas demandas nasceram, ou null
+ *  se a gravação falhou. */
 async function umaRegra(
   supabase: SupabaseClient,
   r: RecurringTask,
   hoje: string
-): Promise<number> {
+): Promise<number | null> {
   const datas = datasPendentes(r, hoje);
   if (!datas.length) return 0;
 
@@ -221,6 +272,13 @@ async function umaRegra(
         title: r.title,
         description: r.description,
         client: r.client,
+        /* O vínculo com o cadastro vai junto. Sem ele a demanda gerada só
+           tinha o nome do cliente em texto, e a tela de Clientes não a
+           contava — "Universo Lubrificantes: nada em aberto" com a demanda
+           dele aberta no Início. Só quando existem, pelo mesmo motivo dos
+           links abaixo. */
+        ...(r.cliente_id ? { cliente_id: r.cliente_id } : {}),
+        ...(r.projeto_id ? { projeto_id: r.projeto_id } : {}),
         priority: r.priority,
         status: "todo",
         due_date: d,
@@ -241,7 +299,7 @@ async function umaRegra(
       .from("recurring_tasks")
       .update({ last_run_on: r.last_run_on })
       .eq("id", r.id);
-    return 0;
+    return null;
   }
 
   /*
@@ -326,11 +384,14 @@ export function ocorrenciasDeEvento({
   fim,
   recorrencia,
   limite,
+  diaDoMes,
 }: {
   inicio: string;
   fim: string | null;
   recorrencia: EventRecurrence;
   limite: Date;
+  /** No mensal, o dia em que a série cai; ausente = o dia da partida. */
+  diaDoMes?: number;
 }): { start_at: string; end_at: string | null }[] {
   if (recorrencia === "none") return [];
 
@@ -351,7 +412,7 @@ export function ocorrenciasDeEvento({
         alvo.getMonth() + 1,
         0
       ).getDate();
-      alvo.setDate(Math.min(base.getDate(), ultimoDia));
+      alvo.setDate(Math.min(diaDoMes ?? base.getDate(), ultimoDia));
       alvo.setHours(base.getHours(), base.getMinutes(), 0, 0);
       proximo = alvo;
     } else {
@@ -408,12 +469,16 @@ export async function estenderEventosRecorrentes(
   const eventos = (data as CalendarEvent[]) ?? [];
   if (!eventos.length) return 0;
 
-  /* Última ocorrência de cada série. */
+  /* Última ocorrência de cada série, e as datas de todas elas. */
   const ultima = new Map<string, CalendarEvent>();
+  const datas = new Map<string, string[]>();
   eventos.forEach((e) => {
     if (!e.series_id) return;
     const atual = ultima.get(e.series_id);
     if (!atual || e.start_at > atual.start_at) ultima.set(e.series_id, e);
+    const lista = datas.get(e.series_id) ?? [];
+    lista.push(paraISO(new Date(e.start_at)));
+    datas.set(e.series_id, lista);
   });
 
   const novas = [...ultima.values()].flatMap((e) =>
@@ -422,6 +487,12 @@ export async function estenderEventosRecorrentes(
       fim: e.end_at,
       recorrencia: e.recurrence,
       limite,
+      /* Mesmo cuidado das contas fixas: a última do dia 31 pode ter caído
+         em 30 ou 28, e partir dela perderia o 31 para sempre. */
+      diaDoMes:
+        e.recurrence === "monthly"
+          ? diaDaSerie(datas.get(e.series_id!) ?? [], paraISO(new Date(e.start_at)))
+          : undefined,
     }).map((o) => ({
       user_id: e.user_id,
       title: e.title,

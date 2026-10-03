@@ -539,7 +539,7 @@ export default function LeituraPage() {
     const nova = Number(cru);
     if (!cru || !Number.isFinite(nova) || nova < 0) return;
     if (livro.total_pages && nova > livro.total_pages)
-      return notice.show(`"${livro.title}" tem ${livro.total_pages} páginas.`);
+      return notice.show(`"${livro.title}" tem ${livro.total_pages} páginas.`, "info");
 
     setGravando(livro.id);
     const uid = await currentUserId(supabase);
@@ -606,7 +606,7 @@ export default function LeituraPage() {
           : h
       );
     }
-    if (terminou) notice.show(`"${livro.title}" lido. Boa.`);
+    if (terminou) notice.show(`"${livro.title}" lido. Boa.`, "ok");
   };
 
   /**

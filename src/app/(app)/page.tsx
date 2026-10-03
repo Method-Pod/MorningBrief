@@ -4,8 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import {
   AlertCircle,
-  BookOpen,
-  GraduationCap,
   Library,
   CalendarDays,
   CheckCircle2,
@@ -18,8 +16,6 @@ import {
   Trash2,
   Wallet,
   Zap,
-  Check,
-  Repeat,
 } from "lucide-react";
 import { Clima } from "@/components/Clima";
 import { Explicacao, Ressalva } from "@/components/Explicacao";
@@ -39,11 +35,11 @@ import {
   dataCurta,
   dateBR,
   daysUntil,
+  decodificarEntidades,
   greeting,
   inicioDeOntem,
   localDay,
   localTime,
-  semanaDe,
   todayISO,
   valorDigitado,
 } from "@/lib/format";
@@ -63,34 +59,11 @@ import {
 } from "@/lib/manutencao";
 import { Card, useNotice, cx,
   EsqueletoPagina,
+  ErroDeCarga,
 } from "@/components/ui";
 import { useIdentity } from "@/components/identity";
 
-/*
- * Recortes das duas tabelas novas.
- *
- * O painel lê só as colunas que mostra, e não a linha inteira: a descrição de
- * um livro tem parágrafos, e trazê-la para desenhar uma barra de progresso
- * seria payload por nada. Foi a mesma razão de `BookLista` na estante.
- */
-type Livro = {
-  id: string;
-  title: string;
-  authors: string | null;
-  cover_url: string | null;
-  total_pages: number | null;
-  current_page: number;
-};
-
-type Habito = { id: string; name: string; color: string };
-
-type Aula = {
-  id: string;
-  title: string;
-  canal: string | null;
-  thumb_url: string | null;
-};
-
+/* Recorte das referências: só as colunas que o cartão mostra. */
 type Ref = {
   id: string;
   name: string;
@@ -108,6 +81,11 @@ const PRIO_DOT: Record<string, string> = {
   low: "bg-ink-600",
 };
 const PRIO_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
+const REPETE: Record<string, string> = {
+  weekly: "toda semana",
+  biweekly: "a cada 2 semanas",
+  monthly: "todo mês",
+};
 
 export default function HomePage() {
   const supabase = React.useMemo(() => createClient(), []);
@@ -147,27 +125,14 @@ export default function HomePage() {
    */
   const [events, setEvents] = useEstadoCacheado<CalendarEvent[]>("painel_eventos", []);
   const [notes, setNotes] = useEstadoCacheado<Note[]>("painel_notas", []);
-  const [lendo, setLendo] = useEstadoCacheado<Livro[]>("painel_lendo", []);
   const [refs, setRefs] = useEstadoCacheado<Ref[]>("painel_refs", []);
   /*
-   * Hábitos no brief da manhã.
-   *
-   * O brief tinha Hoje, Contas e Agenda — e não tinha hábitos, que é
-   * justamente a coisa que se marca de manhã. Para dar baixa num hábito era
-   * preciso lembrar sozinho de abrir outra aba, o que anula o sentido de
-   * existir um brief: ele deveria ser o único lugar que se olha ao acordar.
+   * Hábitos, Aulas e Leitura saíram do Início — pedido dele: continuam no
+   * menu, cada um com a sua tela, mas o brief fica com o que vence (dinheiro,
+   * prazos, agenda). As consultas saíram junto: o Início não busca mais o que
+   * não mostra.
    */
-  const [aulas, setAulas] = useEstadoCacheado<Aula[]>("painel_aulas", []);
-  const [aulasNaSemana, setAulasNaSemana] = useEstadoCacheado<number>(
-    "painel_aulas_semana",
-    0
-  );
-  const [metaAulas, setMetaAulas] = useEstadoCacheado<number>(
-    "painel_aulas_meta",
-    0
-  );
-  const [habitos, setHabitos] = useEstadoCacheado<Habito[]>("painel_habitos", []);
-  const [marcados, setMarcados] = useEstadoCacheado<string[]>("painel_habitos_hoje", []);
+  const [erroCarga, setErroCarga] = React.useState("");
   const [generated, setGenerated] = React.useState(0);
   const [limpas, setLimpas] = React.useState(0);
   const [draft, setDraft] = React.useState("");
@@ -178,7 +143,7 @@ export default function HomePage() {
   const today = todayISO();
 
   const load = React.useCallback(async () => {
-    const [b, t, r, e, n, lv, rf, hb, hl, au, auF, auM] = await Promise.all([
+    const [b, t, r, e, n, rf] = await Promise.all([
       supabase.from("bills").select("*").order("due_date"),
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("recurring_tasks").select("*").order("created_at"),
@@ -217,47 +182,29 @@ export default function HomePage() {
         .eq("pinned", true)
         .order("updated_at", { ascending: false })
         .limit(2),
-      /*
-       * Leitura e referências toleram falha: quem não rodou LEITURA.sql ou
-       * REFERENCIAS.sql simplesmente não vê os dois cartões, e o resto do
-       * painel não sabe que eles existem.
-       */
-      supabase
-        .from("books")
-        .select("id,title,authors,cover_url,total_pages,current_page,status")
-        .eq("status", "reading"),
+      /* Referências toleram falha: quem não rodou REFERENCIAS.sql
+         simplesmente não vê o cartão. */
       supabase
         .from("referencias")
         .select("id,name,url,image_url,icon_url,image_own,busca,created_at")
         .order("created_at", { ascending: false })
         .limit(8),
-      /* Só os ativos, e só as marcas de hoje: o brief não mostra histórico.
-         Tolera falha como leitura e referências — quem não rodou o SQL de
-         hábitos simplesmente não vê o cartão. */
-      supabase.from("habits").select("id,name,color").eq("active", true),
-      supabase.from("habit_logs").select("habit_id").eq("day", today),
-      /*
-       * Aulas: as que faltam ver, as vistas na semana e a meta.
-       *
-       * A tela de Aulas e a segunda maior do app e o Inicio nunca soube dela
-       * — todas as outras oito areas tinham cartao aqui. Tolera falha como
-       * leitura e referencias: quem nao rodou AULAS.sql nao ve o cartao.
-       *
-       * A contagem da semana vem crua e e filtrada no navegador, com o mesmo
-       * `localDay` + `semanaDe` que a tela de Aulas usa. `feita_em` e
-       * timestamptz e volta em UTC: uma aula marcada as 21h30 de domingo em
-       * Sao Paulo esta gravada como segunda em UTC, e comparar a data crua
-       * jogaria ela para a semana seguinte.
-       */
-      supabase
-        .from("lessons")
-        .select("id,title,canal,thumb_url")
-        .eq("feita", false)
-        .order("created_at", { ascending: false })
-        .limit(6),
-      supabase.from("lessons").select("feita_em").eq("feita", true),
-      supabase.from("lesson_goals").select("per_week").maybeSingle(),
     ]);
+    /*
+     * Falha não vira tela vazia.
+     *
+     * O painel ignorava o erro das consultas: uma queda de rede virava
+     * "Nenhuma conta lançada", R$ 0,00 e agenda livre — tudo apresentado como
+     * verdade, e gravado no cache da aba. Agora, se alguma das consultas que
+     * sustentam o brief falha, nada é sobrescrito: a tela continua com o que
+     * já tinha e avisa no topo.
+     */
+    const falhou = b.error ?? t.error ?? r.error ?? e.error ?? n.error;
+    if (falhou) {
+      setErroCarga(falhou.message);
+      return null;
+    }
+    setErroCarga("");
     // numeric do Postgres vem como string no JSON; normaliza na fronteira
     setBills(
       ((b.data as Bill[]) ?? []).map((x) => ({ ...x, amount: Number(x.amount) }))
@@ -280,69 +227,10 @@ export default function HomePage() {
     setRecurring((r.data as RecurringTask[]) ?? []);
     setEvents((e.data as CalendarEvent[]) ?? []);
     setNotes((n.data as Note[]) ?? []);
-    setLendo((lv.data as Livro[]) ?? []);
-    setRefs((rf.data as Ref[]) ?? []);
-    setHabitos((hb.data as Habito[]) ?? []);
-    setAulas((au.data as Aula[]) ?? []);
-    const daSemana = new Set(semanaDe(today));
-    setAulasNaSemana(
-      ((auF.data as { feita_em: string | null }[]) ?? []).filter(
-        (x) => x.feita_em && daSemana.has(localDay(x.feita_em))
-      ).length
-    );
-    setMetaAulas(((auM.data as { per_week: number } | null)?.per_week) ?? 0);
-    setMarcados(((hl.data as { habit_id: string }[]) ?? []).map((x) => x.habit_id));
+    if (!rf.error) setRefs((rf.data as Ref[]) ?? []);
     return (r.data as RecurringTask[]) ?? [];
   }, [supabase]);
 
-
-  /**
-   * Marca ou desmarca um hábito sem sair do brief.
-   *
-   * Otimista: a marca muda na hora e o banco confirma atrás. Esperar a volta
-   * da rede para riscar o item faria o toque parecer engasgado, e é um toque
-   * que se dá várias vezes em sequência de manhã.
-   *
-   * Em caso de falha, desfaz o que foi mostrado — é a única forma honesta de
-   * ser otimista: assumir sucesso e corrigir a tela se não foi.
-   */
-  /* O cartao aparece se ha aula na fila OU meta definida: quem zerou a fila
-     ainda quer ver que fez 3 de 5 na semana. */
-  const temAulas = aulas.length > 0 || metaAulas > 0;
-
-  const alternarHabito = React.useCallback(
-    async (habitId: string) => {
-      const tinha = marcados.includes(habitId);
-      setMarcados((v) =>
-        tinha ? v.filter((x) => x !== habitId) : [...v, habitId]
-      );
-
-      const desfazer = () =>
-        setMarcados((v) =>
-          tinha ? [...v, habitId] : v.filter((x) => x !== habitId)
-        );
-
-      if (tinha) {
-        const { error } = await supabase
-          .from("habit_logs")
-          .delete()
-          .eq("habit_id", habitId)
-          .eq("day", today);
-        if (error) desfazer();
-        return;
-      }
-
-      const uid = await currentUserId(supabase);
-      if (!uid) return desfazer();
-      const { error } = await supabase
-        .from("habit_logs")
-        .insert({ user_id: uid, habit_id: habitId, day: today });
-      /* 23505 = unique(habit_id, day): já estava marcado em outra aba. O
-         resultado desejado é o que está na tela, então não é falha. */
-      if (error && error.code !== "23505") desfazer();
-    },
-    [marcados, setMarcados, supabase]
-  );
 
   React.useEffect(() => {
     let alive = true;
@@ -373,7 +261,10 @@ export default function HomePage() {
        */
       /* Uma vez por dia por aparelho: ver precisaDeManutencao. Voltar para o
          Início pela navegação não repete as cinco varreduras. */
-      if (!precisaDeManutencao(today)) return;
+      /* Sem argumento: o dia de manutenção, que vira às 6h. Passar `today`
+         (a data do calendário) fazia abrir o app à 00h10 rodar a limpeza e
+         as recorrentes seis horas antes da virada combinada. */
+      if (!precisaDeManutencao()) return;
 
       const [apagadas, criadas, lancadas, eventos, aulas] = await Promise.all([
         limparConcluidas(supabase),
@@ -391,7 +282,7 @@ export default function HomePage() {
       if (
         [apagadas, criadas, lancadas, eventos, aulas].every((r) => r !== null)
       )
-        marcarManutencaoFeita(today);
+        marcarManutencaoFeita();
 
       if (apagadas && apagadas > 0) setLimpas(apagadas);
       if ((criadas ?? 0) > 0) setGenerated(criadas ?? 0);
@@ -467,10 +358,61 @@ export default function HomePage() {
 
   const m = React.useMemo(() => {
     const hoje = tasks.filter((t) => t.due_date?.slice(0, 10) === today);
-    const feitas = hoje.filter((t) => t.status === "done").length;
-    const pct = hoje.length ? Math.round((feitas / hoje.length) * 100) : 0;
     const open = tasks.filter((t) => t.status !== "done");
     const pend = bills.filter((b) => b.status === "pending");
+
+    /*
+     * O que "Hoje" mostra: o que vence hoje mais o que passou do prazo.
+     *
+     * O atrasado entra aqui porque é a coisa mais urgente que existe, e
+     * ficava escondido num contador. Ordem: atrasado primeiro, depois por
+     * prioridade, e o concluído desce.
+     */
+    const doDia = [
+      ...open.filter((t) => t.due_date?.slice(0, 10) === today),
+      ...open.filter(
+        (t) =>
+          t.due_date &&
+          t.due_date.slice(0, 10) !== today &&
+          daysUntil(t.due_date) < 0
+      ),
+      ...hoje.filter((t) => t.status === "done"),
+    ].sort(
+      (a, b) =>
+        Number(a.status === "done") - Number(b.status === "done") ||
+        Number(daysUntil(b.due_date ?? today) < 0) -
+          Number(daysUntil(a.due_date ?? today) < 0) ||
+        PRIO_RANK[a.priority] - PRIO_RANK[b.priority]
+    );
+
+    /*
+     * O número de cima conta a MESMA lista que aparece embaixo.
+     *
+     * Contava só o que vence hoje, e a lista mostrava também as atrasadas:
+     * "0/2" em cima de três linhas. Quem lê um número que não bate com a
+     * lista ao lado para de acreditar nos dois.
+     */
+    const feitas = doDia.filter((t) => t.status === "done").length;
+    const pct = doDia.length ? Math.round((feitas / doDia.length) * 100) : 0;
+
+    /*
+     * Agenda: um evento que se repete aparece uma vez, a próxima.
+     *
+     * A mentoria semanal ocupava as quatro linhas do cartão — 06/10, 13/10,
+     * 20/10, 27/10 —, e qualquer outro compromisso do mês ficava de fora.
+     * A repetição vira um rótulo ("toda semana") na própria linha.
+     */
+    const vistos = new Set<string>();
+    const up = events
+      .filter((e) => localDay(e.start_at) >= today)
+      .filter((e) => {
+        if (!e.series_id) return true;
+        if (vistos.has(e.series_id)) return false;
+        vistos.add(e.series_id);
+        return true;
+      })
+      .slice(0, 4);
+
     return {
       hoje,
       feitas,
@@ -519,35 +461,10 @@ export default function HomePage() {
       dueRec: recurring.filter((r) => isDueOn(r, today)),
       actRec: recurring.filter((r) => r.active),
       evToday: events.filter((e) => localDay(e.start_at) === today),
-      up: events
-        .filter((e) => localDay(e.start_at) >= today)
-        .slice(0, 4),
+      up,
       pinned: notes.filter((n) => n.pinned).slice(0, 2),
 
-      /*
-       * O que "Hoje" mostra: o que vence hoje mais o que passou do prazo.
-       *
-       * O atrasado entra aqui porque é a coisa mais urgente que existe, e
-       * ficava escondido num contador. Ordem: atrasado primeiro, depois por
-       * prioridade, e o concluído desce.
-       */
-      doDia: [
-        ...open.filter((t) => t.due_date?.slice(0, 10) === today),
-        ...open.filter(
-          (t) =>
-            t.due_date &&
-            t.due_date.slice(0, 10) !== today &&
-            daysUntil(t.due_date) < 0
-        ),
-        ...hoje.filter((t) => t.status === "done"),
-      ].sort(
-          (a, b) =>
-            Number(a.status === "done") - Number(b.status === "done") ||
-            Number(daysUntil(b.due_date ?? today) < 0) -
-              Number(daysUntil(a.due_date ?? today) < 0) ||
-            PRIO_RANK[a.priority] - PRIO_RANK[b.priority]
-        ),
-
+      doDia,
     };
   }, [tasks, bills, recurring, events, notes, today]);
 
@@ -591,6 +508,10 @@ export default function HomePage() {
           <Clima className="flex items-center gap-1.5 border-l border-line-soft pl-2.5" />
         </span>
       </div>
+
+      {erroCarga && (
+        <ErroDeCarga detalhe={erroCarga} onTentar={load} className="mb-4" />
+      )}
 
       {limpas > 0 && (
         <div className="mb-4 flex items-center gap-2.5 rounded-[14px] bg-ink-800 px-4 py-3 text-[12.5px] text-fg-mute">
@@ -665,24 +586,25 @@ export default function HomePage() {
                     escuro. */}
                 <Explicacao className="text-white/50 hover:bg-white/10 hover:text-white">
                   <p>
-                    Conta as demandas com <b>vencimento hoje</b>: quantas estao
-                    concluidas, sobre o total do dia.
+                    Conta as demandas da lista abaixo: as que vencem{" "}
+                    <b>hoje</b> e as <b>atrasadas</b>. Quantas estão concluídas,
+                    sobre o total.
                   </p>
                   <Ressalva>
-                    Demanda sem data nao entra, e atrasada de outro dia tambem
-                    nao. Por isso da para ter 0 de 0 num dia cheio de trabalho —
-                    o dia esta vazio de <i>vencimentos</i>, nao de tarefa.
+                    Demanda sem data não entra. Por isso dá para ter 0 de 0 num
+                    dia cheio de trabalho — o dia está vazio de{" "}
+                    <i>vencimentos</i>, não de tarefa.
                   </Ressalva>
                 </Explicacao>
               </p>
               <p className="mt-2 text-[40px] font-bold leading-none tracking-[-0.04em]">
                 {m.feitas}
                 <span className="text-[0.5em] font-semibold opacity-60">
-                  /{m.hoje.length}
+                  /{m.doDia.length}
                 </span>
               </p>
               <p className="mt-1.5 text-[13px] text-white/70">
-                tarefas concluídas hoje
+                {m.doDia.length === 1 ? "tarefa concluída" : "tarefas concluídas"}
               </p>
             </div>
             <div className="relative shrink-0">
@@ -829,9 +751,9 @@ export default function HomePage() {
         se leem de uma vez, logo abaixo do herói, e devolvem a largura para
         quem tem o que mostrar.
 
-        A barra fica: ela responde de um olhar o que a lista de números não
-        responde — R$ 200 em aberto quer dizer coisas opostas num mês de
-        R$ 300 e num de R$ 3.000.
+        Sem a barra colorida que ficava em cima: com nada pago ela aparecia
+        inteira em azul, e azul cheio lê como "tudo certo" quando era o
+        contrário. Os quatro números já dizem a proporção.
       */}
       <section className="mt-4">
         <div className="mb-2 flex items-center justify-between gap-3.5 px-1">
@@ -871,29 +793,6 @@ export default function HomePage() {
         ) : (
           <>
             {/*
-              Uma barra só, com as três parcelas na ordem em que se lê o mês: o
-              que saiu, o que está vencido, o que ainda vai vencer. A folga de
-              2px entre elas é o que deixa duas parcelas vizinhas de cores
-              próximas ainda se separarem.
-            */}
-            <div className="flex h-2 w-full gap-[2px] overflow-hidden rounded-full bg-ink-800">
-              {[
-                ["pago", m.pagoMes, "bg-pos"],
-                ["vencido", m.vencidoMes, "bg-neg"],
-                ["a vencer", Math.max(0, m.abertoMes - m.vencidoMes), "bg-[var(--cor-barra)]"],
-              ].map(([nome, valor, cor]) =>
-                (valor as number) > 0 ? (
-                  <span
-                    key={nome as string}
-                    className={cx("h-full first:rounded-l-full last:rounded-r-full", cor as string)}
-                    style={{ width: `${((valor as number) / m.totalMes) * 100}%` }}
-                    title={`${nome}: ${brl(valor as number)}`}
-                  />
-                ) : null
-              )}
-            </div>
-
-            {/*
               As divisórias são o fundo aparecendo por uma folga de 1px entre
               as células — `gap-px` sobre `bg-line`. Uma borda por célula
               desenharia linha dupla no encontro de duas.
@@ -906,7 +805,7 @@ export default function HomePage() {
               "isto é o vencido" é a bolinha ao lado, e vermelho sobre papel ou
               sobre quase-preto são os dois piores contrastes desta tela.
             */}
-            <div className="mt-2.5 grid grid-cols-2 gap-px overflow-hidden rounded-[18px] border border-line bg-line sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[18px] border border-line bg-line sm:grid-cols-4">
               {([
                 ["Total do mês", m.totalMes, null, "todas"],
                 ["Pago", m.pagoMes, "bg-pos", "pagas"],
@@ -988,35 +887,19 @@ export default function HomePage() {
       </div>
 
       {/* --------------- contas · agenda · recorrentes --------------- */}
-      {/*
-        Tres cartoes fixos — Contas, Agenda e Recorrentes — e um quarto quando
-        ha habitos. O resumo saiu desta fileira e virou faixa, entao o numero
-        de colunas no `xl` passa a seguir a contagem: com habitos sao quatro
-        numa linha, sem eles tres. Um `xl:grid-cols-3` fixo deixaria o quarto
-        sozinho na segunda linha, que e o mesmo vao que o resumo veio tapar da
-        primeira vez.
-      */}
-      <div
-        className={cx(
-          "mt-4 grid gap-4 md:grid-cols-2",
-          habitos.length > 0 ? "xl:grid-cols-4" : "xl:grid-cols-3"
-        )}
-      >
+      {/* Três cartões: vencimentos, agenda e recorrentes. Hábitos saiu do
+          Início e continua na tela dele. */}
+      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card>
-          <Head icon={<Wallet size={14} />} title="Contas a pagar" href="/contas" link="ver todas" />
+          {/*
+            "Próximos vencimentos", e não o total do mês outra vez.
+
+            Este cartão repetia o R$ do mês que a faixa do resumo, logo acima,
+            já mostra — dois números iguais um embaixo do outro. O que ele tem
+            de próprio é a fila: o que vence primeiro.
+          */}
+          <Head icon={<Wallet size={14} />} title="Próximos vencimentos" href="/contas" link="ver todas" />
           <div className="px-[18px] pb-[18px] pt-1.5">
-            <div className="flex items-baseline gap-2.5 pt-2.5">
-              <b className="text-2xl font-bold tracking-[-0.035em] tnum">
-                {brl(m.totalMes)}
-              </b>
-              <span className="text-xs text-fg-mute">em {nomeMes}</span>
-            </div>
-            <p className="mt-1 text-[11.5px] text-fg-mute">
-              <span className="font-bold text-fg-dim tnum">
-                {brl(m.abertoMes)}
-              </span>{" "}
-              ainda em aberto
-            </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {m.late.length > 0 ? (
                 <span className="rounded-full bg-neg/12 px-2 py-0.5 text-[11px] font-semibold text-neg">
@@ -1029,7 +912,7 @@ export default function HomePage() {
               )}
               {m.soon.length > 0 && (
                 <span className="rounded-full bg-warn/12 px-2 py-0.5 text-[11px] font-semibold text-warn">
-                  {m.soon.length} vence em 7 dias
+                  {m.soon.length} {m.soon.length === 1 ? "vence" : "vencem"} em 7 dias
                 </span>
               )}
             </div>
@@ -1037,9 +920,11 @@ export default function HomePage() {
               {m.pend.length === 0 ? (
                 <Ghost>Tudo pago.</Ghost>
               ) : (
+                /* Cinco, e não três: o selo dizia "4 vencem em 7 dias" e a
+                   lista mostrava três, sem dizer qual faltava. */
                 [...m.pend]
                   .sort((a, b) => a.due_date.localeCompare(b.due_date))
-                  .slice(0, 3)
+                  .slice(0, 5)
                   .map((b) => {
                     const d = daysUntil(b.due_date);
                     return (
@@ -1058,6 +943,14 @@ export default function HomePage() {
                         </span>
                         <span
                           className={cx(
+                            "shrink-0 text-[11.5px] tnum",
+                            d < 0 ? "font-semibold text-neg" : "text-fg-mute"
+                          )}
+                        >
+                          {d < 0 ? `${-d}d atraso` : d === 0 ? "hoje" : dataCurta(b.due_date)}
+                        </span>
+                        <span
+                          className={cx(
                             "shrink-0 font-semibold tnum",
                             d < 0 && "text-neg"
                           )}
@@ -1071,68 +964,6 @@ export default function HomePage() {
             </div>
           </div>
         </Card>
-
-        {/*
-          Hábitos, com a marcação aqui mesmo.
-
-          Mostrar só a lista obrigaria a abrir a aba de Hábitos para dar baixa
-          — e aí o brief vira um aviso, não um lugar onde se resolve. Marcar
-          custa um toque e a tela não recarrega: a mudança é otimista, e o
-          banco confirma atrás.
-
-          Só aparece se houver hábito ativo. Sem nenhum, um cartão vazio
-          ocuparia a faixa mais valiosa da tela para dizer que não há nada.
-        */}
-        {habitos.length > 0 && (
-          <Card>
-            <Head
-              icon={<Repeat size={14} />}
-              title="Hábitos"
-              href="/habitos"
-              link="ver todos"
-            />
-            <div className="px-[18px] pb-[18px] pt-1.5">
-              <div className="flex items-baseline gap-2.5 pt-2.5">
-                <b className="text-2xl font-bold tracking-[-0.035em] tnum">
-                  {marcados.length}/{habitos.length}
-                </b>
-                <span className="text-xs text-fg-mute">marcados hoje</span>
-              </div>
-              <div className="mt-3 flex flex-col">
-                {habitos.map((h) => {
-                  const feito = marcados.includes(h.id);
-                  return (
-                    <button
-                      key={h.id}
-                      onClick={() => alternarHabito(h.id)}
-                      aria-pressed={feito}
-                      className="flex items-center gap-2.5 rounded-[10px] py-1.5 pr-1 text-left transition-colors hover:bg-ink-800"
-                    >
-                      <span
-                        className={cx(
-                          "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[6px] border transition-colors",
-                          feito
-                            ? "border-transparent bg-brand-500 text-white"
-                            : "border-line"
-                        )}
-                      >
-                        {feito && <Check size={12} strokeWidth={3} />}
-                      </span>
-                      <span
-                        className={cx(
-                          "min-w-0 flex-1 truncate text-sm font-medium",
-                          feito && "text-fg-mute line-through"
-                        )}
-                      >
-                        {h.name}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </Card>
-        )}
 
         <Card>
           <Head icon={<CalendarDays size={14} />} title="Agenda" href="/calendario" link="ver tudo" />
@@ -1155,6 +986,7 @@ export default function HomePage() {
                         {e.all_day
                           ? " · dia inteiro"
                           : ` · ${localTime(e.start_at)}`}
+                        {e.series_id && REPETE[e.recurrence] && ` · ${REPETE[e.recurrence]}`}
                         {e.location && ` · ${e.location}`}
                       </span>
                     </span>
@@ -1201,183 +1033,10 @@ export default function HomePage() {
         </Card>
       </div>
 
-      {/* ------------------------ leitura + referências ------------------------ */}
-      {/*
-        Duas abas que o painel ignorava.
-        
-        A estante e as referências existem há semanas e o Início nunca soube
-        delas: um livro em 78% e uma parede de referências não apareciam em
-        lugar nenhum da tela de entrada. Só aparecem quando têm o que mostrar —
-        cartão vazio em painel é espaço morto.
-      */}
-      {(lendo.length > 0 || refs.length > 0 || temAulas) && (
-        <div
-          className={cx(
-            "mt-4 grid grid-cols-1 gap-4",
-            /* Tres colunas so quando ha os tres cartoes. Com dois, a linha
-               volta a ser a de antes — coluna vazia num painel e o espaco
-               morto que ele ja mandou tirar uma vez. */
-            temAulas && lendo.length > 0
-              ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.35fr)]"
-              : "xl:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]"
-          )}
-        >
-          {lendo.length > 0 && (
-            <Card>
-              <Head
-                icon={<BookOpen size={14} />}
-                title="Lendo agora"
-                href="/leitura"
-                link="estante"
-              />
-              <div className="flex flex-col px-[18px] pb-[18px] pt-3">
-                {lendo.slice(0, 2).map((l) => {
-                  const pct =
-                    l.total_pages && l.total_pages > 0
-                      ? Math.min(
-                          100,
-                          Math.round((l.current_page / l.total_pages) * 100)
-                        )
-                      : null;
-                  return (
-                    <Link
-                      key={l.id}
-                      href="/leitura"
-                      className="group flex items-center gap-3 border-b border-line-soft py-2.5 last:border-0"
-                    >
-                      {/* 2:3 fixo, como na estante: sem trava, capa alta e
-                          capa baixa fariam as duas linhas dançarem. */}
-                      <span className="relative block aspect-[2/3] w-[38px] shrink-0 overflow-hidden rounded-md bg-ink-800">
-                        {l.cover_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={l.cover_url}
-                            alt=""
-                            loading="lazy"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <span className="grid h-full w-full place-items-center text-brand-400/40">
-                            <BookOpen size={14} />
-                          </span>
-                        )}
-                      </span>
-
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-semibold group-hover:text-brand-400">
-                          {l.title}
-                        </span>
-                        {l.authors && (
-                          <span className="mt-0.5 block truncate text-[11px] text-fg-mute">
-                            {l.authors}
-                          </span>
-                        )}
-                        {pct !== null && (
-                          <span className="mt-1.5 flex items-center gap-2">
-                            <span className="h-1 min-w-[40px] flex-1 overflow-hidden rounded-full bg-ink-800">
-                              <span
-                                className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
-                                style={{ transform: `scaleX(${pct / 100})` }}
-                              />
-                            </span>
-                            <span className="shrink-0 text-[10.5px] font-bold text-fg-mute tnum">
-                              pág {l.current_page}
-                              {l.total_pages ? ` de ${l.total_pages}` : ""}
-                            </span>
-                          </span>
-                        )}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
-            </Card>
-          )}
-
-          {temAulas && (
-            <Card>
-              <Head
-                icon={<GraduationCap size={14} />}
-                title="Aulas"
-                href="/aulas"
-                link="ver todas"
-              />
-              <div className="flex flex-col px-[18px] pb-[18px] pt-3">
-                {aulas.slice(0, 2).map((a) => (
-                  <Link
-                    key={a.id}
-                    href="/aulas"
-                    className="group flex items-center gap-3 border-b border-line-soft py-2.5 last:border-0"
-                  >
-                    {/* 16:9 fixo, que é a proporção da miniatura do YouTube.
-                        Sem trava, aula com miniatura e aula sem fariam as
-                        duas linhas dançarem — mesma razão da capa na estante. */}
-                    <span className="relative block aspect-video w-[54px] shrink-0 overflow-hidden rounded-md bg-ink-800">
-                      {a.thumb_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={a.thumb_url}
-                          alt=""
-                          loading="lazy"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <span className="grid h-full w-full place-items-center text-brand-400/40">
-                          <GraduationCap size={14} />
-                        </span>
-                      )}
-                    </span>
-
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-semibold group-hover:text-brand-400">
-                        {a.title}
-                      </span>
-                      {a.canal && (
-                        <span className="mt-0.5 block truncate text-[11px] text-fg-mute">
-                          {a.canal}
-                        </span>
-                      )}
-                    </span>
-                  </Link>
-                ))}
-
-                {/*
-                  A meta da semana, com o mesmo número da tela de Aulas.
-
-                  Só aparece quando existe meta: barra de progresso sem alvo
-                  não mede nada. E o verde ao fechar é o mesmo critério de lá,
-                  para os dois lugares não discordarem sobre "cumpri".
-                */}
-                {metaAulas > 0 && (
-                  <div className="mt-3 flex items-center gap-2 text-[11px] text-fg-mute">
-                    <span className="font-semibold text-fg-dim tnum">
-                      {aulasNaSemana}/{metaAulas}
-                    </span>
-                    <span>esta semana</span>
-                    <span className="ml-auto h-1 w-[56px] overflow-hidden rounded-full bg-ink-800">
-                      <span
-                        className={cx(
-                          "block h-full w-full origin-left rounded-full transition-transform duration-300",
-                          aulasNaSemana >= metaAulas ? "bg-pos" : "bg-brand-500"
-                        )}
-                        style={{
-                          transform: `scaleX(${Math.min(1, aulasNaSemana / metaAulas)})`,
-                        }}
-                      />
-                    </span>
-                  </div>
-                )}
-
-                {aulas.length === 0 && (
-                  <p className="py-1 text-[12px] text-fg-mute">
-                    Nenhuma aula na fila.
-                  </p>
-                )}
-              </div>
-            </Card>
-          )}
-
-          {refs.length > 0 && (
+      {/* ------------------------------ referências ------------------------------ */}
+      {/* Leitura e Aulas saíram do Início; ficam na tela de cada uma. */}
+      {refs.length > 0 && (
+        <div className="mt-4">
             <Card>
               <Head
                 icon={<Library size={14} />}
@@ -1393,12 +1052,12 @@ export default function HomePage() {
                   muito menos que a imagem. Por isso aqui é a única parte do
                   painel que é imagem e não lista.
                 */}
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {refs.slice(0, 4).map((r) => (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                  {refs.slice(0, 6).map((r) => (
                     <Link
                       key={r.id}
                       href="/referencias"
-                      title={r.name}
+                      title={decodificarEntidades(r.name)}
                       className="group block"
                     >
                       <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-[10px] bg-ink-800">
@@ -1417,14 +1076,13 @@ export default function HomePage() {
                         )}
                       </span>
                       <span className="mt-1.5 block truncate text-[11px] font-medium text-fg-dim group-hover:text-brand-400">
-                        {r.name}
+                        {decodificarEntidades(r.name)}
                       </span>
                     </Link>
                   ))}
                 </div>
               </div>
             </Card>
-          )}
         </div>
       )}
 
@@ -1495,7 +1153,7 @@ function ValorDaFatura({
           type="button"
           onClick={gravar}
           disabled={!vale || gravando}
-          className="h-8 rounded-lg bg-warn px-3 text-[12px] font-bold text-white transition-opacity disabled:opacity-40"
+          className="h-8 rounded-lg bg-warn px-3 text-[12px] font-bold text-sobre-cor transition-opacity disabled:opacity-40"
         >
           {gravando ? "..." : "Lançar"}
         </button>

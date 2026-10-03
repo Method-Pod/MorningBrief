@@ -201,7 +201,10 @@ export function Shell({
   const wordmark = (
     <Link
       href="/"
-      className="flex items-center gap-2 px-2.5 text-[21px] font-bold tracking-[-0.035em] text-fg"
+      /* 20px, e não 21: a 21 o nome media 123px numa vaga de 122, e um pixel
+         a mais bastava para o `truncate` cortar em "morningbri…" na barra
+         aberta do computador. */
+      className="flex items-center gap-2 px-2.5 text-[20px] font-bold tracking-[-0.035em] text-fg"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

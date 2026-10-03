@@ -62,9 +62,7 @@ import {
 } from "@/components/Parcelamento";
 import {
   CalendarioPagamentos,
-  ContasFixas,
   mesesAdiante,
-  proximoMes,
 } from "@/components/ContasExtras";
 import {
   EvolucaoMensal,
@@ -84,6 +82,7 @@ import {
   useConfirm,
   useNotice,
   EsqueletoPagina,
+  ErroDeCarga,
 } from "@/components/ui";
 
 /* ------------------------------ filtros e ordem ------------------------------ */
@@ -195,7 +194,6 @@ export default function ContasPage() {
   const [dia, setDia] = React.useState<string | null>(null);
   /** "AAAA-MM" em foco. A lista, o resumo, os gráficos e o calendário seguem. */
   const [mes, setMes] = React.useState(() => todayISO().slice(0, 7));
-  const [lancando, setLancando] = React.useState<string | null>(null);
   /* Pagas nasce fechado: é o grupo que só cresce e não pede ação. */
   const [fechados, setFechados] = React.useState<Set<string>>(
     () => new Set(["Pagas"])
@@ -219,6 +217,7 @@ export default function ContasPage() {
   const [gerindoCategorias, setGerindoCategorias] = React.useState(false);
   const [abatendo, setAbatendo] = React.useState<Bill | null>(null);
   const [emLote, setEmLote] = React.useState(false);
+  const [erroCarga, setErroCarga] = React.useState("");
   /*
    * Os cartões cadastrados, para o seletor do formulário.
    *
@@ -233,6 +232,14 @@ export default function ContasPage() {
       supabase.from("bills").select("*").order("due_date"),
       supabase.from("cartoes").select("*").order("nome"),
     ]);
+    /* Falha não vira lista vazia: mantém o que já estava na tela e avisa.
+       Antes uma queda de rede aparecia como "R$ 0,00 · nenhuma conta". */
+    if (contas.error) {
+      setErroCarga(contas.error.message);
+      setLoading(false);
+      return;
+    }
+    setErroCarga("");
     // numeric do Postgres chega como string no JSON
     setRows(
       ((contas.data as Bill[]) ?? []).map((b) => ({
@@ -427,7 +434,9 @@ export default function ContasPage() {
       category: form.category || CATEGORIA_PADRAO,
       status: form.status,
       notes: form.notes.trim(),
-      recurring: form.recurring,
+      /* Parcela tem fim; fixa não. As duas marcas juntas faziam a conta seguir
+         sendo lançada depois da última parcela. */
+      recurring: form.recurring && !form.parcelado,
       /* Mesma razão do completed_at em demandas: reescrever aqui apagava
          quando a conta foi realmente paga. */
       paid_at:
@@ -496,6 +505,35 @@ export default function ContasPage() {
         setBusy(false);
         return setErr(NADA_GRAVADO);
       }
+      /*
+       * A série acompanha o que se fez nesta conta.
+       *
+       * A série de uma conta fixa é a descrição dela. Mexer numa linha só
+       * deixava as outras para trás, e a automação das 6h continuava a
+       * partir delas:
+       *
+       * - desmarcar "fixa" aqui não parava nada, porque o mês anterior
+       *   continuava fixo — a cobrança cancelada voltava no mês seguinte;
+       * - renomear criava uma série nova e mantinha a antiga, e o mês
+       *   seguinte saía duas vezes, uma com cada nome.
+       */
+      if (!falha && editing.recurring) {
+        const mudancas = {
+          ...(!payload.recurring ? { recurring: false } : {}),
+          ...(desc !== editing.description ? { description: desc } : {}),
+        };
+        if (Object.keys(mudancas).length) {
+          const { error: erroSerie } = await supabase
+            .from("bills")
+            .update(mudancas)
+            .eq("description", editing.description)
+            .eq("recurring", true);
+          if (erroSerie)
+            notice.show(
+              `A conta foi salva, mas as outras da série não acompanharam: ${erroSerie.message}`
+            );
+        }
+      }
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {
@@ -551,11 +589,17 @@ export default function ContasPage() {
         notice.show(
           `${linhas.length} parcelas lançadas, de ${rotuloMes(
             linhas[0].due_date
-          )} a ${rotuloMes(linhas[linhas.length - 1].due_date)}.`
+          )} a ${rotuloMes(linhas[linhas.length - 1].due_date)}.`,
+          "ok"
         );
     }
     setBusy(false);
     if (error) {
+      /* A trava de CONTAS-SEM-DUPLICATA.sql: uma conta fixa por nome por mês. */
+      if (error.code === "23505")
+        return setErr(
+          `Já existe uma conta fixa "${desc}" neste mês. Edite a que está lá em vez de lançar outra.`
+        );
       // PGRST204: coluna inexistente — quase sempre a migração 003 pendente
       if (error.code === "PGRST204" && error.message.includes("installment"))
         return setErr(
@@ -630,29 +674,6 @@ export default function ContasPage() {
     setRows((r) =>
       r.map((b) => (b.id === conta.id ? { ...b, amount: valor } : b))
     );
-  };
-
-  /** Duplica a conta fixa para o mês seguinte, já em aberto. */
-  const lancarProximo = async (b: Bill) => {
-    setLancando(b.id);
-    const uid = await currentUserId(supabase);
-    if (!uid) {
-      setLancando(null);
-      return notice.show(SESSION_EXPIRED);
-    }
-    const { error } = await supabase.from("bills").insert({
-      user_id: uid,
-      description: b.description,
-      amount: b.amount,
-      due_date: proximoMes(b.due_date),
-      category: b.category,
-      status: "pending",
-      notes: b.notes,
-      recurring: true,
-      paid_at: null,
-    });
-    setLancando(null);
-    if (!notice.check(error, "lançar a próxima parcela")) load();
   };
 
   /*
@@ -1165,7 +1186,7 @@ export default function ContasPage() {
             rotuloVisivel="Gerenciar"
             itens={[
               {
-                rotulo: "Contas fixas",
+                rotulo: "Gerenciar contas",
                 icone: <SlidersHorizontal size={15} />,
                 aoEscolher: () => router.push("/contas/gerenciar"),
               },
@@ -1200,11 +1221,20 @@ export default function ContasPage() {
         </div>
       )}
 
+      {erroCarga && (
+        <ErroDeCarga detalhe={erroCarga} onTentar={load} className="mb-4" />
+      )}
+
       {/* ------------------------------ resumo do mês ------------------------------ */}
       <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
         Resumo de {nomeMes}
       </p>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      {/*
+        Duas colunas já no telefone. Empilhados, os quatro números ocupavam a
+        primeira tela inteira (~700px) e a lista de contas — o que se abre a
+        tela para ver — só aparecia rolando.
+      */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
         <Numero rotulo="Total" valor={resumoMes.total} qtd={resumoMes.qtdTotal} />
         <Numero
           rotulo="Pagas"
@@ -1437,15 +1467,12 @@ export default function ContasPage() {
         )}
       </Card>
 
-      {/* -------------------- calendário + contas fixas -------------------- */}
+      {/* -------------------- calendário + cartões -------------------- */}
       {/*
-        Três faixas quando há cartão, duas quando não há.
-
-        "Contas fixas" sozinha na coluna larga ficava com meia tela de espaço
-        vazio à direita de cada linha — o botão "Lançar próximo mês" chegava a
-        ficar a mais de 800px do nome da conta, e o olho perdia a ligação
-        entre os dois. Com os cartões ao lado, a coluna encolhe para uma
-        largura de leitura e o espaço passa a ter conteúdo.
+        Sem o cartão "Contas fixas": as fixas entram sozinhas no dia 1º de
+        cada mês, e o botão "Lançar próximo mês" que ele tinha deixou de ter
+        função — era um clique pedido para algo que agora não precisa de
+        ninguém. A série se gerencia em Gerenciar → Gerenciar contas.
       */}
       <div
         className={cx(
@@ -1465,8 +1492,8 @@ export default function ContasPage() {
            */
           "mt-4 grid grid-cols-[minmax(0,1fr)] gap-4",
           cartoes.length > 0
-            ? "xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)_minmax(0,352px)]"
-            : "xl:grid-cols-[minmax(0,360px)_minmax(0,1fr)]"
+            ? "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            : "xl:grid-cols-[minmax(0,420px)]"
         )}
       >
         <Card>
@@ -1479,16 +1506,6 @@ export default function ContasPage() {
               mes={mes}
               onMes={trocarMes}
             />
-          </div>
-        </Card>
-
-        <Card>
-          <Cabeca
-            titulo="Contas fixas"
-            sub="Lance o mês seguinte com um clique"
-          />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <ContasFixas contas={rows} onLancar={lancarProximo} ocupado={lancando} />
           </div>
         </Card>
 
@@ -1691,17 +1708,27 @@ export default function ContasPage() {
             />
           </Field>
 
-          <label className="flex cursor-pointer items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3">
+          <label
+            className={cx(
+              "flex items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3",
+              form.parcelado ? "cursor-not-allowed opacity-60" : "cursor-pointer"
+            )}
+          >
             <input
               type="checkbox"
-              checked={form.recurring}
+              checked={form.recurring && !form.parcelado}
+              disabled={form.parcelado}
               onChange={(e) => setForm({ ...form, recurring: e.target.checked })}
               className="h-4 w-4 accent-[var(--a)]"
             />
             <span className="text-sm text-fg-dim">
               Conta fixa
               <span className="ml-1 text-[11px] text-fg-mute">
-                (marca como recorrente; não duplica)
+                {form.parcelado
+                  ? "(parcelada tem fim — não pode ser fixa)"
+                  : editing?.recurring && !form.recurring
+                    ? "(desmarcar encerra a série: o próximo mês não é mais lançado)"
+                    : "(lançada sozinha todo dia 1º do mês)"}
               </span>
             </span>
           </label>
@@ -2018,7 +2045,7 @@ function Numero({
   tom?: string;
 }) {
   return (
-    <Card className="p-[18px]">
+    <Card className="p-3.5 sm:p-[18px]">
       <p
         className={cx(
           "text-[10.5px] font-bold uppercase tracking-[0.1em]",
@@ -2027,7 +2054,7 @@ function Numero({
       >
         {rotulo}
       </p>
-      <p className="mt-2.5 text-[20px] font-bold tracking-[-0.03em] tnum">
+      <p className="mt-1.5 text-[17px] font-bold tracking-[-0.03em] tnum sm:mt-2.5 sm:text-[20px]">
         {brl(valor)}
       </p>
       <p className="mt-1 text-[11.5px] text-fg-mute">

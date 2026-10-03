@@ -468,7 +468,7 @@ export default function AulasPage() {
     const total = duracaoDaAula(l);
     const teto = total ? Math.ceil(total / 60) : null;
     if (teto && n > teto)
-      return notice.show(`A aula tem ${duracaoExata(total)}.`);
+      return notice.show(`A aula tem ${duracaoExata(total)}.`, "info");
 
     const { data: gravadas, error } = await supabase
       .from("lessons")
@@ -856,7 +856,8 @@ export default function AulasPage() {
     notice.show(
       `${novas.length} aula${novas.length === 1 ? "" : "s"} importada${
         novas.length === 1 ? "" : "s"
-      }${pulou ? ` · ${pulou} já estava${pulou === 1 ? "" : "m"} na lista` : ""}.`
+      }${pulou ? ` · ${pulou} já estava${pulou === 1 ? "" : "m"} na lista` : ""}.`,
+      "ok"
     );
     setImportando(false);
     setLinkPlaylist("");
