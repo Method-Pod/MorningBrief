@@ -644,9 +644,19 @@ export default function HomePage() {
       ))}
 
       {/* ------------------------ seu dia + hoje ------------------------ */}
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="flex flex-col rounded-[22px] bg-gradient-to-br from-[var(--bloco-1)] to-[var(--bloco-2)] p-[22px] text-white">
-          <div className="flex items-start justify-between gap-4">
+      {/*
+        "Seu dia" e "Hoje" viraram UM cartao.
+
+        Eram dois, lado a lado, mostrando o mesmo conjunto: o anel conta
+        exatamente as linhas que a lista ao lado lista. Separados, o numero e
+        a lista competiam pela atencao e a tela abria com dois herois; juntos,
+        o numero vira o cabecalho da propria lista, que e o que ele sempre
+        foi. O painel passa a ter UM ponto de entrada em vez de uma grade de
+        cartoes de peso igual.
+      */}
+      <Card className="overflow-hidden">
+        <div className="flex items-center gap-5 bg-gradient-to-br from-[var(--bloco-1)] to-[var(--bloco-2)] p-[22px] text-white">
+          <div className="flex flex-1 items-start justify-between gap-4">
             <div>
               <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/60">
                 Seu dia
@@ -702,15 +712,33 @@ export default function HomePage() {
               </span>
             </div>
           </div>
-          <div className="mt-auto grid grid-cols-3 gap-2 pt-[22px]">
-            <Mini icon={<CheckCircle2 size={15} />} value={m.feitas} label="feitas" />
-            <Mini icon={<Repeat2 size={15} />} value={m.actRec.length} label="recorrentes" />
-            <Mini icon={<CalendarDays size={15} />} value={m.evToday.length} label="na agenda" />
-          </div>
-        </div>
 
-        <Card className="flex flex-col">
-          <Head icon={<ListChecks size={14} />} title="Hoje" href="/demandas" link="ver todas" />
+        {/* Os tres contadores sobem para a direita do anel: em coluna eles
+            ocupavam a altura toda do bloco antigo, e aqui o bloco e uma faixa
+            de cabecalho. */}
+        <div className="hidden shrink-0 grid-cols-3 gap-2 sm:grid sm:w-[300px]">
+          <Mini icon={<CheckCircle2 size={15} />} value={m.feitas} label="feitas" />
+          <Mini icon={<Repeat2 size={15} />} value={m.actRec.length} label="recorrentes" />
+          <Mini icon={<CalendarDays size={15} />} value={m.evToday.length} label="na agenda" />
+        </div>
+      </div>
+
+      <div className="flex flex-col">
+        <div className="flex items-center justify-between gap-3.5 px-[18px] pt-3.5">
+          <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
+            <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-brand-500/12 text-brand-400">
+              <ListChecks size={14} />
+            </span>
+            Hoje
+          </span>
+          <Link
+            href="/demandas"
+            prefetch={false}
+            className="text-xs font-medium text-fg-mute transition-colors hover:text-brand-400"
+          >
+            ver todas
+          </Link>
+        </div>
           <div className="flex flex-1 flex-col px-[18px] pb-[18px] pt-3">
             {/* O número e a barra saíram: são os mesmos da faixa acima. Este
                 cartão passa a ser só a lista e o campo de adicionar. */}
@@ -787,8 +815,8 @@ export default function HomePage() {
               )}
             </div>
           </div>
-        </Card>
       </div>
+      </Card>
 
       {/* ------------------------ demandas + notas ------------------------ */}
       {/*

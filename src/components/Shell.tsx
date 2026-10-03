@@ -262,7 +262,7 @@ export function Shell({
               "flex items-center rounded-[14px] py-2.5 text-sm font-medium transition-colors duration-150",
               compacta ? "justify-center px-0" : "gap-3 px-3",
               active
-                ? "bg-brand-500 text-on-brand"
+                ? "bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand"
                 : "text-fg-dim hover:bg-ink-800 hover:text-fg"
             )}
           >

@@ -81,8 +81,12 @@ export function Button({
      * juntas leem como "o botao veio para frente", que e o que o hover quer
      * dizer.
      */
+    /* `bg-[image:var(--a-degrade)]` e nao `bg-brand-500`: o preenchimento
+       chapado virou a cor com um tom mais escuro no pe. O hover continua
+       trocando para a cor solida de hover, que e o que faz o botao parecer
+       vir para frente. Ver `--a-degrade` em globals.css. */
     primary:
-      "bg-brand-500 text-on-brand shadow-[var(--brilho)] hover:bg-brand-600 hover:shadow-[var(--brilho-forte)]",
+      "bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand shadow-[var(--brilho)] hover:bg-brand-600 hover:bg-none hover:shadow-[var(--brilho-forte)]",
     outline: "bg-ink-900 text-fg-dim shadow-[var(--elev-1)] hover:text-fg hover:shadow-[var(--elev-2)]",
     ghost: "text-fg-mute hover:text-fg hover:bg-ink-800",
     subtle: "bg-ink-800 text-fg-dim hover:bg-brand-500/12 hover:text-brand-400",
