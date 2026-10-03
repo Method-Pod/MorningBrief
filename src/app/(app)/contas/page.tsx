@@ -1478,12 +1478,17 @@ export default function ContasPage() {
         acompanha a largura: na metade da tela cada dia virava um quadrado de
         120px e o cartão passava de 750px de altura — "muito grande", nas
         palavras dele. Preso em 340px ele volta ao tamanho de um calendário.
-        E nenhum cartão estica para igualar a altura do vizinho: o quadro de
-        cartões esticado era uma moldura enorme com uma linha dentro.
+        As duas colunas terminam na mesma linha. Com cada uma na altura do
+        próprio conteúdo sobrava um vão embaixo dos cartões — a coluna dos
+        gráficos é mais alta, e quanto ela mede depende de quantas categorias
+        o mês tem. Agora o último cartão de cada coluna completa a altura: no
+        quadro de cartões o total desce para o rodapé e fica alinhado com o
+        fim do gráfico ao lado; a sobra, que é de poucas dezenas de pixels,
+        fica dentro do cartão em vez de virar buraco na página.
       */}
-      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+      <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
-          <Card>
+          <Card className={cx(cartoes.length === 0 && "lg:flex-1")}>
             <Cabeca titulo="Calendário de pagamentos" sub="Clique num dia para filtrar" />
             <div className="px-[18px] pb-[18px] pt-3">
               <CalendarioPagamentos
@@ -1499,7 +1504,7 @@ export default function ContasPage() {
           {/* Os cartões só aparecem quando existem: sem cartão cadastrado, uma
               moldura vazia só anunciaria um recurso que ninguém pediu. */}
           {cartoes.length > 0 && (
-            <Card className="flex flex-col">
+            <Card className="flex flex-col lg:flex-1">
               <Cabeca titulo="Cartões" sub={`Fatura de ${rotuloMes(mes)}`} />
               <QuadroCartoes
                 cartoes={cartoes}
@@ -1525,7 +1530,7 @@ export default function ContasPage() {
             </div>
           </Card>
 
-          <Card>
+          <Card className="lg:flex-1">
             <Cabeca
               titulo="Pago vs pendente por categoria"
               sub={`Vencimentos de ${nomeMes}`}
