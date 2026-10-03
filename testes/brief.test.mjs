@@ -103,6 +103,8 @@ test("fechamento soma pago, em aberto e as categorias que mais pesaram", () => {
       conta({ due_date: "2026-09-15", status: "paid", amount: 300, category: "Moradia" }),
       conta({ due_date: "2026-09-20", amount: 50, category: "Saúde" }),
       conta({ due_date: "2026-08-10", status: "paid", amount: 200 }),
+      conta({ due_date: "2026-08-12", status: "paid", amount: 0 }),
+      conta({ due_date: "2026-08-14", status: "paid", amount: 0 }),
       conta({ due_date: "2026-10-10", amount: 999 }),
     ],
     "2026-09"
@@ -114,6 +116,17 @@ test("fechamento soma pago, em aberto e as categorias que mais pesaram", () => {
   assert.equal(f.totalAnterior, 200);
   assert.deepEqual(f.categorias.map((c) => c.categoria), ["Moradia", "Internet", "Saúde"]);
   assert.match(linhaDoFechamento(f), /setembro fechou: R\$\s?400,00 pagos · R\$\s?50,00 ficaram em aberto/);
+});
+
+test("comparacao some quando o mes anterior tem pouca base", () => {
+  const f = fechamentoDoMes(
+    [
+      conta({ due_date: "2026-09-10", status: "paid", amount: 100 }),
+      conta({ due_date: "2026-08-30", status: "paid", amount: 10 }),
+    ],
+    "2026-09"
+  );
+  assert.equal(f.totalAnterior, null);
 });
 
 test("datas em Sao Paulo e mes anterior na virada do ano", () => {

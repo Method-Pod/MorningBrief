@@ -405,7 +405,10 @@ function NotificacaoDaManha() {
         )}
         {situacao === "bloqueada" && (
           <p className="mt-3 text-[12.5px] text-warn">
-            A notificação está bloqueada para o app. Libere em Ajustes → Notificações → Morning Brief.
+            A notificação está bloqueada para o app.{" "}
+            {/iphone|ipad/i.test(typeof navigator === "undefined" ? "" : navigator.userAgent)
+              ? "Libere em Ajustes → Notificações → Morning Brief."
+              : "Libere nas permissões do navegador para este site e recarregue."}
           </p>
         )}
 

@@ -61,7 +61,13 @@ export type Fechamento = {
   total: number;
   /** As três categorias que mais pesaram, do maior para o menor. */
   categorias: { categoria: string; valor: number }[];
-  /** Total do mês anterior, para comparar; null quando não há dado. */
+  /**
+   * Total do mês anterior, para comparar; null quando não há base.
+   *
+   * Com menos de três lançamentos no mês anterior a comparação mente: o app
+   * começou no fim de agosto, e setembro aparecia como "+322% em relação a
+   * agosto" — que tinha uma conta só.
+   */
   totalAnterior: number | null;
 };
 
@@ -97,7 +103,7 @@ export function fechamentoDoMes(contas: Bill[], mes: string): Fechamento {
       .map(([categoria, valor]) => ({ categoria, valor }))
       .sort((a, b) => b.valor - a.valor)
       .slice(0, 3),
-    totalAnterior: anterior.length ? soma(anterior) : null,
+    totalAnterior: anterior.length >= 3 ? soma(anterior) : null,
   };
 }
 
