@@ -2,7 +2,7 @@
 
 /* ============================================================
    Tema claro, minimalista, sans-serif.
-   O accent é trocável em tempo de execução via [data-accent] no <html>.
+   O accent é um só — roxo — e vive em `:root`.
    As classes utilitárias apontam para --a*, então trocar o atributo
    repinta a interface inteira sem recompilar nada.
 
@@ -33,120 +33,6 @@
  * escura deles (`--a-ink`) quebraria no pé do degradê, que é escuro.
  */
 :root {
-  --a: #287ee7;
-  --a-ink: #fff;
-  --a-2: #1f66bd;
-  --a-text: #1b5eb0;
-  --a-soft: #e8f1fd;
-  --a-bg: #f1f4f7;
-  --a-sink: #f7f9fb;
-  --a-line: #e3e8ee;
-  --a-line-soft: #edf1f5;
-
-  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
-  --a-2-esc: #4690ea;
-  --a-text-esc: #64afff;
-  --a-soft-esc: #263f59;
-
-  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
-  --painel-1: #2574d5;
-  --painel-2: #1e58a1;
-}
-:root[data-accent="red"] {
-  --a: #e72828;
-  --a-ink: #fff;
-  --a-2: #c11f1f;
-  --a-text: #b31d1d;
-  --a-soft: #fdeaea;
-  --a-bg: #f5f2f2;
-  --a-sink: #faf7f7;
-  --a-line: #eae3e3;
-  --a-line-soft: #f3eeee;
-
-  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
-  --a-2-esc: #ea4646;
-  --a-text-esc: #ff8888;
-  --a-soft-esc: #593236;
-
-  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
-  --painel-1: #e02728;
-  --painel-2: #a72226;
-}
-:root[data-accent="blue"] {
-  --a: #287ee7;
-  --a-ink: #fff;
-  --a-2: #1f66bd;
-  --a-text: #1b5eb0;
-  --a-soft: #e8f1fd;
-  --a-bg: #f1f4f7;
-  --a-sink: #f7f9fb;
-  --a-line: #e3e8ee;
-  --a-line-soft: #edf1f5;
-
-  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
-  --a-2-esc: #4690ea;
-  --a-text-esc: #64afff;
-  --a-soft-esc: #263f59;
-
-  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
-  --painel-1: #2574d5;
-  --painel-2: #1e58a1;
-}
-:root[data-accent="green"] {
-  --a: #28e75e;
-  --a-ink: #0a2412;
-  --a-2: #17c04d;
-  --a-text: #0f6b31;
-  --a-soft: #e6faec;
-  --a-bg: #f1f6f2;
-  --a-sink: #f7fbf8;
-  --a-line: #e2ece5;
-  --a-line-soft: #edf4ef;
-
-  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
-  --a-2-esc: #46ea75;
-  --a-text-esc: #28e75e;
-  --a-soft-esc: #1d442f;
-
-  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
-  --painel-1: #1b8541;
-  --painel-2: #134e31;
-}
-
-/*
- * Temas adicionais.
- *
- * Os matizes seguem o mesmo vocabulário dos quatro primeiros — 28 / 8E / E7 nos
- * canais — em vez de cores escolhidas a esmo, para a paleta continuar parecendo
- * de uma só família.
- *
- * As derivadas não foram escolhidas a olho: foram geradas com o critério medido
- * nos quatro originais (accent como texto entre 5.95 e 6.75:1 contra branco,
- * hover 10 pontos de luminosidade abaixo) e conferidas uma a uma. A calibração
- * do gerador contra os originais fica dentro de 17 de distância RGB, e na
- * maioria dos casos abaixo de 9.
- */
-:root[data-accent="orange"] {
-  --a: #e78e28;
-  --a-ink: #24180a;
-  --a-2: #bd731f;
-  --a-text: #895111;
-  --a-soft: #fbf3e9;
-  --a-bg: #f5f4f2;
-  --a-sink: #f9f9f8;
-  --a-line: #ebe8e6;
-  --a-line-soft: #f2f1f0;
-
-  /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
-  --a-2-esc: #ea9e46;
-  --a-text-esc: #f1952a;
-  --a-soft-esc: #473b2b;
-
-  /* O painel de marca do login. Ver o comentário em `--painel-1`. */
-  --painel-1: #a16625;
-  --painel-2: #674623;
-}
-:root[data-accent="violet"] {
   --a: #7e28e7;
   --a-ink: #fff;
   --a-2: #661fbd;
@@ -166,6 +52,20 @@
   --painel-1: #7e28e7;
   --painel-2: #6022b3;
 }
+
+/*
+ * Temas adicionais.
+ *
+ * Os matizes seguem o mesmo vocabulário dos quatro primeiros — 28 / 8E / E7 nos
+ * canais — em vez de cores escolhidas a esmo, para a paleta continuar parecendo
+ * de uma só família.
+ *
+ * As derivadas não foram escolhidas a olho: foram geradas com o critério medido
+ * nos quatro originais (accent como texto entre 5.95 e 6.75:1 contra branco,
+ * hover 10 pontos de luminosidade abaixo) e conferidas uma a uma. A calibração
+ * do gerador contra os originais fica dentro de 17 de distância RGB, e na
+ * maioria dos casos abaixo de 9.
+ */
 
 /* ============================================================
    Profundidade e tipografia.
@@ -322,13 +222,17 @@
    * O pé NÃO é `--a-2`. Esse token é o tom de hover, e ele muda de direção
    * com o tema — no claro é mais escuro que `--a`, no escuro é mais CLARO.
    * Usado aqui, o degradê desceria no claro e subiria no escuro, o que é
-   * duas aparências diferentes com o mesmo nome. 14% de preto misturado
-   * escurece nos dois, e acompanha a troca de accent sem valor novo.
+   * duas aparências diferentes com o mesmo nome. Preto misturado escurece
+   * nos dois.
+   *
+   * 10%, e não mais: o degradê tem que ser lido como profundidade, não como
+   * duas cores. Acima disso o pé começa a parecer outra tinta, e o botão fica
+   * com cara de ter uma sombra pintada dentro.
    */
   --a-degrade: linear-gradient(
     180deg,
     var(--a),
-    color-mix(in srgb, var(--a) 86%, #000)
+    color-mix(in srgb, var(--a) 90%, #000)
   );
 
   --cartao-borda: transparent;
@@ -459,11 +363,16 @@
   --cat-resto: #6b757c;
 
   /*
-   * A barra de progresso não segue a cor de destaque.
+   * A terceira série do resumo do mês: "a vencer".
    *
-   * Progresso é medida, não identidade: quem trocou o app para roxo não pediu
-   * que "89% lido" virasse roxo. Valor único nos dois temas — 4,18:1 sobre
-   * branco e 4,15:1 sobre o cartão escuro.
+   * Hoje este token só pinta essa fatia — a barra e a bolinha de "a vencer" —,
+   * e não as barras de progresso, que seguem o accent. O comentário antigo
+   * dizia "barra de progresso" e tinha ficado para trás.
+   *
+   * Por que não é o accent: numa série de três, a cor diz QUAL fatia, e o
+   * accent já diz "isto é interface". Usar o mesmo roxo nos dois faria a
+   * fatia parecer um botão. Valor único nos dois temas — 4,18:1 sobre branco
+   * e 4,15:1 sobre o cartão escuro.
    */
   --cor-barra: #3779e5;
 

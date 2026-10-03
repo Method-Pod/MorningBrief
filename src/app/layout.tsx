@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Plus_Jakarta_Sans } from "next/font/google";
-import { ACCENT_KEYS } from "@/lib/accents";
 import { TEMA_STORAGE } from "@/lib/tema";
 import { RegistroApp } from "@/components/RegistroApp";
 import { CorDaBarra } from "@/components/tema";
@@ -120,35 +119,18 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-/**
- * Aplica o accent salvo antes da primeira pintura. Sem isso a página abre no
- * azul padrão e pisca para a cor escolhida no primeiro frame de hidratação.
- *
- * A lista de válidos vem de `ACCENT_KEYS`, e não escrita à mão aqui.
- *
- * Escrita à mão foi o que deu errado: ela tinha os quatro accents originais e
- * ficou para trás quando outros quatro entraram. A validação então recusava o
- * valor salvo de quem tinha escolhido laranja, ciano, violeta ou rosa, o
- * atributo não era aplicado, e a página abria azul e pulava para a cor certa
- * depois da hidratação -- exatamente a piscada que este script existe para
- * evitar, acontecendo só para metade das opções.
- *
- * Derivar da mesma constante que o seletor usa faz as duas listas não terem
- * como divergir de novo: acrescentar uma cor em `lib/accents` já a ensina aqui.
- */
 /*
- * O tema segue a mesma receita, e pela mesma razão.
+ * Aplica o tema salvo antes da primeira pintura.
  *
- * Só que aqui a piscada seria pior: abrir no claro e saltar para o escuro
- * depois da hidratação é a tela inteira trocando de cor na cara de quem
- * abriu, não um detalhe mudando de tom.
+ * Sem isto a tela abre no claro e salta para o escuro no primeiro quadro
+ * depois da hidratação: a tela inteira trocando de cor na cara de quem
+ * abriu. Havia um gêmeo deste script para a cor de destaque, que saiu junto
+ * com as cinco cores — agora o accent é um só e vem do CSS.
  *
  * "auto" não é gravado no atributo de propósito — ausência é o que o CSS lê
  * como automático. Ver `lib/tema`.
  */
-const ACCENT_BOOT = `try{var a=localStorage.getItem('mb.accent');
-if(${JSON.stringify([...ACCENT_KEYS])}.indexOf(a)>-1)document.documentElement.dataset.accent=a}catch(e){}
-try{var t=localStorage.getItem(${JSON.stringify(TEMA_STORAGE)});
+const TEMA_BOOT = `try{var t=localStorage.getItem(${JSON.stringify(TEMA_STORAGE)});
 if(t==='claro'||t==='escuro')document.documentElement.dataset.tema=t}catch(e){}`;
 
 export default async function RootLayout({
@@ -170,14 +152,13 @@ export default async function RootLayout({
   const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   return (
-    // suppressHydrationWarning: o ACCENT_BOOT troca data-accent antes da
+    // suppressHydrationWarning: o TEMA_BOOT troca data-tema antes da
     // hidratação, então o <html> do servidor divergir do cliente é esperado.
     // Extensões de navegador também injetam atributos aqui (LanguageTool
     // grava data-lt-installed). Vale só para os atributos deste elemento —
     // não silencia diferença nenhuma dentro da árvore.
     <html
       lang="pt-BR"
-      data-accent="blue"
       className={jakarta.variable}
       suppressHydrationWarning
     >
@@ -194,7 +175,7 @@ export default async function RootLayout({
         <script
           nonce={nonce}
           suppressHydrationWarning
-          dangerouslySetInnerHTML={{ __html: ACCENT_BOOT }}
+          dangerouslySetInnerHTML={{ __html: TEMA_BOOT }}
         />
       </head>
       <body className="min-h-dvh font-sans antialiased">

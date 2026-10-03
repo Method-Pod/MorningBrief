@@ -10,7 +10,6 @@ import {
   Mail,
   Monitor,
   Moon,
-  Palette,
   ShieldCheck,
   Sun,
   User,
@@ -18,7 +17,6 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { dateTimeBR } from "@/lib/format";
 import { sairDaConta } from "@/lib/sair";
-import { ACCENTS, useAccent } from "@/components/accent";
 import { TEMAS, useTema } from "@/components/tema";
 import { TrocarFoto, useAvatar } from "@/components/Avatar";
 import { Button, Card, Input, cx } from "@/components/ui";
@@ -42,7 +40,6 @@ export default function ContaPage() {
   const [nomeOk, setNomeOk] = React.useState("");
   const [aviso, setAviso] = React.useState("");
   const [erro, setErro] = React.useState("");
-  const { accent, setAccent } = useAccent();
   const { tema, setTema } = useTema();
   const { url: foto, setUrl: setFoto } = useAvatar();
 
@@ -247,38 +244,6 @@ export default function ContaPage() {
                   )}
                   {t.name}
                   {tema === t.key && <Check size={14} />}
-                </button>
-              ))}
-            </div>
-          </div>
-        </Card>
-
-        {/* ------------------------------ cor ------------------------------ */}
-        <Card>
-          <Cabeca icon={<Palette size={14} />} titulo="Cor de destaque" />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <p className="text-[13px] text-fg-mute">
-              A cor escolhida fica salva neste navegador.
-            </p>
-            <div className="mt-3.5 flex flex-wrap gap-2.5">
-              {ACCENTS.map((a) => (
-                <button
-                  key={a.key}
-                  onClick={() => setAccent(a.key)}
-                  aria-pressed={accent === a.key}
-                  className={cx(
-                    "flex items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-[13px] font-medium transition-colors",
-                    accent === a.key
-                      ? "bg-brand-500/12 text-brand-400"
-                      : "bg-ink-800 text-fg-dim hover:text-fg"
-                  )}
-                >
-                  <span
-                    className="h-4 w-4 rounded-full"
-                    style={{ background: a.hex }}
-                  />
-                  {a.name}
-                  {accent === a.key && <Check size={14} />}
                 </button>
               ))}
             </div>

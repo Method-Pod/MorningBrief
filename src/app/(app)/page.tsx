@@ -754,7 +754,7 @@ export default function HomePage() {
                 type="submit"
                 disabled={adding || !draft.trim()}
                 aria-label="Adicionar"
-                className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[14px] bg-brand-500 shadow-[var(--brilho)] hover:shadow-[var(--brilho-forte)] text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-40"
+                className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[14px] bg-brand-500 bg-[image:var(--a-degrade)] shadow-[var(--brilho)] hover:shadow-[var(--brilho-forte)] text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-40"
               >
                 <Plus size={18} />
               </button>
@@ -818,6 +818,130 @@ export default function HomePage() {
       </div>
       </Card>
 
+
+      {/* --------------------------- resumo do mês --------------------------- */}
+      {/*
+        Faixa, e não cartão.
+
+        Quatro números curtos não precisam da moldura que um cartão com lista
+        dentro precisa: com cartão eles pediam a mesma altura e o mesmo peso
+        visual de "Contas a pagar", que tem conteúdo de verdade. Em faixa eles
+        se leem de uma vez, logo abaixo do herói, e devolvem a largura para
+        quem tem o que mostrar.
+
+        A barra fica: ela responde de um olhar o que a lista de números não
+        responde — R$ 200 em aberto quer dizer coisas opostas num mês de
+        R$ 300 e num de R$ 3.000.
+      */}
+      <section className="mt-4">
+        <div className="mb-2 flex items-center justify-between gap-3.5 px-1">
+          <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
+            <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-brand-500/12 text-brand-400">
+              <PieChart size={14} />
+            </span>
+            Resumo de {nomeMes}
+            <Explicacao>
+              <p>
+                Soma as contas com <b>vencimento dentro de {nomeMes}</b>. Pago
+                e o que esta marcado como pago; vencido e o que continua em
+                aberto com a data ja passada; a vencer e o resto do que esta em
+                aberto. As tres fecham o total.
+              </p>
+              <Ressalva>
+                O recorte e a data de VENCIMENTO, nao a de pagamento. Uma conta
+                de setembro que voce pagou em outubro conta em setembro.
+              </Ressalva>
+            </Explicacao>
+          </span>
+          <Link
+            href="/contas"
+            prefetch={false}
+            className="text-xs font-medium text-fg-mute transition-colors hover:text-brand-400"
+          >
+            abrir contas
+          </Link>
+        </div>
+
+        {m.totalMes === 0 ? (
+          <Card>
+            <div className="px-[18px] py-[18px]">
+              <Ghost>Nenhuma conta lançada neste mês.</Ghost>
+            </div>
+          </Card>
+        ) : (
+          <>
+            {/*
+              Uma barra só, com as três parcelas na ordem em que se lê o mês: o
+              que saiu, o que está vencido, o que ainda vai vencer. A folga de
+              2px entre elas é o que deixa duas parcelas vizinhas de cores
+              próximas ainda se separarem.
+            */}
+            <div className="flex h-2 w-full gap-[2px] overflow-hidden rounded-full bg-ink-800">
+              {[
+                ["pago", m.pagoMes, "bg-pos"],
+                ["vencido", m.vencidoMes, "bg-neg"],
+                ["a vencer", Math.max(0, m.abertoMes - m.vencidoMes), "bg-[var(--cor-barra)]"],
+              ].map(([nome, valor, cor]) =>
+                (valor as number) > 0 ? (
+                  <span
+                    key={nome as string}
+                    className={cx("h-full first:rounded-l-full last:rounded-r-full", cor as string)}
+                    style={{ width: `${((valor as number) / m.totalMes) * 100}%` }}
+                    title={`${nome}: ${brl(valor as number)}`}
+                  />
+                ) : null
+              )}
+            </div>
+
+            {/*
+              As divisórias são o fundo aparecendo por uma folga de 1px entre
+              as células — `gap-px` sobre `bg-line`. Uma borda por célula
+              desenharia linha dupla no encontro de duas.
+
+              Cada valor é uma PORTA: ler "Vencido R$ 320" levanta a pergunta
+              "quais?", e a resposta estava a três passos. O número abre
+              /contas já filtrado.
+
+              O NÚMERO vai em tinta de texto, nunca na cor da série: quem diz
+              "isto é o vencido" é a bolinha ao lado, e vermelho sobre papel ou
+              sobre quase-preto são os dois piores contrastes desta tela.
+            */}
+            <div className="mt-2.5 grid grid-cols-2 gap-px overflow-hidden rounded-[18px] border border-line bg-line sm:grid-cols-4">
+              {([
+                ["Total do mês", m.totalMes, null, "todas"],
+                ["Pago", m.pagoMes, "bg-pos", "pagas"],
+                ["Vencido", m.vencidoMes, "bg-neg", "atrasadas"],
+                [
+                  "A vencer",
+                  Math.max(0, m.abertoMes - m.vencidoMes),
+                  "bg-[var(--cor-barra)]",
+                  "pendentes",
+                ],
+              ] as [string, number, string | null, string][]).map(
+                ([rotulo, valor, ponto, filtro]) => (
+                  <Link
+                    key={rotulo}
+                    href={`/contas?filtro=${filtro}`}
+                    prefetch={false}
+                    className="group bg-ink-900 px-4 py-3.5 transition-colors hover:bg-ink-800"
+                  >
+                    <span className="flex items-center gap-1.5 text-[11.5px] text-fg-mute">
+                      {ponto && (
+                        <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", ponto)} />
+                      )}
+                      {rotulo}
+                    </span>
+                    <span className="mt-0.5 block text-[19px] font-bold tracking-[-0.04em] text-fg tnum group-hover:text-brand-400">
+                      {brl(valor)}
+                    </span>
+                  </Link>
+                )
+              )}
+            </div>
+          </>
+        )}
+      </section>
+
       {/* ------------------------ demandas + notas ------------------------ */}
       {/*
         Anotações sozinha na faixa, largura cheia.
@@ -864,7 +988,20 @@ export default function HomePage() {
       </div>
 
       {/* --------------- contas · agenda · recorrentes --------------- */}
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {/*
+        Tres cartoes fixos — Contas, Agenda e Recorrentes — e um quarto quando
+        ha habitos. O resumo saiu desta fileira e virou faixa, entao o numero
+        de colunas no `xl` passa a seguir a contagem: com habitos sao quatro
+        numa linha, sem eles tres. Um `xl:grid-cols-3` fixo deixaria o quarto
+        sozinho na segunda linha, que e o mesmo vao que o resumo veio tapar da
+        primeira vez.
+      */}
+      <div
+        className={cx(
+          "mt-4 grid gap-4 md:grid-cols-2",
+          habitos.length > 0 ? "xl:grid-cols-4" : "xl:grid-cols-3"
+        )}
+      >
         <Card>
           <Head icon={<Wallet size={14} />} title="Contas a pagar" href="/contas" link="ver todas" />
           <div className="px-[18px] pb-[18px] pt-1.5">
@@ -1060,154 +1197,6 @@ export default function HomePage() {
                 })
               )}
             </div>
-          </div>
-        </Card>
-
-        {/* --------------------------- resumo do mês --------------------------- */}
-        {/*
-          A quarta peça da faixa, e ela existe por duas razões.
-
-          A primeira é o buraco: a faixa tem três cartões e duas colunas na
-          largura de tablet, então o terceiro ficava sozinho na segunda linha
-          com meia tela vazia ao lado. Com quatro, fecha 2×2. No `xl:`, onde as
-          três cabem numa linha, esta atravessa as três colunas e vira uma
-          faixa — que é a forma certa para uma fileira de números.
-
-          A segunda é o conteúdo: "Contas a pagar" diz quanto FALTA, e nunca
-          quanto andou. R$ 200 em aberto quer dizer coisas opostas num mês de
-          R$ 300 e num de R$ 3.000. Aqui a barra responde isso de um olhar.
-        */}
-        {/*
-          Quanto o resumo ocupa depende de quantos cartoes vieram antes dele.
-          
-          A faixa tem quatro cartoes fixos — Contas, Agenda, Recorrentes e este
-          — e um quinto que so aparece quando ha habitos. Um `col-span` fixo
-          acerta um caso e erra o outro: com `xl:col-span-3` ele virava faixa
-          inteira e descia para uma linha propria, deixando o vao ao lado de
-          Recorrentes que era justamente o que ele veio tapar.
-          
-          Com o quinto cartao presente, sobra uma coluna ao lado de Recorrentes
-          e ele ocupa duas; sem o quinto, Recorrentes fecha a primeira linha e
-          ele ocupa as tres. As quatro combinacoes (duas larguras x com e sem
-          habitos) fecham sem sobra.
-        */}
-        <Card
-          className={
-            habitos.length > 0
-              ? "md:col-span-2 xl:col-span-2"
-              : "xl:col-span-3"
-          }
-        >
-          <Head
-            icon={<PieChart size={14} />}
-            title={`Resumo de ${nomeMes}`}
-            href="/contas"
-            link="abrir contas"
-            explicacao={
-              <Explicacao>
-                <p>
-                  Soma as contas com <b>vencimento dentro de {nomeMes}</b>.
-                  Pago e o que esta marcado como pago; vencido e o que continua
-                  em aberto com a data ja passada; a vencer e o resto do que
-                  esta em aberto. As tres fecham o total.
-                </p>
-                <Ressalva>
-                  O recorte e a data de VENCIMENTO, nao a de pagamento. Uma
-                  conta de setembro que voce pagou em outubro conta em
-                  setembro.
-                </Ressalva>
-              </Explicacao>
-            }
-          />
-          <div className="px-[18px] pb-[18px] pt-3">
-            {m.totalMes === 0 ? (
-              <Ghost>Nenhuma conta lançada neste mês.</Ghost>
-            ) : (
-              <>
-                {/*
-                  Uma barra só, com as três parcelas na ordem em que se lê o
-                  mês: o que saiu, o que está vencido, o que ainda vai vencer.
-                  A folga de 2px entre elas é o que deixa duas parcelas
-                  vizinhas de cores próximas ainda se separarem.
-                */}
-                <div className="flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full bg-ink-800">
-                  {[
-                    ["pago", m.pagoMes, "bg-pos"],
-                    ["vencido", m.vencidoMes, "bg-neg"],
-                    ["a vencer", Math.max(0, m.abertoMes - m.vencidoMes), "bg-[var(--cor-barra)]"],
-                  ].map(([nome, valor, cor]) =>
-                    (valor as number) > 0 ? (
-                      <span
-                        key={nome as string}
-                        className={cx("h-full first:rounded-l-full last:rounded-r-full", cor as string)}
-                        style={{ width: `${((valor as number) / m.totalMes) * 100}%` }}
-                        title={`${nome}: ${brl(valor as number)}`}
-                      />
-                    ) : null
-                  )}
-                </div>
-
-                {/*
-                  O NÚMERO vai em tinta de texto — preto no claro, branco no
-                  escuro —, e nunca na cor da série.
-
-                  Quem diz "isto é o pago" é a bolinha ao lado, que já repete a
-                  cor do pedaço da barra. Pintando o número também, a cor passa
-                  a ser dita duas vezes e o valor perde legibilidade nas duas
-                  pontas: vermelho sobre branco e vermelho sobre quase-preto são
-                  os dois piores contrastes desta tela.
-                */}
-                {/*
-                  Cada valor e uma PORTA, nao um numero parado.
-
-                  Ler "Vencido R$ 320" levanta uma pergunta imediata — quais? —
-                  e a resposta estava a tres passos: abrir Contas, achar a
-                  pastilha Atrasadas, clicar. Agora o proprio numero leva para
-                  a lista ja filtrada. Numero que responde uma pergunta e faz
-                  nascer outra deveria levar para a resposta.
-                */}
-                {/*
-                  Deixou de ser <dl>: lista de definicao so aceita dt/dd (ou
-                  div) como filha, e um <a> no meio e marcacao invalida. Com o
-                  valor virando link, o que isto e passou a ser um grupo de
-                  atalhos — e e assim que esta escrito.
-                */}
-                <div className="mt-3.5 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
-                  {([
-                    ["Total do mês", m.totalMes, null, "todas"],
-                    ["Pago", m.pagoMes, "bg-pos", "pagas"],
-                    ["Vencido", m.vencidoMes, "bg-neg", "atrasadas"],
-                    [
-                      "A vencer",
-                      Math.max(0, m.abertoMes - m.vencidoMes),
-                      "bg-[var(--cor-barra)]",
-                      "pendentes",
-                    ],
-                  ] as [string, number, string | null, string][]).map(
-                    ([rotulo, valor, ponto, filtro]) => (
-                      <Link
-                        key={rotulo}
-                        href={`/contas?filtro=${filtro}`}
-                        prefetch={false}
-                        className="group -m-1 rounded-lg p-1 transition-colors hover:bg-ink-800"
-                      >
-                        <span className="flex items-center gap-1.5 text-[11.5px] text-fg-mute">
-                          {/* A bolinha liga o número ao pedaço da barra: sem ela
-                              a barra vira enfeite e a lista vira tabela. */}
-                          {ponto && (
-                            <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", ponto)} />
-                          )}
-                          {rotulo}
-                        </span>
-                        <span className="mt-0.5 block text-[17px] font-bold tracking-[-0.03em] text-fg tnum group-hover:text-brand-400">
-                          {brl(valor)}
-                        </span>
-                      </Link>
-                    )
-                  )}
-                </div>
-              </>
-            )}
           </div>
         </Card>
       </div>
