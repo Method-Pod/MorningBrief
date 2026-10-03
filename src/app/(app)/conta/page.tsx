@@ -337,7 +337,7 @@ function NotificacaoDaManha() {
       const r = await ligarPush(supabase, uid);
       setRecado(
         r.ok
-          ? { ok: true, texto: "Ligada. Amanhã às 6h o brief chega neste aparelho." }
+          ? { ok: true, texto: "Ligada. Amanhã às 6h o bom-dia chega neste aparelho." }
           : { ok: false, texto: r.erro }
       );
     } catch (e) {
@@ -383,8 +383,9 @@ function NotificacaoDaManha() {
       <Cabeca icon={<Bell size={14} />} titulo="Notificação da manhã" />
       <div className="px-[18px] pb-[18px] pt-3">
         <p className="text-[13px] text-fg-mute">
-          Todo dia às 6h chega um resumo no celular: demandas do dia, contas que
-          vencem e a agenda. No dia 1º, também como o mês anterior fechou.
+          Todo dia às 6h chega um &ldquo;Bom dia! Veja o resumo do seu
+          dia&rdquo; no celular. Tocar nele abre o Início, com as demandas, as
+          contas que vencem e a agenda.
         </p>
 
         {situacao === "precisa-instalar" && (

@@ -11,27 +11,15 @@ import { enviarBrief } from "@/lib/enviarBrief";
  */
 export const dynamic = "force-dynamic";
 
-const hojeEmSaoPaulo = () =>
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-
 export async function POST() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   if (!data.user)
     return NextResponse.json({ erro: "sessão expirada" }, { status: 401 });
 
-  const r = await enviarBrief(supabase, {
-    userId: data.user.id,
-    hoje: hojeEmSaoPaulo(),
-    falhou: false,
-  });
+  const r = await enviarBrief(supabase, { userId: data.user.id });
   if (r === null)
-    return NextResponse.json({ erro: "Não deu para montar o brief." }, { status: 500 });
+    return NextResponse.json({ erro: "Não deu para enviar." }, { status: 500 });
   if ("pulado" in r) {
     const recado = {
       "sem-chave":

@@ -1,42 +1,12 @@
-import type { Bill, CalendarEvent, Task } from "./types";
-import { brl } from "./format";
+import type { Bill } from "./types";
 
 /*
- * O brief da manhã e o fechamento do mês, como texto.
+ * O fechamento do mês, como números.
  *
- * Funções puras, sem banco: quem busca os dados é o cron (no servidor, para a
- * notificação das 6h) e o Início (no navegador, para o cartão de
- * fechamento). Aqui só se decide o que dizer — e é isso que os testes cobrem.
- *
- * Tudo em São Paulo, e não no fuso da máquina: o cron roda num servidor em
- * UTC, e às 06:00 daqui ele já está às 09:00. Um evento das 22h de ontem,
- * gravado em UTC, cairia "hoje" se a conta usasse o relógio do servidor.
+ * Função pura, sem banco: quem busca as contas é o Início, que mostra o
+ * cartão de fechamento na primeira semana do mês. Aqui só se calcula — e é
+ * isso que os testes cobrem.
  */
-
-const FUSO = "America/Sao_Paulo";
-
-const FMT_DIA = new Intl.DateTimeFormat("en-CA", {
-  timeZone: FUSO,
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-const FMT_HORA = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: FUSO,
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-/** O dia (AAAA-MM-DD) de um instante, em São Paulo. */
-export const diaEmSaoPaulo = (iso: string) => FMT_DIA.format(new Date(iso));
-
-const DIA = 86_400_000;
-const diasEntre = (de: string, ate: string) =>
-  Math.round(
-    (new Date(ate.slice(0, 10) + "T00:00:00Z").getTime() -
-      new Date(de.slice(0, 10) + "T00:00:00Z").getTime()) /
-      DIA
-  );
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -105,98 +75,4 @@ export function fechamentoDoMes(contas: Bill[], mes: string): Fechamento {
       .slice(0, 3),
     totalAnterior: anterior.length >= 3 ? soma(anterior) : null,
   };
-}
-
-/* ------------------------------ brief ------------------------------ */
-
-export type Brief = { titulo: string; corpo: string };
-
-/**
- * O texto da notificação das 6h.
- *
- * Quatro linhas no máximo, que é o que a tela de bloqueio do iPhone mostra
- * sem abrir: demandas do dia, o que vence, a agenda e — só quando há — um
- * aviso. Linha sem conteúdo não entra; "nada vence hoje" não precisa ser
- * dito numa notificação que ele vai ler meio dormindo.
- */
-export function montarBrief({
-  hoje,
-  contas,
-  tarefas,
-  eventos,
-  falhou = false,
-}: {
-  hoje: string;
-  contas: Bill[];
-  tarefas: Task[];
-  eventos: CalendarEvent[];
-  falhou?: boolean;
-}): Brief {
-  const linhas: string[] = [];
-
-  /* Demandas: as de hoje e as atrasadas, que são as que o "Hoje" do Início mostra. */
-  const abertas = tarefas.filter((t) => t.status !== "done" && t.due_date);
-  const deHoje = abertas.filter((t) => t.due_date!.slice(0, 10) === hoje);
-  const atrasadas = abertas.filter((t) => t.due_date!.slice(0, 10) < hoje);
-  if (deHoje.length || atrasadas.length) {
-    const partes = [
-      deHoje.length ? `${deHoje.length} ${deHoje.length === 1 ? "demanda" : "demandas"} hoje` : "",
-      atrasadas.length
-        ? `${atrasadas.length} ${atrasadas.length === 1 ? "atrasada" : "atrasadas"}`
-        : "",
-    ].filter(Boolean);
-    linhas.push(`📋 ${partes.join(" · ")}`);
-  }
-
-  /* Contas: vencidas e as dos próximos três dias, mais urgente primeiro. */
-  const urgentes = contas
-    .filter((b) => b.status !== "paid" && diasEntre(hoje, b.due_date) <= 3)
-    .sort((a, b) => a.due_date.localeCompare(b.due_date));
-  if (urgentes.length) {
-    const quando = (b: Bill) => {
-      const d = diasEntre(hoje, b.due_date);
-      return d < 0 ? "atrasada" : d === 0 ? "hoje" : d === 1 ? "amanhã" : `em ${d}d`;
-    };
-    const primeiras = urgentes
-      .slice(0, 2)
-      .map((b) =>
-        Number(b.amount) > 0
-          ? `${b.description} ${brl(Number(b.amount))} ${quando(b)}`
-          : `${b.description} ${quando(b)}`
-      );
-    const resto = urgentes.length - primeiras.length;
-    linhas.push(`💳 ${primeiras.join(" · ")}${resto > 0 ? ` +${resto}` : ""}`);
-  }
-
-  /* Agenda de hoje: até dois compromissos com hora. */
-  const doDia = eventos
-    .filter((e) => !e.cancelado && diaEmSaoPaulo(e.start_at) === hoje)
-    .sort((a, b) => a.start_at.localeCompare(b.start_at));
-  if (doDia.length) {
-    const itens = doDia
-      .slice(0, 2)
-      .map((e) => (e.all_day ? e.title : `${FMT_HORA.format(new Date(e.start_at))} ${e.title}`));
-    const resto = doDia.length - itens.length;
-    linhas.push(`📅 ${itens.join(" · ")}${resto > 0 ? ` +${resto}` : ""}`);
-  }
-
-  if (falhou) linhas.push("⚠️ A manutenção das 6h falhou — abra o app para conferir.");
-
-  /* O jeito de abrir a mensagem foi pedido dele: um "bom dia" e um convite,
-     e só depois os números. */
-  return {
-    titulo: "Bom dia! ☀️",
-    corpo: linhas.length
-      ? ["Veja o resumo do seu dia:", ...linhas].join("\n")
-      : "Seu dia está livre: nada vence e nenhuma demanda para hoje.",
-  };
-}
-
-/**
- * A linha do fechamento, para o brief do dia 1º.
- */
-export function linhaDoFechamento(f: Fechamento): string {
-  const partes = [`${nomeDoMes(f.mes)} fechou: ${brl(f.pago)} pagos`];
-  if (f.qtdAbertas) partes.push(`${brl(f.aberto)} ficaram em aberto`);
-  return `📊 ${partes.join(" · ")}`;
 }
