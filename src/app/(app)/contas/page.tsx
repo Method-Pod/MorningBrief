@@ -1312,7 +1312,9 @@ export default function ContasPage() {
             zerar, desabilitar o botão aceso deixaria a tela sem como sair
             dele.
           */}
-          <div className="flex flex-wrap gap-1.5">
+          {/* No celular a fileira rola de lado em vez de quebrar em três
+              linhas — eram ~120px de chips antes da primeira conta. */}
+          <div className="-mx-[18px] flex w-[calc(100%+36px)] gap-1.5 overflow-x-auto px-[18px] pb-0.5 sm:mx-0 sm:w-auto sm:flex-wrap sm:overflow-visible sm:px-0">
             {FILTROS.map((f) => {
               const vazio = contagens[f.v] === 0 && filtro !== f.v;
               return (
@@ -1322,7 +1324,7 @@ export default function ContasPage() {
                   disabled={vazio}
                   aria-label={vazio ? `${f.label}: nenhuma` : undefined}
                   className={cx(
-                    "h-8 rounded-full px-3.5 text-[12.5px] font-semibold transition-colors",
+                    "h-8 shrink-0 rounded-full px-3.5 text-[12.5px] font-semibold transition-colors",
                     filtro === f.v
                       ? "bg-brand-500 text-on-brand"
                       : vazio
@@ -1340,8 +1342,8 @@ export default function ContasPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 px-[18px] pb-3.5 pt-3">
-          <div className="relative w-full flex-1 sm:min-w-[180px]">
+        <div className="flex items-center gap-2.5 px-[18px] pb-3.5 pt-3">
+          <div className="relative min-w-0 flex-1 sm:min-w-[180px]">
             <Search
               size={15}
               className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-fg-mute"
@@ -1358,7 +1360,7 @@ export default function ContasPage() {
             value={ordem}
             onChange={(e) => setOrdem(e.target.value as Ordem)}
             aria-label="Ordenar por"
-            className="w-full sm:w-[196px]"
+            className="w-[44%] shrink-0 sm:w-[196px]"
           >
             {ORDENS.map((o) => (
               <option key={o.v} value={o.v}>

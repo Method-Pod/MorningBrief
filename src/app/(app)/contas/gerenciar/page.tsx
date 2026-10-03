@@ -414,7 +414,9 @@ function LinhaSerie({
     s.tipo === "fixa"
       ? `Todo dia ${s.dia}`
       : s.tipo === "parcelada"
-        ? `Parcela ${s.parcelaAtual ?? s.contas.length} de ${s.parcelaTotal ?? "?"}`
+        ? /* A parcela da vez — a primeira em aberto —, e não a maior lançada:
+             "Parcela 10 de 10 · 9 em aberto" fazia parecer que faltava uma. */
+          `Parcela ${s.emAberto[0]?.installment_no ?? s.parcelaAtual ?? s.contas.length} de ${s.parcelaTotal ?? "?"}`
         : s.tipo === "abatida"
           ? s.falta > 0
             ? `falta ${brl(s.falta)}`
