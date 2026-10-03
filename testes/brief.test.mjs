@@ -57,13 +57,15 @@ test("brief junta demandas, contas e agenda em linhas curtas", () => {
     ],
     eventos: [evento({})],
   });
+  assert.match(b.titulo, /^Bom dia!/);
   const linhas = b.corpo.split("\n");
-  assert.equal(linhas.length, 3);
-  assert.match(linhas[0], /1 demanda hoje · 1 atrasada/);
-  assert.match(linhas[1], /Youtube R\$\s?14,00 amanhã/);
+  assert.equal(linhas.length, 4);
+  assert.equal(linhas[0], "Veja o resumo do seu dia:");
+  assert.match(linhas[1], /1 demanda hoje · 1 atrasada/);
+  assert.match(linhas[2], /Youtube R\$\s?14,00 amanhã/);
   assert.doesNotMatch(b.corpo, /Paga|Longe/);
   /* 18:00 UTC = 15:00 em São Paulo. */
-  assert.match(linhas[2], /15:00 Mentoria/);
+  assert.match(linhas[3], /15:00 Mentoria/);
 });
 
 test("evento cancelado e de outro dia ficam fora do brief", () => {
@@ -77,7 +79,7 @@ test("evento cancelado e de outro dia ficam fora do brief", () => {
       evento({ start_at: "2026-10-03T02:00:00.000Z" }),
     ],
   });
-  assert.match(b.corpo, /Dia livre/);
+  assert.match(b.corpo, /Seu dia está livre/);
 });
 
 test("conta variavel sem valor aparece sem R$ 0,00", () => {

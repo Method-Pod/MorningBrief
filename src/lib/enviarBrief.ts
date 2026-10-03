@@ -86,7 +86,13 @@ export async function enviarBrief(
   });
   if (primeiroDia) {
     const f = fechamentoDoMes(todasContas, mesAnterior(hoje.slice(0, 7)));
-    if (f.total > 0) brief.corpo = `${linhaDoFechamento(f)}\n${brief.corpo}`;
+    /* Logo depois do "Veja o resumo do seu dia:", antes das linhas do dia. */
+    if (f.total > 0) {
+      const [cabeca, ...resto] = brief.corpo.split("\n");
+      brief.corpo = resto.length
+        ? [cabeca, linhaDoFechamento(f), ...resto].join("\n")
+        : `${linhaDoFechamento(f)}\n${brief.corpo}`;
+    }
   }
 
   webpush.setVapidDetails(

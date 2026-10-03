@@ -182,9 +182,13 @@ export function montarBrief({
 
   if (falhou) linhas.push("⚠️ A manutenção das 6h falhou — abra o app para conferir.");
 
+  /* O jeito de abrir a mensagem foi pedido dele: um "bom dia" e um convite,
+     e só depois os números. */
   return {
-    titulo: "Bom dia ☀️",
-    corpo: linhas.length ? linhas.join("\n") : "Dia livre: nada vence e nenhuma demanda para hoje.",
+    titulo: "Bom dia! ☀️",
+    corpo: linhas.length
+      ? ["Veja o resumo do seu dia:", ...linhas].join("\n")
+      : "Seu dia está livre: nada vence e nenhuma demanda para hoje.",
   };
 }
 
