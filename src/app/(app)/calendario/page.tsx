@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   CalendarDays,
@@ -11,6 +12,7 @@ import {
   MapPin,
   Pencil,
   Plus,
+  Repeat2,
   Trash2,
   Wallet,
 } from "lucide-react";
@@ -521,10 +523,21 @@ export default function CalendarioPage() {
             {monthStats.tasks === 1 ? "" : "s"} neste mês
           </p>
         </div>
-        <Button variant="primary" onClick={() => startNew(selected)}>
-          <Plus size={15} />
-          Novo evento
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* O calendário mostra ocorrências; para ver o que SE REPETE é
+              preciso sair da grade. Daí o atalho morar no cabeçalho, ao lado
+              de criar — as duas são ações da agenda inteira, não do dia. */}
+          <Link href="/calendario/recorrentes">
+            <Button>
+              <Repeat2 size={15} />
+              Recorrentes
+            </Button>
+          </Link>
+          <Button variant="primary" onClick={() => startNew(selected)}>
+            <Plus size={15} />
+            Novo evento
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_340px]">
