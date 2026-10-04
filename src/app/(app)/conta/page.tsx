@@ -365,11 +365,26 @@ function NotificacaoDaManha() {
     setRecado(null);
     try {
       const resp = await fetch("/api/brief", { method: "POST" });
-      const dados = (await resp.json()) as { enviados?: number; erro?: string };
+      const dados = (await resp.json()) as {
+        enviados?: number;
+        recusados?: number;
+        erro?: string;
+      };
+      /* "Enviado para 0 aparelhos" soava como sucesso. Quando o servidor de
+         push recusa — par de chaves trocado, quase sempre — o certo é dizer
+         que não saiu. */
       setRecado(
-        resp.ok
-          ? { ok: true, texto: `Enviado para ${dados.enviados} aparelho${dados.enviados === 1 ? "" : "s"}.` }
-          : { ok: false, texto: dados.erro ?? "Não deu para enviar." }
+        !resp.ok
+          ? { ok: false, texto: dados.erro ?? "Não deu para enviar." }
+          : (dados.recusados ?? 0) > 0
+            ? {
+                ok: false,
+                texto: `O servidor de push recusou ${dados.recusados} aparelho${dados.recusados === 1 ? "" : "s"}. Normalmente é a chave VAPID da Vercel não casar com a que o aparelho usou ao se inscrever: desligue e ligue a notificação neste aparelho.`,
+              }
+            : {
+                ok: true,
+                texto: `Enviado para ${dados.enviados} aparelho${dados.enviados === 1 ? "" : "s"}.`,
+              }
       );
     } catch {
       setRecado({ ok: false, texto: "Sem conexão com o app." });

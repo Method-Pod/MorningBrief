@@ -179,7 +179,25 @@ export async function GET(req: Request) {
       console.error("[cron] brief", e);
     }
     (linha as Record<string, unknown>).brief = brief;
+    /*
+     * Configuracao quebrada conta como FALHA, e e por isso que isto mudou.
+     *
+     * `enviarBrief` devolve `{pulado}` em tres casos, e eles nao sao a mesma
+     * coisa: "sem-aparelho" e legitimo — ninguem ligou a notificacao, nao ha
+     * o que enviar. "sem-chave" e "sem-tabela" sao o app mal configurado, e
+     * antes passavam como sucesso: a rota respondia 200, a Vercel marcava a
+     * execucao como boa, e a notificacao simplesmente nao chegava, todo dia,
+     * sem nada em lugar nenhum dizendo por que.
+     *
+     * "recusados" entra pelo mesmo motivo: o servidor de push negar o envio
+     * (403, tipico de par de chaves VAPID trocado) deixava `enviados` em 0 e
+     * tambem respondia 200.
+     */
     if (brief === null) falhas.push(`${linha.usuario}: brief`);
+    else if ("pulado" in brief && brief.pulado !== "sem-aparelho")
+      falhas.push(`${linha.usuario}: brief ${brief.pulado}`);
+    else if ("recusados" in brief && brief.recusados > 0)
+      falhas.push(`${linha.usuario}: brief recusado em ${brief.recusados}`);
   }
 
   /*

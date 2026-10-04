@@ -23,7 +23,11 @@ export const BOM_DIA = { titulo: "Bom dia! ☀️", corpo: "Veja o resumo do seu
 type Assinatura = { id: string; endpoint: string; p256dh: string; auth: string };
 
 export type ResultadoBrief =
-  | { enviados: number; removidos: number }
+  /* `recusados` existe por um caso que passava por sucesso: o servidor de
+     push recusar o envio (403, tipico de par de chaves VAPID trocado). O
+     aparelho esta inscrito, nada e removido, e `enviados` fica em 0 — a tela
+     dizia "Enviado para 0 aparelhos", que soa como se tivesse funcionado. */
+  | { enviados: number; removidos: number; recusados: number }
   | { pulado: "sem-chave" | "sem-aparelho" | "sem-tabela" }
   | null;
 
@@ -50,6 +54,7 @@ export async function enviarBrief(
   const carga = JSON.stringify(BOM_DIA);
 
   let enviados = 0;
+  let recusados = 0;
   const vencidas: string[] = [];
   await Promise.all(
     aparelhos.map(async (a) => {
@@ -67,12 +72,15 @@ export async function enviarBrief(
            tirada). A linha sai para não tentar de novo todo dia. */
         const status = (e as { statusCode?: number }).statusCode;
         if (status === 404 || status === 410) vencidas.push(a.id);
-        else console.error("[brief] falha ao enviar", status, (e as Error).message);
+        else {
+          recusados += 1;
+          console.error("[brief] falha ao enviar", status, (e as Error).message);
+        }
       }
     })
   );
   if (vencidas.length)
     await supabase.from("push_assinaturas").delete().in("id", vencidas);
 
-  return { enviados, removidos: vencidas.length };
+  return { enviados, removidos: vencidas.length, recusados };
 }
