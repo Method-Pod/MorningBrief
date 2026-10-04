@@ -242,16 +242,16 @@ export default function CalendarioPage() {
     setOpen(true);
   };
 
-  /**
-   * `escopo` só importa ao editar uma ocorrência de repetição.
+  /*
+   * Salva SEMPRE uma ocorrência só.
    *
-   * "uma" altera o lançamento aberto. "serie" leva as mudanças para as outras
-   * ocorrências dali para frente.
+   * Havia um `escopo` aqui, com "serie" levando a mudança para as irmãs. Ele
+   * saiu junto com o botão "Salvar em todas": mudar a repetição inteira
+   * passou a morar em Calendário > Recorrentes, com a conta em
+   * `lib/serieDeEventos`. Duas telas escrevendo a mesma série por caminhos
+   * diferentes é como elas começam a discordar.
    */
-  const save = async (
-    ev: React.FormEvent | null,
-    escopo: "uma" | "serie" = "uma"
-  ) => {
+  const save = async (ev: React.FormEvent | null) => {
     ev?.preventDefault();
     setErr("");
     if (!form.title.trim()) return setErr("Informe o título do evento.");
@@ -298,81 +298,6 @@ export default function CalendarioPage() {
         return setErr(NADA_GRAVADO);
       }
 
-      /*
-       * "Todas": leva as mudanças para as outras ocorrências da repetição.
-       *
-       * A DATA não vai — cada ocorrência tem a sua, e propagá-la empilharia a
-       * repetição toda num único dia. O que vai é a HORA: mudar de 20:00 para
-       * 21:00 move todas para 21:00 nas datas delas.
-       *
-       * Vai para todas, inclusive as que já passaram. É o que "todas" diz, e
-       * uma repetição de horário trocado pela metade seria pior que o problema:
-       * o histórico mostraria dois horários para o mesmo compromisso.
-       */
-      if (!error && escopo === "serie" && editing.series_id) {
-        const { data: irmas, error: erroBusca } = await supabase
-          .from("events")
-          .select("id, start_at")
-          .eq("series_id", editing.series_id)
-          .neq("id", editing.id);
-
-        if (erroBusca) error = erroBusca;
-        else {
-          const duracao =
-            endAt ? endAt.getTime() - startAt.getTime() : null;
-          const comuns = {
-            title: payload.title,
-            description: payload.description,
-            all_day: payload.all_day,
-            color: payload.color,
-            location: payload.location,
-          };
-
-          /*
-           * Uma requisição por ocorrência, e não um update em lote, porque cada
-           * start_at novo depende da data que aquela linha já tem: só a hora
-           * muda. Um update único não calcularia isso por linha.
-           *
-           * Em paralelo, e não uma esperando a outra: uma repetição semanal
-           * na janela de dois meses tem umas nove ocorrências, e em fila isso
-           * era quase um segundo de "Salvando..." para nove escritas que não
-           * dependem umas das outras. Antes o laço parava no primeiro erro e
-           * deixava a série metade trocada e metade não; agora todas são
-           * tentadas e o primeiro erro é o que aparece.
-           */
-          const resultados = await Promise.all(
-            ((irmas as { id: string; start_at: string }[]) ?? []).map((irma) => {
-              const dia = localDay(irma.start_at);
-              const novoInicio = new Date(
-                `${dia}T${form.all_day ? "00:00" : form.time || "00:00"}:00`
-              );
-              return supabase
-                .from("events")
-                .update({
-                  ...comuns,
-                  start_at: novoInicio.toISOString(),
-                  end_at:
-                    duracao === null
-                      ? null
-                      : new Date(novoInicio.getTime() + duracao).toISOString(),
-                })
-                .eq("id", irma.id)
-                .select("id");
-            })
-          );
-          error = resultados.find((r) => r.error)?.error ?? error;
-          /* Sem erro e sem linha é o 204 silencioso do PostgREST: alguma
-             ocorrência da série não estava mais lá, e "alterado em N" mentiria
-             sobre quantas foram. */
-          if (!error && resultados.some((r) => !r.data?.length))
-            error = { message: NADA_GRAVADO };
-          if (!error && irmas?.length)
-            notice.show(
-              `Alterado em ${irmas.length + 1} ocorrências da repetição.`,
-              "ok"
-            );
-        }
-      }
     } else {
       const uid = await currentUserId(supabase);
       if (!uid) {
@@ -469,31 +394,6 @@ export default function CalendarioPage() {
         if (!notice.check(error, "excluir o evento")) load();
       }
     );
-
-  /*
-   * Excluir a repetição inteira.
-   *
-   * Existe separado porque apagar uma ocorrência do meio não encerra a
-   * repetição: a manutenção estende a partir da última, então a série
-   * continuaria nascendo. Encerrar é apagar a série.
-   */
-  const removerSerie = (e: CalendarEvent) => {
-    if (!e.series_id) return;
-    const quantas = events.filter((x) => x.series_id === e.series_id).length;
-    confirm.ask(
-      `Excluir a repetição de "${e.title}"? São ${quantas} ocorrências, e ela para de se repetir.`,
-      async () => {
-        const { error } = await supabase
-          .from("events")
-          .delete()
-          .eq("series_id", e.series_id);
-        if (!notice.check(error, "excluir a repetição")) {
-          setOpen(false);
-          load();
-        }
-      }
-    );
-  };
 
   const shift = (n: number) =>
     setCursor((c) => {
@@ -878,31 +778,19 @@ export default function CalendarioPage() {
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
-            {editing?.series_id ? (
-              /*
-               * Duas saídas quando a ocorrência é de uma repetição, porque as
-               * duas intenções são legítimas e o app não tem como adivinhar:
-               * remarcar um encontro específico, ou corrigir a repetição toda.
-               * Com um botão só, uma das duas viraria trabalho manual nas
-               * outras ocorrências.
-               */
-              <>
-                <Button onClick={() => save(null, "uma")} disabled={busy}>
-                  {busy ? "Salvando..." : "Salvar só esta"}
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={() => save(null, "serie")}
-                  disabled={busy}
-                >
-                  {busy ? "Salvando..." : "Salvar em todas"}
-                </Button>
-              </>
-            ) : (
-              <Button variant="primary" onClick={() => save(null)} disabled={busy}>
-                {busy ? "Salvando..." : "Salvar"}
-              </Button>
-            )}
+            {/*
+              Um botão só, e ele salva SEMPRE uma ocorrência.
+              
+              Eram dois — "só esta" e "em todas" —, e o "em todas" saiu daqui:
+              mudar a repetição inteira passou a morar em Calendário >
+              Recorrentes, onde a unidade da tela já é a série. Com as duas
+              saídas no mesmo rodapé, a diferença entre elas dependia de ler o
+              aviso acima, e o botão mais à mão era justamente o que alterava
+              nove linhas de uma vez.
+            */}
+            <Button variant="primary" onClick={() => save(null)} disabled={busy}>
+              {busy ? "Salvando..." : "Salvar"}
+            </Button>
           </>
         }
       >
@@ -994,16 +882,17 @@ export default function CalendarioPage() {
                   <span className="font-semibold text-fg">
                     {EVENT_RECURRENCE_LABEL[editing.recurrence] ?? ""}
                   </span>
-                  . Ao salvar, escolha entre só esta e todas. A data fica sempre
-                  só nesta; a hora vai junto.
+                  . O que você mudar aqui vale <b className="text-fg">só para
+                  este dia</b>.
                 </span>
-                <button
-                  type="button"
-                  onClick={() => removerSerie(editing)}
-                  className="text-[11.5px] font-bold text-neg underline decoration-neg/30 underline-offset-2 transition-colors hover:decoration-neg"
+                {/* Mudar ou encerrar a repetição inteira mora numa tela só, e
+                    não é esta: aqui a unidade é a ocorrência. */}
+                <Link
+                  href="/calendario/recorrentes"
+                  className="text-[11.5px] font-bold text-brand-400 underline decoration-brand-400/30 underline-offset-2 transition-colors hover:decoration-brand-400"
                 >
-                  excluir a repetição
-                </button>
+                  mudar a repetição
+                </Link>
               </div>
             )
           )}

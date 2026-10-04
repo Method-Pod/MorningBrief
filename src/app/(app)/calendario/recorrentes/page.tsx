@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, MapPin, Repeat2, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  MapPin,
+  Pencil,
+  Repeat2,
+  Trash2,
+} from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { useEstadoCacheado, temCache } from "@/lib/cachePagina";
@@ -13,11 +20,16 @@ import {
   type CalendarEvent,
   type EventRecurrence,
 } from "@/lib/types";
+import { atualizarSerie } from "@/lib/serieDeEventos";
 import {
   Button,
   Card,
   Empty,
   EsqueletoPagina,
+  Field,
+  Input,
+  Modal,
+  Textarea,
   cx,
   useConfirm,
   useNotice,
@@ -35,10 +47,15 @@ import {
  * Aqui a unidade é a SÉRIE, e não a ocorrência: uma linha por `series_id`,
  * com a frequência, a próxima vez e quantas ainda estão marcadas.
  *
- * O que esta tela NÃO faz, de propósito: editar título, horário ou
- * frequência. Isso já existe no calendário, abrindo uma ocorrência e
- * escolhendo "todas as repetições" — e dois editores do mesmo dado divergem
- * no dia em que alguém mexe num só. Daqui sai o atalho para lá.
+ * É aqui que se muda a repetição inteira — título, hora, local, descrição —,
+ * e é o único lugar: o calendário passou a salvar sempre uma ocorrência só.
+ * Lá os dois botões ("só esta" e "em todas") ficavam lado a lado, e o que
+ * alterava nove linhas de uma vez era o mais à mão.
+ *
+ * O que NÃO se muda aqui: a DATA, que é de cada ocorrência — remarcar um
+ * encontro específico continua sendo no calendário —, e a FREQUÊNCIA, porque
+ * trocá-la obrigaria a refazer as ocorrências já marcadas. Para mudar de
+ * semanal para mensal, encerre e crie de novo.
  */
 
 type Serie = {
@@ -58,6 +75,19 @@ export default function RecorrentesDaAgenda() {
   const [loading, setLoading] = React.useState(() => !temCache("events"));
   const confirm = useConfirm();
   const notice = useNotice();
+
+  /* O editor da série. `aberta` é a série em edição; nulo é fechado. */
+  const [aberta, setAberta] = React.useState<Serie | null>(null);
+  const [form, setForm] = React.useState({
+    title: "",
+    time: "",
+    end_time: "",
+    all_day: false,
+    location: "",
+    description: "",
+  });
+  const [salvando, setSalvando] = React.useState(false);
+  const [erro, setErro] = React.useState("");
 
   const carregar = React.useCallback(async () => {
     const { data } = await supabase.from("events").select("*").order("start_at");
@@ -126,6 +156,61 @@ export default function RecorrentesDaAgenda() {
       }
     );
 
+  const editar = (s: Serie) => {
+    const e = s.proxima;
+    setAberta(s);
+    setErro("");
+    setForm({
+      title: e.title,
+      time: e.all_day ? "" : localTime(e.start_at),
+      end_time: e.end_at && !e.all_day ? localTime(e.end_at) : "",
+      all_day: e.all_day,
+      location: e.location ?? "",
+      description: e.description ?? "",
+    });
+  };
+
+  const salvar = async () => {
+    if (!aberta) return;
+    if (!form.title.trim()) return setErro("Informe o título.");
+    setSalvando(true);
+    setErro("");
+
+    /*
+     * A duração é medida no formulário, não lida do banco: se ele mudar o fim
+     * de 16h para 17h, é a duração NOVA que tem de ir para todas. Lendo a do
+     * banco, a hora de fim que ele acabou de digitar seria ignorada em silêncio.
+     */
+    const duracaoMs =
+      form.all_day || !form.time || !form.end_time
+        ? null
+        : new Date(`2000-01-01T${form.end_time}:00`).getTime() -
+          new Date(`2000-01-01T${form.time}:00`).getTime();
+
+    const { gravadas, erro: falha } = await atualizarSerie(supabase, {
+      serieId: aberta.id,
+      campos: {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        location: form.location.trim(),
+        color: aberta.proxima.color,
+        all_day: form.all_day,
+      },
+      hora: form.all_day ? "00:00" : form.time,
+      duracaoMs: duracaoMs !== null && duracaoMs > 0 ? duracaoMs : null,
+    });
+
+    setSalvando(false);
+    if (falha) return setErro(falha.message);
+    if (!gravadas) return setErro(NADA_GRAVADO);
+    setAberta(null);
+    notice.show(
+      `Alterado em ${gravadas} ocorrência${gravadas === 1 ? "" : "s"}.`,
+      "ok"
+    );
+    carregar();
+  };
+
   if (loading) return <EsqueletoPagina />;
 
   return (
@@ -185,6 +270,15 @@ export default function RecorrentesDaAgenda() {
                   </span>
                   <button
                     type="button"
+                    onClick={() => editar(s)}
+                    aria-label={`Editar a repetição de ${s.titulo}`}
+                    title="Editar a repetição"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => encerrar(s)}
                     aria-label={`Encerrar a repetição de ${s.titulo}`}
                     title="Encerrar a repetição"
@@ -236,6 +330,101 @@ export default function RecorrentesDaAgenda() {
           })}
         </div>
       )}
+
+      <Modal
+        open={!!aberta}
+        onClose={() => setAberta(null)}
+        title="Editar a repetição"
+        footer={
+          <>
+            <Button onClick={() => setAberta(null)}>Cancelar</Button>
+            <Button variant="primary" onClick={salvar} disabled={salvando}>
+              {salvando ? "Salvando..." : "Salvar em todas"}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <p className="rounded-[14px] bg-ink-800 px-3.5 py-3 text-[12px] leading-relaxed text-fg-dim">
+            O que mudar aqui vale para{" "}
+            <b className="text-fg">
+              as {aberta?.total ?? 0} ocorrência
+              {(aberta?.total ?? 0) === 1 ? "" : "s"}
+            </b>{" "}
+            desta repetição, inclusive as que já passaram — horário trocado pela
+            metade mostraria dois horários para o mesmo compromisso.
+          </p>
+
+          <Field label="Título">
+            <Input
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              autoFocus
+            />
+          </Field>
+
+          <label className="flex cursor-pointer items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3 text-[13px]">
+            <input
+              type="checkbox"
+              checked={form.all_day}
+              onChange={(e) => setForm({ ...form, all_day: e.target.checked })}
+              className="h-4 w-4 accent-[var(--a)]"
+            />
+            Dia inteiro
+          </label>
+
+          {!form.all_day && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Início">
+                <Input
+                  type="time"
+                  value={form.time}
+                  onChange={(e) => setForm({ ...form, time: e.target.value })}
+                />
+              </Field>
+              <Field label="Fim">
+                <Input
+                  type="time"
+                  value={form.end_time}
+                  onChange={(e) => setForm({ ...form, end_time: e.target.value })}
+                />
+              </Field>
+            </div>
+          )}
+
+          <Field label="Local">
+            <Input
+              value={form.location}
+              onChange={(e) => setForm({ ...form, location: e.target.value })}
+              placeholder="Zoom, sala, endereço..."
+            />
+          </Field>
+
+          <Field label="Descrição">
+            <Textarea
+              rows={3}
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Pauta, links, participantes..."
+            />
+          </Field>
+
+          {/* A DATA não está aqui de propósito: ela é de cada ocorrência, e
+              propagá-la empilharia a repetição inteira num dia só. Remarcar um
+              encontro específico continua sendo no calendário. */}
+          <p className="text-[11.5px] leading-relaxed text-fg-mute">
+            A data de cada ocorrência e a frequência não mudam aqui. Para
+            remarcar um dia só, abra o evento no calendário; para trocar de
+            semanal para mensal, encerre a repetição e crie de novo.
+          </p>
+
+          {erro && (
+            <p className="rounded-[14px] bg-neg/12 p-3 text-xs font-medium text-neg">
+              {erro}
+            </p>
+          )}
+        </div>
+      </Modal>
 
       {confirm.node}
       {notice.node}
