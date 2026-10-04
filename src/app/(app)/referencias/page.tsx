@@ -26,6 +26,8 @@ import {
   type ReferenciaColecao,
 } from "@/lib/types";
 import { GerenciarColecoes, Pastilha, SUGESTOES } from "@/components/Colecoes";
+import { cortar, pedir } from "@/lib/teto";
+import { MostrarMais } from "@/components/MostrarMais";
 import {
   Button,
   Card,
@@ -145,6 +147,12 @@ export default function ReferenciasPage() {
   );
   const [falta, setFalta] = React.useState<{ texto: string } | null>(null);
 
+  /* Teto de linhas; ver lib/teto. `paginas` acompanha o cache da tela para
+     que voltar para a aba nao desfaca o "carregar mais" que ja foi clicado. */
+  const [paginas, setPaginas] = useEstadoCacheado<number>("referencias:paginas", 1);
+  const [temMais, setTemMais] = React.useState(false);
+  const [buscandoMais, setBuscandoMais] = React.useState(false);
+
   const [filtro, setFiltro] = React.useState<"all" | string>("all");
   /*
    * Imagens que falharam ao carregar.
@@ -183,7 +191,8 @@ export default function ReferenciasPage() {
       supabase
         .from("referencias")
         .select("*")
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .limit(pedir(paginas)),
       supabase.from("colecoes").select("*").order("name"),
       supabase.from("referencia_colecao").select("*"),
     ]);
@@ -199,21 +208,22 @@ export default function ReferenciasPage() {
           : (recadoDeErro(problema) ?? { texto: problema.message })
       );
       setLoading(false);
+      setBuscandoMais(false);
       return;
     }
     setFalta(null);
     /* Títulos gravados antes de o leitor conhecer &mdash; e afins vinham
        com o código cru; desfaz na leitura, e editar regrava limpo. */
+    const { lista, temMais: ha } = cortar(r.data as Referencia[], paginas);
     setRows(
-      ((r.data as Referencia[]) ?? []).map((x) => ({
-        ...x,
-        name: decodificarEntidades(x.name),
-      }))
+      lista.map((x) => ({ ...x, name: decodificarEntidades(x.name) }))
     );
+    setTemMais(ha);
     setColecoes((c.data as Colecao[]) ?? []);
     setLigacoes((l.data as ReferenciaColecao[]) ?? []);
     setLoading(false);
-  }, [supabase, setRows, setColecoes, setLigacoes]);
+    setBuscandoMais(false);
+  }, [supabase, setRows, setColecoes, setLigacoes, paginas]);
 
   React.useEffect(() => {
     load();
@@ -1099,6 +1109,17 @@ export default function ReferenciasPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {temMais && (
+        <MostrarMais
+          visiveis={rows.length}
+          carregando={buscandoMais}
+          onMais={() => {
+            setBuscandoMais(true);
+            setPaginas((p) => p + 1);
+          }}
+        />
       )}
 
       {/* ------------------------------ cadastro ------------------------------ */}

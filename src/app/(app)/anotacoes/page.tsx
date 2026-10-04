@@ -29,6 +29,8 @@ import { dateTimeBR } from "@/lib/format";
 import { textoDaNota } from "@/lib/notas";
 import { GerenciarEtiquetas } from "@/components/GerenciarEtiquetas";
 import { MenuSuspenso } from "@/components/MenuSuspenso";
+import { cortar, pedir } from "@/lib/teto";
+import { MostrarMais } from "@/components/MostrarMais";
 import {
   Button,
   Card,
@@ -90,6 +92,10 @@ export default function AnotacoesPage() {
   );
   /* Já visitou nesta sessão? Abre com conteúdo e atualiza atrás. */
   const [loading, setLoading] = React.useState(() => !temCache("notes"));
+  /* Teto de linhas; ver lib/teto. */
+  const [paginas, setPaginas] = useEstadoCacheado<number>("notes:paginas", 1);
+  const [temMais, setTemMais] = React.useState(false);
+  const [buscandoMais, setBuscandoMais] = React.useState(false);
   /*
    * `useSearchParams`, e não `window.location.search`.
    *
@@ -148,17 +154,23 @@ export default function AnotacoesPage() {
         .from("notes")
         .select("id,user_id,title,color,pinned,created_at,updated_at")
         .order("pinned", { ascending: false })
-        .order("updated_at", { ascending: false }),
+        .order("updated_at", { ascending: false })
+        .limit(pedir(paginas)),
       /* As categorias toleram falha: sem CATEGORIAS-DE-NOTA.sql a faixa de
          filtro não aparece e o resto da tela continua funcionando. */
       supabase.from("note_categories").select("*").order("name"),
       supabase.from("note_in_category").select("*"),
     ]);
-    if (!n.error) setRows((n.data as NotaDaLista[]) ?? []);
+    if (!n.error) {
+      const { lista, temMais: ha } = cortar(n.data as NotaDaLista[], paginas);
+      setRows(lista);
+      setTemMais(ha);
+    }
     setCats((c.data as NoteCategory[]) ?? []);
     setLigacoes((l.data as NoteInCategory[]) ?? []);
     setLoading(false);
-  }, [supabase, setRows, setCats, setLigacoes]);
+    setBuscandoMais(false);
+  }, [supabase, setRows, setCats, setLigacoes, paginas]);
 
   React.useEffect(() => {
     load();
@@ -367,7 +379,15 @@ export default function AnotacoesPage() {
   const carregarCorpos = React.useCallback(async () => {
     if (buscandoCorpos || assinaturaDosCorpos.current === assinatura) return;
     setBuscandoCorpos(true);
-    const { data, error } = await supabase.from("notes").select("id,content");
+    /* A mesma janela do índice: sem ordem e sem teto, a busca baixaria o
+       corpo de anotações que a lista nem mostra — e cortaria um pedaço
+       qualquer do acervo, não o mesmo pedaço. */
+    const { data, error } = await supabase
+      .from("notes")
+      .select("id,content")
+      .order("pinned", { ascending: false })
+      .order("updated_at", { ascending: false })
+      .limit(pedir(paginas));
     setBuscandoCorpos(false);
     if (error) return;
 
@@ -376,7 +396,7 @@ export default function AnotacoesPage() {
       m.set(n.id, textoDaNota(n.content).toLowerCase());
     assinaturaDosCorpos.current = assinatura;
     setCorpos(m);
-  }, [supabase, assinatura, buscandoCorpos]);
+  }, [supabase, assinatura, buscandoCorpos, paginas]);
 
   /**
    * O texto de cada anotação, sem marcação e em minúsculas, pronto para a
@@ -640,6 +660,17 @@ export default function AnotacoesPage() {
            moldura só, separadas por um fio, elas se liam como uma tabela
            contínua — pedido dele: separar. */
         <ul className="flex flex-col gap-2">{vista.map(linha)}</ul>
+      )}
+
+      {temMais && (
+        <MostrarMais
+          visiveis={rows.length}
+          carregando={buscandoMais}
+          onMais={() => {
+            setBuscandoMais(true);
+            setPaginas((p) => p + 1);
+          }}
+        />
       )}
 
       {/* ------------------------- edição rápida ------------------------- */}

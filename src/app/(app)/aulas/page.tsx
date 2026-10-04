@@ -51,6 +51,8 @@ import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { NADA_GRAVADO, nenhumaLinha, recadoDeErro } from "@/lib/erros";
 import { Carrossel } from "@/components/Carrossel";
 import { useBordasRolagem } from "@/components/bordasRolagem";
+import { cortar, pedir } from "@/lib/teto";
+import { MostrarMais } from "@/components/MostrarMais";
 import {
   CampoAssunto,
   Etiqueta,
@@ -199,6 +201,10 @@ export default function AulasPage() {
     texto: string;
     recarregar?: boolean;
   } | null>(null);
+  /* Teto de linhas; ver lib/teto. */
+  const [paginas, setPaginas] = useEstadoCacheado<number>("lessons:paginas", 1);
+  const [temMais, setTemMais] = React.useState(false);
+  const [buscandoMais, setBuscandoMais] = React.useState(false);
   const [aba, setAba] = React.useState<Aba>("fila");
   const [filtro, setFiltro] = React.useState<"all" | string>("all");
   const [marcando, setMarcando] = React.useState<string | null>(null);
@@ -251,7 +257,11 @@ export default function AulasPage() {
 
   const load = React.useCallback(async () => {
     const [l, c, a, m, ca] = await Promise.all([
-      supabase.from("lessons").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("lessons")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(pedir(paginas)),
       supabase.from("courses").select("*").order("created_at", { ascending: false }),
       supabase.from("subjects").select("*").order("name"),
       /* A meta tolera falha: sem AULAS-EXTRAS.sql a tira não aparece e o resto
@@ -279,10 +289,13 @@ export default function AulasPage() {
             : (recadoDeErro(problema) ?? { texto: problema.message })
       );
       setLoading(false);
+      setBuscandoMais(false);
       return;
     }
     setFalta(null);
-    setRows((l.data as Lesson[]) ?? []);
+    const { lista: aulas, temMais: ha } = cortar(l.data as Lesson[], paginas);
+    setRows(aulas);
+    setTemMais(ha);
     setCursos((c.data as Course[]) ?? []);
     setAssuntos((a.data as Subject[]) ?? []);
     setMeta((m.data as { per_week: number } | null)?.per_week ?? null);
@@ -291,7 +304,8 @@ export default function AulasPage() {
     setSemTabelaCanais(!!ca.error);
     setCanais((ca.data as Channel[]) ?? []);
     setLoading(false);
-  }, [supabase, setRows, setCursos, setAssuntos, setMeta, setCanais]);
+    setBuscandoMais(false);
+  }, [supabase, setRows, setCursos, setAssuntos, setMeta, setCanais, paginas]);
 
   React.useEffect(() => {
     load();
@@ -1596,6 +1610,17 @@ export default function AulasPage() {
               })}
             </ul>
           </Card>
+        )}
+
+        {temMais && (
+          <MostrarMais
+            visiveis={rows.length}
+            carregando={buscandoMais}
+            onMais={() => {
+              setBuscandoMais(true);
+              setPaginas((p) => p + 1);
+            }}
+          />
         )}
       </div>
 

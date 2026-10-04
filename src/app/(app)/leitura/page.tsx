@@ -28,6 +28,8 @@ import { type LivroAchado } from "@/lib/livros";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { nenhumaLinha, recadoDeErro } from "@/lib/erros";
 import { useBordasRolagem } from "@/components/bordasRolagem";
+import { cortar, pedir } from "@/lib/teto";
+import { MostrarMais } from "@/components/MostrarMais";
 import {
   Badge,
   Button,
@@ -147,6 +149,10 @@ export default function LeituraPage() {
     texto: string;
     recarregar?: boolean;
   } | null>(null);
+  /* Teto de linhas; ver lib/teto. */
+  const [paginas, setPaginas] = useEstadoCacheado<number>("books:paginas", 1);
+  const [temMais, setTemMais] = React.useState(false);
+  const [buscandoMais, setBuscandoMais] = React.useState(false);
   const [prateleira, setPrateleira] = React.useState<Filtro>("reading");
   /*
    * `useSearchParams`, e não `window.location.search`.
@@ -214,7 +220,8 @@ export default function LeituraPage() {
       supabase
         .from("books")
         .select(COLUNAS_LISTA)
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .limit(pedir(paginas)),
       /*
        * Só a janela do ritmo, não o histórico inteiro.
        *
@@ -254,14 +261,21 @@ export default function LeituraPage() {
           : (recadoDeErro(l.error) ?? { texto: l.error.message })
       );
       setLoading(false);
+      setBuscandoMais(false);
       return;
     }
     setFalta(null);
-    setLivros((l.data as unknown as BookLista[]) ?? []);
+    const { lista, temMais: ha } = cortar(
+      l.data as unknown as BookLista[],
+      paginas
+    );
+    setLivros(lista);
+    setTemMais(ha);
     setSessoes((s.data as ReadingSession[]) ?? []);
     setMeta((m.data as ReadingGoal | null)?.target ?? null);
     setLoading(false);
-  }, [supabase]);
+    setBuscandoMais(false);
+  }, [supabase, paginas, setLivros, setSessoes]);
 
   React.useEffect(() => {
     load();
@@ -1382,6 +1396,17 @@ export default function LeituraPage() {
               );
             })}
           </ul>
+        )}
+
+        {temMais && (
+          <MostrarMais
+            visiveis={livros.length}
+            carregando={buscandoMais}
+            onMais={() => {
+              setBuscandoMais(true);
+              setPaginas((p) => p + 1);
+            }}
+          />
         )}
       </div>
 
