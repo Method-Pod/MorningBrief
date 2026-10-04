@@ -576,7 +576,14 @@ function Editor({
   const [vencimento, setVencimento] = React.useState("");
   const [status, setStatus] = React.useState("pending");
   const [abatido, setAbatido] = React.useState("");
-  const [soEste, setSoEste] = React.useState(false);
+  /*
+   * O alcance deixou de ser estado.
+   *
+   * Era um interruptor no aviso ("alterar só este mês") e um botão que lia
+   * esse estado. Quem abria o editor, digitava e clicava em "Salvar nos 2"
+   * não tinha como saber o que os 2 eram sem voltar a ler o aviso. Agora
+   * cada botão diz o que faz, e o alcance chega como argumento de `salvar`.
+   */
   const [ocupado, setOcupado] = React.useState(false);
   const [erro, setErro] = React.useState("");
 
@@ -596,7 +603,6 @@ function Editor({
     setVencimento(conta.due_date.slice(0, 10));
     setStatus(conta.status);
     setAbatido(conta.paid_amount == null ? "" : paraCampo(Number(conta.paid_amount)));
-    setSoEste(false);
     setErro("");
   }, [conta]);
 
@@ -608,10 +614,11 @@ function Editor({
    * saiu do bolso reescreve histórico, e isso não pode acontecer sem pedido.
    */
   const outros = serie.emAberto.filter((b) => b.id !== conta.id);
-  const alvos = soEste ? [conta] : [conta, ...outros];
+  const alvos0 = outros.length + 1;
   const pagasDeFora = serie.contas.length - serie.emAberto.length;
 
-  const salvar = async () => {
+  const salvar = async (soEste: boolean) => {
+    const alvos = soEste ? [conta] : [conta, ...outros];
     setErro("");
     const desc = descricao.trim();
     const v = paraNumero(valor);
@@ -767,13 +774,29 @@ function Editor({
       footer={
         <>
           <Button onClick={onFechar}>Cancelar</Button>
-          <Button variant="primary" onClick={salvar} disabled={ocupado}>
-            {ocupado
-              ? "Salvando..."
-              : alvos.length > 1
-                ? `Salvar nos ${alvos.length}`
-                : "Salvar"}
-          </Button>
+          {outros.length === 0 ? (
+            <Button variant="primary" onClick={() => salvar(false)} disabled={ocupado}>
+              {ocupado ? "Salvando..." : "Salvar"}
+            </Button>
+          ) : (
+            /*
+             * Duas saídas, cada uma dizendo o alcance no próprio rótulo.
+             *
+             * Era um botão só, "Salvar nos 2", e o alcance dependia de um
+             * interruptor de texto lá em cima — "alterar só este mês". Ele
+             * perguntou "quais dois?", que é a pergunta certa: o número
+             * sozinho não diz nem quais nem o que são. Agora o botão fala, e
+             * o aviso acima nomeia os meses.
+             */
+            <>
+              <Button onClick={() => salvar(true)} disabled={ocupado}>
+                {ocupado ? "Salvando..." : "Só neste mês"}
+              </Button>
+              <Button variant="primary" onClick={() => salvar(false)} disabled={ocupado}>
+                {ocupado ? "Salvando..." : `Salvar nos ${alvos0} em aberto`}
+              </Button>
+            </>
+          )}
         </>
       }
     >
@@ -784,45 +807,42 @@ function Editor({
           saber disso antes de digitar, não depois.
         */}
         {outros.length > 0 && (
-          <div
-            className={cx(
-              "rounded-[14px] px-3.5 py-3 text-[12px] leading-relaxed transition-colors",
-              soEste ? "bg-ink-800 text-fg-dim" : "bg-brand-500/10 text-fg-dim"
-            )}
-          >
-            {soEste ? (
+          <div className="rounded-[14px] bg-brand-500/10 px-3.5 py-3 text-[12px] leading-relaxed text-fg-dim">
+            {/*
+              O aviso NOMEIA os meses em vez de contá-los.
+              
+              Dizia "nos outros 2 meses em aberto", e a pergunta que isso gera
+              é imediata: quais dois? Um número não é uma resposta — e sem a
+              resposta ninguém sabe o que o botão vai alterar. Com os meses
+              escritos, o alcance se confere de relance.
+              
+              Até quatro nomes; acima disso vira "e mais N", porque uma lista
+              de doze meses numa linha de aviso deixa de ser lida.
+            */}
+            O que estiver em{" "}
+            <span className="font-bold text-fg">Vale para a conta toda</span> vai
+            junto para{" "}
+            <span className="font-bold text-fg">
+              {outros
+                .slice(0, 4)
+                .map((b) => rotuloMes(b.due_date.slice(0, 7)))
+                .join(", ")}
+              {outros.length > 4 && ` e mais ${outros.length - 4}`}
+            </span>
+            {pagasDeFora > 0 && (
               <>
-                Alterando <span className="font-bold text-fg">só este mês</span>.
-                Os outros {outros.length} em aberto ficam como estão.
-              </>
-            ) : (
-              <>
-                O que estiver em{" "}
-                <span className="font-bold text-fg">Vale para a conta toda</span>{" "}
-                será gravado também nos outros{" "}
-                <span className="font-bold text-fg tnum">{outros.length}</span>{" "}
-                {outros.length === 1 ? "mês em aberto" : "meses em aberto"}
-                {pagasDeFora > 0 && (
-                  <>
-                    {" "}
-                    · {pagasDeFora} {pagasDeFora === 1 ? "já paga fica" : "já pagas ficam"}{" "}
-                    de fora
-                  </>
-                )}
-                .
+                {" "}
+                · {pagasDeFora} {pagasDeFora === 1 ? "já paga fica" : "já pagas ficam"}{" "}
+                de fora
               </>
             )}
-            <button
-              onClick={() => setSoEste((s) => !s)}
-              className="ml-1.5 font-bold text-brand-400 underline decoration-brand-400/30 underline-offset-2 transition-colors hover:decoration-brand-400"
-            >
-              {soEste ? "voltar a alterar todos" : "alterar só este mês"}
-            </button>
+            . O botão <span className="font-bold text-fg">Só neste mês</span>{" "}
+            grava apenas em {rotuloMes(conta.due_date.slice(0, 7))}.
           </div>
         )}
 
         <section className="flex flex-col gap-3.5">
-          {outros.length > 0 && !soEste && (
+          {outros.length > 0 && (
             <p className="text-[10.5px] font-bold uppercase tracking-wider text-brand-400">
               Vale para a conta toda
             </p>
@@ -902,8 +922,10 @@ function Editor({
             <Field
               label="Vencimento"
               hint={
-                outros.length && !soEste
-                  ? "O dia escolhido passa a valer nos outros meses em aberto."
+                /* Só vale quando ele salvar em todos; por isso a dica diz
+                   "se", e não afirma. */
+                outros.length
+                  ? "Salvando em todos, o dia escolhido passa a valer nos outros meses."
                   : undefined
               }
             >
