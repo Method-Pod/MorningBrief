@@ -304,18 +304,31 @@ export const NOTE_COLORS = ["blue", "violet", "emerald", "amber", "rose", "slate
 /**
  * O tom de cada cor de `NOTE_COLORS`, para desenhar a bolinha.
  *
- * Estava escrito dentro do painel, e os cartões precisavam do mesmo mapa —
- * uma segunda cópia começaria a divergir da primeira no dia em que alguém
- * ajustasse um tom. Aqui, ao lado da lista de nomes que ele traduz.
+ * Devolve uma VARIÁVEL, e não um hexadecimal: as seis cores mudam com o tema,
+ * e um valor fixo em JavaScript não tem como saber qual tema está na tela.
+ * Fixas, elas tinham sido calibradas contra o cartão claro e ficaram para trás
+ * quando o escuro desceu para #20201f — medido lá, o azul caía para 2,66:1,
+ * abaixo do piso de 3:1 para bolinha e ícone. Os valores dos dois temas estão
+ * em `--rot-*`, no globals.css.
+ *
+ * `blue` é o reserva por ser o valor que o banco grava por padrão nas colunas
+ * antigas; o que nasce novo hoje nasce roxo, ver `COR_PADRAO`.
  */
-export const CORES_HEX: Record<string, string> = {
-  blue: "#2563a8",
-  violet: "#6d5bd0",
-  emerald: "#1f9d63",
-  amber: "#b8820c",
-  rose: "#cf4a3f",
-  slate: "#666e74",
-};
+export const corDoRotulo = (nome: string | null | undefined) =>
+  `var(--rot-${NOTE_COLORS.includes(nome ?? "") ? nome : "blue"})`;
+
+/**
+ * A cor com que item novo nasce.
+ *
+ * Era `blue`, de quando o azul era a cor do app. Com o app roxo, coisa nova
+ * nascia de uma cor que não pertencia a lugar nenhum — foi o alfinete azul
+ * que ele viu no Início.
+ *
+ * O custo da escolha, declarado: sendo o padrão igual ao roxo da interface,
+ * "sem rótulo" e "marcado de roxo" ficam iguais. Ele escolheu assim sabendo
+ * disso; a alternativa era nascer cinza.
+ */
+export const COR_PADRAO = "violet";
 
 /**
  * Um cartão de crédito. Ver supabase/CARTOES.sql.

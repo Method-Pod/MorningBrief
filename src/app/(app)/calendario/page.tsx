@@ -25,6 +25,7 @@ import {
   ocorrenciasDeEvento,
 } from "@/lib/manutencao";
 import {
+  COR_PADRAO,
   EVENT_RECURRENCE_LABEL,
   PRIORITY_LABEL,
   type Bill,
@@ -81,7 +82,7 @@ const blank = (date: string) => ({
   time: "09:00",
   end_time: "",
   all_day: false,
-  color: "blue",
+  color: COR_PADRAO,
   location: "",
   recurrence: "none" as EventRecurrence,
 });

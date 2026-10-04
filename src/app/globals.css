@@ -235,6 +235,27 @@
     color-mix(in srgb, var(--a) 90%, #000)
   );
 
+  /*
+   * A paleta de RÓTULO: as seis cores que marcam uma anotação, um cartão de
+   * banco, um cliente.
+   *
+   * Não é o accent e não substitui ele. O accent diz "isto é interface"; estas
+   * dizem "este item é este e não aquele". Por isso continuam seis mesmo
+   * depois de o app passar a ter uma cor só.
+   *
+   * Em variável, e não num objeto de JavaScript como era, porque elas mudam
+   * com o tema. Fixas, elas foram calibradas contra o cartão claro e ficaram
+   * para trás quando o escuro desceu para #20201f: medido lá, o azul caía
+   * para 2,66:1 — abaixo do piso de 3:1 para bolinha e ícone, e era
+   * exatamente o alfinete azul que ele viu na tela.
+   */
+  --rot-blue: #2563a8;
+  --rot-violet: #6d5bd0;
+  --rot-emerald: #1f9d63;
+  --rot-amber: #b8820c;
+  --rot-rose: #cf4a3f;
+  --rot-slate: #666e74;
+
   --cartao-borda: transparent;
 
   --barra: #d5dbd7;
@@ -477,6 +498,14 @@
     --recorrente-bg: var(--a-sink);
     --chip-link: var(--txt-dim);
 
+    /* A mesma paleta de rótulo, aberta para o cartão escuro: todas a ~4,6:1
+       contra #20201f, onde as do claro caíam entre 2,66 e 3,65. */
+    --rot-blue: #368ae6;
+    --rot-violet: #8973ff;
+    --rot-emerald: #1f9c62;
+    --rot-amber: #b37f0b;
+    --rot-rose: #ea5549;
+    --rot-slate: #808a91;
     --cartao-borda: var(--a-line);
 
     --barra: #353534;
@@ -599,6 +628,14 @@
   --recorrente-bg: var(--a-sink);
   --chip-link: var(--txt-dim);
 
+  /* A mesma paleta de rótulo, aberta para o cartão escuro: todas a ~4,6:1
+     contra #20201f, onde as do claro caíam entre 2,66 e 3,65. */
+  --rot-blue: #368ae6;
+  --rot-violet: #8973ff;
+  --rot-emerald: #1f9c62;
+  --rot-amber: #b37f0b;
+  --rot-rose: #ea5549;
+  --rot-slate: #808a91;
   --cartao-borda: var(--a-line);
 
   --barra: #353534;

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
 import { useEstadoCacheado, temCache } from "@/lib/cachePagina";
-import { CORES_HEX, NOTE_COLORS, type Cartao } from "@/lib/types";
+import { COR_PADRAO, corDoRotulo, NOTE_COLORS, type Cartao } from "@/lib/types";
 import { brl, valorDigitado } from "@/lib/format";
 import {
   Button,
@@ -41,7 +41,7 @@ const VAZIO = {
   fecha_dia: "1",
   vence_dia: "10",
   limite: "",
-  cor: "blue",
+  cor: COR_PADRAO,
 };
 
 /** Traz um dia digitado para dentro de 1–31, que é o que o banco aceita. */
@@ -98,7 +98,7 @@ export default function CartoesPage() {
       fecha_dia: String(c.fecha_dia),
       vence_dia: String(c.vence_dia),
       limite: c.limite == null ? "" : String(c.limite),
-      cor: c.cor || "blue",
+      cor: c.cor || COR_PADRAO,
     });
     setErro("");
     setAberto(true);
@@ -252,7 +252,7 @@ export default function CartoesPage() {
                   <p className="flex items-center gap-2 text-[14px] font-bold tracking-[-0.01em]">
                     <span
                       className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: CORES_HEX[c.cor] ?? CORES_HEX.blue }}
+                      style={{ background: corDoRotulo(c.cor) }}
                     />
                     <span className="truncate">{c.nome}</span>
                   </p>
@@ -360,7 +360,7 @@ export default function CartoesPage() {
                   onClick={() => setForm({ ...form, cor: c })}
                   aria-label={`Cor ${c}`}
                   aria-pressed={form.cor === c}
-                  style={{ background: CORES_HEX[c] }}
+                  style={{ background: corDoRotulo(c) }}
                   className={cx(
                     "h-7 w-7 rounded-full transition-transform hover:scale-110",
                     form.cor === c &&

@@ -24,7 +24,7 @@ import { nenhumaLinha } from "@/lib/erros";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
-  CORES_HEX,
+  corDoRotulo,
   dataDoFechamento,
   jaFechou,
   semValorAinda,
@@ -864,7 +864,7 @@ export default function HomePage() {
                 return (
                 <div key={n.id} className="border-b border-line-soft py-2.5 last:border-0">
                   <div className="flex items-center gap-1.5">
-                    <Pin size={12} style={{ color: CORES_HEX[n.color] ?? CORES_HEX.blue }} />
+                    <Pin size={12} style={{ color: corDoRotulo(n.color) }} />
                     <p className="truncate text-[13px] font-semibold">
                       {n.title || "Sem título"}
                     </p>
@@ -981,7 +981,7 @@ export default function HomePage() {
                   <Row key={e.id}>
                     <span
                       className="h-[7px] w-[7px] shrink-0 rounded-full"
-                      style={{ background: CORES_HEX[e.color] ?? "var(--a)" }}
+                      style={{ background: corDoRotulo(e.color) }}
                     />
                     <span className="min-w-0 flex-1 text-sm font-medium">
                       <span className="block truncate">{e.title}</span>

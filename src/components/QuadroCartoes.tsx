@@ -4,7 +4,7 @@ import * as React from "react";
 import { Check, X } from "lucide-react";
 import { brl, valorDigitado } from "@/lib/format";
 import {
-  CORES_HEX,
+  corDoRotulo,
   semValorAinda,
   type Bill,
   type Cartao,
@@ -78,7 +78,7 @@ export function QuadroCartoes({
         >
           <span
             className="h-2 w-2 shrink-0 rounded-full"
-            style={{ background: CORES_HEX[cartao.cor] ?? CORES_HEX.blue }}
+            style={{ background: corDoRotulo(cartao.cor) }}
           />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13px] font-semibold">

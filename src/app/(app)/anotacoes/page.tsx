@@ -20,6 +20,7 @@ import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
 import {
   NOTE_COLORS,
+  COR_PADRAO,
   type Note,
   type NoteCategory,
   type NoteInCategory,
@@ -123,7 +124,7 @@ export default function AnotacoesPage() {
    * navegações. Por isso saíram da página da nota e vieram para cá.
    */
   const [editando, setEditando] = React.useState<NotaDaLista | null>(null);
-  const [rascunho, setRascunho] = React.useState({ title: "", color: "blue" });
+  const [rascunho, setRascunho] = React.useState({ title: "", color: COR_PADRAO });
   const [minhas, setMinhas] = React.useState<string[]>([]);
   const [salvando, setSalvando] = React.useState(false);
   const [erroEdicao, setErroEdicao] = React.useState("");
@@ -180,7 +181,7 @@ export default function AnotacoesPage() {
     }
     const { data, error } = await supabase
       .from("notes")
-      .insert({ user_id: uid, title: "", content: "", color: "blue" })
+      .insert({ user_id: uid, title: "", content: "", color: COR_PADRAO })
       .select("id")
       .maybeSingle();
     setCriando(false);
