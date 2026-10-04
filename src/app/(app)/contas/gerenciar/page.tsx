@@ -614,7 +614,6 @@ function Editor({
    * saiu do bolso reescreve histórico, e isso não pode acontecer sem pedido.
    */
   const outros = serie.emAberto.filter((b) => b.id !== conta.id);
-  const alvos0 = outros.length + 1;
   const pagasDeFora = serie.contas.length - serie.emAberto.length;
 
   const salvar = async (soEste: boolean) => {
@@ -785,15 +784,19 @@ function Editor({
              * Era um botão só, "Salvar nos 2", e o alcance dependia de um
              * interruptor de texto lá em cima — "alterar só este mês". Ele
              * perguntou "quais dois?", que é a pergunta certa: o número
-             * sozinho não diz nem quais nem o que são. Agora o botão fala, e
-             * o aviso acima nomeia os meses.
+             * sozinho não diz nem quais nem o que são.
+             *
+             * O rótulo pode ser curto — "em todos" — porque quem responde
+             * "quais" é o aviso logo acima, que nomeia os meses e diz quantas
+             * pagas ficam de fora. Repetir a contagem no botão era dizer
+             * duas vezes a metade pior da informação.
              */
             <>
               <Button onClick={() => salvar(true)} disabled={ocupado}>
                 {ocupado ? "Salvando..." : "Só neste mês"}
               </Button>
               <Button variant="primary" onClick={() => salvar(false)} disabled={ocupado}>
-                {ocupado ? "Salvando..." : `Salvar nos ${alvos0} em aberto`}
+                {ocupado ? "Salvando..." : "Salvar em todos"}
               </Button>
             </>
           )}
