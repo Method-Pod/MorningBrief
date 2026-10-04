@@ -302,22 +302,6 @@ export const BILL_CATEGORIES = [
 export const NOTE_COLORS = ["blue", "violet", "emerald", "amber", "rose", "slate"];
 
 /**
- * O tom de cada cor de `NOTE_COLORS`, para desenhar a bolinha.
- *
- * Devolve uma VARIÁVEL, e não um hexadecimal: as seis cores mudam com o tema,
- * e um valor fixo em JavaScript não tem como saber qual tema está na tela.
- * Fixas, elas tinham sido calibradas contra o cartão claro e ficaram para trás
- * quando o escuro desceu para #20201f — medido lá, o azul caía para 2,66:1,
- * abaixo do piso de 3:1 para bolinha e ícone. Os valores dos dois temas estão
- * em `--rot-*`, no globals.css.
- *
- * `blue` é o reserva por ser o valor que o banco grava por padrão nas colunas
- * antigas; o que nasce novo hoje nasce roxo, ver `COR_PADRAO`.
- */
-export const corDoRotulo = (nome: string | null | undefined) =>
-  `var(--rot-${NOTE_COLORS.includes(nome ?? "") ? nome : "blue"})`;
-
-/**
  * A cor com que item novo nasce.
  *
  * Era `blue`, de quando o azul era a cor do app. Com o app roxo, coisa nova
@@ -329,6 +313,25 @@ export const corDoRotulo = (nome: string | null | undefined) =>
  * disso; a alternativa era nascer cinza.
  */
 export const COR_PADRAO = "violet";
+
+/**
+ * O tom de cada cor de `NOTE_COLORS`, para desenhar a bolinha.
+ *
+ * Devolve uma VARIÁVEL, e não um hexadecimal: as seis cores mudam com o tema,
+ * e um valor fixo em JavaScript não tem como saber qual tema está na tela.
+ * Fixas, elas tinham sido calibradas contra o cartão claro e ficaram para trás
+ * quando o escuro desceu para #20201f — medido lá, o azul caía para 2,66:1,
+ * abaixo do piso de 3:1 para bolinha e ícone. Os valores dos dois temas estão
+ * em `--rot-*`, no globals.css.
+ *
+ * O reserva é `COR_PADRAO`, e já foi `blue`. Era o padrão da coluna no banco
+ * — então nome vazio e coluna antiga davam na mesma cor, e isso era verdade.
+ * Deixou de ser em supabase/COR-ROXA.sql, que trocou o padrão das cinco
+ * colunas para roxo. Mantido em azul, o reserva seria a última peça do app
+ * ainda pintando de azul uma coisa que ninguém escolheu.
+ */
+export const corDoRotulo = (nome: string | null | undefined) =>
+  `var(--rot-${NOTE_COLORS.includes(nome ?? "") ? nome : COR_PADRAO})`;
 
 /**
  * Um cartão de crédito. Ver supabase/CARTOES.sql.

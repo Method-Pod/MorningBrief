@@ -63,7 +63,7 @@ create table if not exists public.cartoes (
 
   /* A mesma paleta das outras cores do app, para o cartão ter identidade
      na lista sem precisar de logo de banco. */
-  cor         text not null default 'blue',
+  cor         text not null default 'violet',
 
   created_at  timestamptz not null default now()
 );

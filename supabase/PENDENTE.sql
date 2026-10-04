@@ -57,7 +57,7 @@ create table if not exists public.habits (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid not null references auth.users(id) on delete cascade,
   name            text not null,
-  color           text not null default 'blue',
+  color           text not null default 'violet',
   target_per_week int  not null default 7 check (target_per_week between 1 and 7),
   active          boolean not null default true,
   created_at      timestamptz not null default now()

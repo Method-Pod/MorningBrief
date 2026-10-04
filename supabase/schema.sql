@@ -9,7 +9,7 @@ create table if not exists public.notes (
   user_id     uuid not null references auth.users(id) on delete cascade,
   title       text not null default '',
   content     text not null default '',
-  color       text not null default 'blue',
+  color       text not null default 'violet',
   pinned      boolean not null default false,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
@@ -70,7 +70,7 @@ create table if not exists public.events (
   start_at     timestamptz not null,
   end_at       timestamptz,
   all_day      boolean not null default false,
-  color        text not null default 'blue',
+  color        text not null default 'violet',
   location     text not null default '',
   created_at   timestamptz not null default now()
 );

@@ -36,7 +36,7 @@ create table if not exists public.clientes (
    * contato: nada disso foi pedido, e campo que ninguém preenche é campo
    * que atrapalha quem cadastra.
    */
-  cor         text not null default 'blue',
+  cor         text not null default 'violet',
 
   created_at  timestamptz not null default now()
 );
