@@ -8,7 +8,8 @@ import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
 import { mesesAdiante } from "@/components/ContasExtras";
 import { ehAbatida, restanteDe, type Bill } from "@/lib/types";
-import { brl, dataCurta, rotuloMes, valorDigitado } from "@/lib/format";
+import { brl, dataCurta, rotuloMes, todayISO, valorDigitado } from "@/lib/format";
+import { avisoDeExclusao, repartirSerie } from "@/lib/serieDeContas";
 import { useCategorias } from "@/components/Categorias";
 import {
   Button,
@@ -259,20 +260,55 @@ export default function GerenciarPage() {
     );
   };
 
+  /**
+   * Excluir daqui apaga o que ainda vai vencer, e só isso.
+   *
+   * Antes apagava a série inteira, pagas inclusive — pedido dele: "contas
+   * pagas e passadas devem manter no histórico". A régua e a frase do aviso
+   * estão em `lib/serieDeContas`, as duas sob teste, para que o que a caixa
+   * promete e o que a gravação faz não possam discordar.
+   *
+   * As duas gravações são em ordem, e a segunda só acontece se a primeira
+   * passar: parar a repetição sem ter apagado o futuro deixaria a conta
+   * existindo e sem se renovar, que é um terceiro estado que ninguém pediu.
+   */
   const excluirSerie = (s: Serie) => {
-    const n = s.contas.length;
-    const pagas = s.contas.filter((b) => b.status === "paid").length;
-    confirm.ask(
-      `Excluir "${s.descricao}" e ${n === 1 ? "seu único lançamento" : `seus ${n} lançamentos`}?` +
-        (pagas ? ` ${pagas} já ${pagas === 1 ? "está paga" : "estão pagas"}, e o histórico vai junto.` : ""),
-      async () => {
-        const { error } = await supabase
-          .from("bills")
-          .delete()
-          .in("id", s.contas.map((b) => b.id));
-        if (!notice.check(error, "excluir a série")) carregar();
+    const reparticao = repartirSerie(s.contas, todayISO());
+    const { pararRepeticao, excluir } = reparticao;
+    const aviso = avisoDeExclusao(s.descricao, reparticao);
+
+    if (aviso.acao === "nada") return notice.show(aviso.texto);
+
+    const parar = async () => {
+      const { data, error } = await supabase
+        .from("bills")
+        .update({ recurring: false })
+        .in("id", pararRepeticao.map((b) => b.id))
+        .select("id");
+      if (notice.check(error, "parar a repetição")) return false;
+      if (!data?.length) {
+        notice.show(NADA_GRAVADO);
+        return false;
       }
-    );
+      return true;
+    };
+
+    if (aviso.acao === "parar")
+      return confirm.ask(aviso.texto, async () => {
+        if (await parar()) carregar();
+      });
+
+    confirm.ask(aviso.texto, async () => {
+      const { data: saiu, error } = await supabase
+        .from("bills")
+        .delete()
+        .in("id", excluir.map((b) => b.id))
+        .select("id");
+      if (notice.check(error, "excluir os lançamentos futuros")) return;
+      if (!saiu?.length) return notice.show(NADA_GRAVADO);
+      if (pararRepeticao.length) await parar();
+      carregar();
+    });
   };
 
   return (
@@ -538,7 +574,8 @@ function LinhaSerie({
         </button>
         <button
           onClick={onExcluir}
-          aria-label={`Excluir ${s.descricao}`}
+          aria-label={`Excluir os lançamentos futuros de ${s.descricao}`}
+          title="Exclui o que ainda vai vencer. O histórico fica."
           className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
         >
           <Trash2 size={15} />
