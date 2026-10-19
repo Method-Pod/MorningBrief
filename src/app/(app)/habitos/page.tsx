@@ -31,6 +31,7 @@ import {
   useNotice,
   EsqueletoPagina,
 } from "@/components/ui";
+import { MenuSuspenso } from "@/components/MenuSuspenso";
 
 /** semanaDe devolve segunda→domingo, então os nomes seguem a mesma ordem. */
 const DIAS = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
@@ -384,27 +385,23 @@ export default function HabitosPage() {
 
                     {/* no mobile as ações moram na linha do nome */}
                     <div className="flex shrink-0 gap-0.5 lg:hidden">
-                      <button
-                        onClick={() => pausar(h)}
-                        aria-label={h.active ? "Pausar" : "Retomar"}
-                        className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
-                      >
-                        <Power size={14} />
-                      </button>
-                      <button
-                        onClick={() => editar(h)}
-                        aria-label="Editar"
-                        className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
-                      >
-                        <Pencil size={14} />
-                      </button>
-                      <button
-                        onClick={() => excluir(h)}
-                        aria-label="Excluir"
-                        className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <MenuSuspenso
+                        rotulo={`Ações de ${h.name}`}
+                        itens={[
+                          {
+                            rotulo: h.active ? "Pausar" : "Retomar",
+                            icone: <Power size={14} />,
+                            aoEscolher: () => pausar(h),
+                          },
+                          { rotulo: "Editar", icone: <Pencil size={14} />, aoEscolher: () => editar(h) },
+                          {
+                            rotulo: "Excluir",
+                            icone: <Trash2 size={14} />,
+                            aoEscolher: () => excluir(h),
+                            perigo: true,
+                          },
+                        ]}
+                      />
                     </div>
                   </div>
 
@@ -442,27 +439,23 @@ export default function HabitosPage() {
                   </div>
 
                   <div className="hidden shrink-0 gap-0.5 transition-opacity lg:flex lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                    <button
-                      onClick={() => pausar(h)}
-                      aria-label={h.active ? "Pausar" : "Retomar"}
-                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
-                    >
-                      <Power size={14} />
-                    </button>
-                    <button
-                      onClick={() => editar(h)}
-                      aria-label="Editar"
-                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    <button
-                      onClick={() => excluir(h)}
-                      aria-label="Excluir"
-                      className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <MenuSuspenso
+                      rotulo={`Ações de ${h.name}`}
+                      itens={[
+                        {
+                          rotulo: h.active ? "Pausar" : "Retomar",
+                          icone: <Power size={14} />,
+                          aoEscolher: () => pausar(h),
+                        },
+                        { rotulo: "Editar", icone: <Pencil size={14} />, aoEscolher: () => editar(h) },
+                        {
+                          rotulo: "Excluir",
+                          icone: <Trash2 size={14} />,
+                          aoEscolher: () => excluir(h),
+                          perigo: true,
+                        },
+                      ]}
+                    />
                   </div>
                 </li>
               );

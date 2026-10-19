@@ -51,6 +51,7 @@ import {
   cx,
   EsqueletoPagina,
 } from "@/components/ui";
+import { MenuSuspenso } from "@/components/MenuSuspenso";
 import { SeletorDeData } from "@/components/SeletorDeData";
 
 const MONTHS = [
@@ -650,21 +651,19 @@ export default function CalendarioPage() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                          <button
-                            onClick={() => startEdit(e)}
-                            aria-label="Editar"
-                            className="rounded-md p-1 text-fg-mute hover:bg-ink-750 hover:text-fg"
-                          >
-                            <Pencil size={12} />
-                          </button>
-                          <button
-                            onClick={() => remove(e)}
-                            aria-label="Excluir"
-                            className="rounded-md p-1 text-fg-mute hover:bg-neg/15 hover:text-neg"
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                        <div className="-mr-1 shrink-0 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                          <MenuSuspenso
+                            rotulo={`Ações de ${e.title}`}
+                            itens={[
+                              { rotulo: "Editar", icone: <Pencil size={14} />, aoEscolher: () => startEdit(e) },
+                              {
+                                rotulo: "Excluir",
+                                icone: <Trash2 size={14} />,
+                                aoEscolher: () => remove(e),
+                                perigo: true,
+                              },
+                            ]}
+                          />
                         </div>
                       </div>
                       {e.description && (

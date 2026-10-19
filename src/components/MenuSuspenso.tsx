@@ -25,7 +25,11 @@ export type ItemMenuSuspenso = {
 };
 
 /** Onde o menu nasce: abaixo e alinhado à direita do botão, ou acima. */
-const LARGURA = 184;
+/* 224 e nao 184: "Mover para Em andamento", o rotulo mais longo do
+   cartao de demanda, quebrava em duas linhas. Medido: o item pede 203px
+   e a caixa tem 14px de recuo e borda, entao o minimo e 217 -- os 7 a
+   mais sao folga para a fonte renderizar mais larga em outra maquina. */
+const LARGURA = 224;
 const FOLGA = 6;
 
 export function MenuSuspenso({

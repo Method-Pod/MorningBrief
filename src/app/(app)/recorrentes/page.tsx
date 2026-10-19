@@ -44,6 +44,7 @@ import {
   cx,
   EsqueletoLista,
 } from "@/components/ui";
+import { MenuSuspenso } from "@/components/MenuSuspenso";
 
 const FREQS: Frequency[] = [
   "daily",
@@ -439,21 +440,19 @@ export default function RecorrentesPage() {
                       {frequencyDescription(r)}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                    <button
-                      onClick={() => startEdit(r)}
-                      aria-label="Editar"
-                      className="rounded-md p-1.5 text-fg-mute hover:bg-ink-750 hover:text-fg"
-                    >
-                      <Pencil size={13} />
-                    </button>
-                    <button
-                      onClick={() => remove(r)}
-                      aria-label="Excluir"
-                      className="rounded-md p-1.5 text-fg-mute hover:bg-neg/15 hover:text-neg"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                  <div className="-mr-1 -mt-0.5 shrink-0 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                    <MenuSuspenso
+                      rotulo={`Ações de ${r.title}`}
+                      itens={[
+                        { rotulo: "Editar", icone: <Pencil size={14} />, aoEscolher: () => startEdit(r) },
+                        {
+                          rotulo: "Excluir",
+                          icone: <Trash2 size={14} />,
+                          aoEscolher: () => remove(r),
+                          perigo: true,
+                        },
+                      ]}
+                    />
                   </div>
                 </div>
 

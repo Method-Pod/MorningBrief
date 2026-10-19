@@ -2168,7 +2168,7 @@ function Linha({
         </span>
       )}
 
-      <div className="flex shrink-0 gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+      <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
         {abatida && !paga && (
           <button
             onClick={onAbater}
@@ -2179,20 +2179,21 @@ function Linha({
             <HandCoins size={14} />
           </button>
         )}
-        <button
-          onClick={onEditar}
-          aria-label="Editar"
-          className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-ink-900 hover:text-fg"
-        >
-          <Pencil size={14} />
-        </button>
-        <button
-          onClick={onExcluir}
-          aria-label="Excluir"
-          className="grid h-7 w-7 place-items-center rounded-lg text-fg-mute hover:bg-neg/15 hover:text-neg"
-        >
-          <Trash2 size={14} />
-        </button>
+        {/* Abater fica de fora do menu de proposito: tem cor propria e e a
+            acao principal de conta abatida. O menu e para o que so se
+            distinguia lendo o balaozinho -- editar e excluir. */}
+        <MenuSuspenso
+          rotulo={`Ações de ${b.description}`}
+          itens={[
+            { rotulo: "Editar", icone: <Pencil size={14} />, aoEscolher: onEditar },
+            {
+              rotulo: "Excluir",
+              icone: <Trash2 size={14} />,
+              aoEscolher: onExcluir,
+              perigo: true,
+            },
+          ]}
+        />
       </div>
     </li>
   );

@@ -544,11 +544,11 @@ export function Segmented<T extends string>({
               dentro de um trilho cinza, que no claro ficava branco sobre
               quase-branco — a diferença entre escolhido e não escolhido era a
               sombra. Com o roxo cheio, qual filtro está ligado se lê de
-              longe, e é o mesmo tratamento do botão primário e das pílulas de
-              categoria, que já são o jeito do app dizer "este aqui".
+              longe. Sem o brilho do botão primário, a pedido dele: o
+              brilho diz "aperte aqui", e o seletor só precisa dizer "é este".
             */
             value === o.value
-              ? "bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand shadow-[var(--brilho)]"
+              ? "bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand"
               : "text-fg-mute hover:text-fg-dim"
           )}
         >
