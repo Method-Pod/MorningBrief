@@ -1486,9 +1486,18 @@ export default function DemandasPage() {
         }
       >
         {/*
-          Ordem: o que a demanda é, depois o que ela contém, depois quando.
-          Antes cliente e prioridade vinham só no fim, depois do checklist, e
-          para trocar a prioridade era preciso rolar por toda a lista de itens.
+          Tres blocos, e nao nove campos numa pilha.
+
+          Era uma lista de blocos de peso igual em que nada dizia o que e
+          essencial e o que e detalhe -- e o campo que MUDA A FORMA do
+          formulario ("demanda recorrente") era o ultimo: a pessoa
+          preenchia prazo e status, marcava a caixa no fim e via os dois
+          sumirem. Era essa a parte confusa.
+
+          Agora: o que a demanda e (titulo e tipo), de quem e para
+          quando, e so depois o conteudo. Os fios separam os blocos sem
+          acrescentar mais texto cinza numa tela que ja tinha rotulo
+          demais.
         */}
         <form onSubmit={save} className="space-y-5">
           <Field label="Título">
@@ -1500,166 +1509,29 @@ export default function DemandasPage() {
             />
           </Field>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/*
-              Cliente e projeto vêm do cadastro, e não mais de texto livre.
-
-              O campo era um `<input>` com sugestões, e sugestão não impede
-              nada: bastava um espaço a mais para nascer um cliente novo em
-              silêncio — foi assim que a Bia virou cinco. Escolhendo de uma
-              lista, a demanda aponta para uma linha do cadastro, e renomear
-              lá muda aqui.
-
-              O projeto depende do cliente: sem cliente escolhido ele não tem
-              o que oferecer, e por isso fica desabilitado em vez de mostrar
-              uma lista de projetos soltos de donos diferentes.
-            */}
-            <Field
-              label="Cliente"
-              hint={
-                cadastro.length === 0
-                  ? "Cadastre em Gerenciar › Clientes e projetos."
-                  : undefined
-              }
-            >
-              <Select
-                value={form.cliente_id}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    cliente_id: e.target.value,
-                    /* Trocar de cliente zera o projeto: manter o anterior
-                       deixaria a demanda apontando para um projeto de outro
-                       dono, que é pior que não ter projeto. */
-                    projeto_id: "",
-                  })
+          {/*
+            O tipo vem ANTES dos campos que ele controla. Escolhido aqui,
+            a linha de prazo ja nasce sendo a certa: prazo, horario e
+            status para a avulsa; frequencia para a recorrente. Na edicao
+            nao aparece, porque demanda que ja existe nao vira regra.
+          */}
+          {!editing && (
+            <div>
+              <Segmented
+                value={form.recurring ? "recorrente" : "avulsa"}
+                onChange={(v) =>
+                  setForm({ ...form, recurring: v === "recorrente" })
                 }
-              >
-                <option value="">Sem cliente</option>
-                {cadastro.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Prioridade">
-              <Select
-                value={form.priority}
-                onChange={(e) =>
-                  setForm({ ...form, priority: e.target.value as Priority })
-                }
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field
-              label="Projeto"
-              hint={
-                !form.cliente_id
-                  ? "Escolha um cliente primeiro."
-                  : projetosDoCliente.length === 0
-                    ? "Este cliente ainda não tem projeto."
-                    : undefined
-              }
-            >
-              <Select
-                value={form.projeto_id}
-                disabled={!form.cliente_id || projetosDoCliente.length === 0}
-                onChange={(e) =>
-                  setForm({ ...form, projeto_id: e.target.value })
-                }
-              >
-                <option value="">Sem projeto</option>
-                {projetosDoCliente.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nome}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-
-          <Field label="Descrição">
-            <Textarea
-              rows={4}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Contexto, o que precisa ser entregue..."
-            />
-          </Field>
-
-          <Field
-            label="Links do material"
-            hint="Roteiro, vídeo bruto, pasta do Drive. Abrem em outra aba."
-          >
-            <EditorLinks
-              links={form.links}
-              onChange={(links) => setForm({ ...form, links })}
-            />
-          </Field>
-
-          <Field
-            label="Checklist"
-            hint={
-              form.recurring
-                ? "Vira o modelo da recorrência: cada dia nasce com estes itens desmarcados."
-                : "A demanda só vai para Concluída com todos marcados."
-            }
-          >
-            <EditorChecklist itens={checklist} onChange={setChecklist} />
-          </Field>
-
-          {/* Prazo e status só fazem sentido em demanda avulsa: numa recorrente
-              quem manda na data é a frequência, e ela sempre nasce "a fazer". */}
-          {!form.recurring && (
-            <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="Prazo">
-                <SeletorDeData
-                  value={form.due_date}
-                  onChange={(due_date) => setForm({ ...form, due_date })}
-                />
-              </Field>
-              {/*
-                Horário é opcional, e o campo diz isso sem precisar de rótulo
-                extra: ele só liga quando há um dia escolhido.
-
-                A maioria das demandas é do dia inteiro — "gravar o vídeo" não
-                tem hora. Um campo obrigatório faria inventar uma hora para
-                todas, e aí o cartão mostraria um horário que não quer dizer
-                nada. Desligado sem data porque hora de dia nenhum não tem
-                onde aparecer.
-              */}
-              <Field
-                label="Horário"
-                hint={form.due_date ? "Opcional." : "Escolha o prazo primeiro."}
-              >
-                <Input
-                  type="time"
-                  value={form.due_time}
-                  disabled={!form.due_date}
-                  onChange={(e) => setForm({ ...form, due_time: e.target.value })}
-                />
-              </Field>
-              <Field label="Status">
-                <Select
-                  value={form.status}
-                  onChange={(e) =>
-                    setForm({ ...form, status: e.target.value as TaskStatus })
-                  }
-                >
-                  {COLUMNS.map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABEL[s]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
+                options={[
+                  { value: "avulsa", label: "Avulsa" },
+                  { value: "recorrente", label: "Recorrente" },
+                ]}
+              />
+              <p className="mt-1.5 text-[11px] text-fg-mute">
+                {form.recurring
+                  ? "Cria a regra e já lança a de hoje. Depois ela volta sozinha em cada data."
+                  : "Uma vez só, com prazo próprio."}
+              </p>
             </div>
           )}
 
@@ -1674,153 +1546,300 @@ export default function DemandasPage() {
             </p>
           )}
 
-          {!editing && (
-            <div className="rounded-[14px] bg-ink-800 p-3.5">
-              <label className="flex cursor-pointer items-start gap-2.5">
-                <input
-                  type="checkbox"
-                  checked={form.recurring}
-                  onChange={(e) =>
-                    setForm({ ...form, recurring: e.target.checked })
-                  }
-                  className="mt-0.5 h-4 w-4 accent-[var(--a)]"
-                />
-                <span className="text-sm text-fg-dim">
-                  <span className="font-semibold text-fg">Demanda recorrente</span>
-                  <span className="mt-0.5 block text-[11.5px] text-fg-mute">
-                    Cria a regra e já lança a demanda de hoje. Depois ela volta
-                    sozinha em cada data.
-                  </span>
-                </span>
-              </label>
+          <div className="space-y-4 border-t border-line-soft pt-5">
+            {/*
+              Cliente, projeto e prioridade em TRES colunas. Em duas, o
+              projeto sobrava sozinho numa linha e deixava meia largura
+              vazia embaixo do cliente -- um buraco no meio do formulario.
+            */}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {/*
+                Cliente e projeto vêm do cadastro, e não mais de texto livre.
 
-              {form.recurring && (
-                <div className="mt-3.5 grid gap-4 border-t border-line-soft pt-3.5 sm:grid-cols-2">
-                  <Field label="Frequência">
+                O campo era um `<input>` com sugestões, e sugestão não impede
+                nada: bastava um espaço a mais para nascer um cliente novo em
+                silêncio — foi assim que a Bia virou cinco. Escolhendo de uma
+                lista, a demanda aponta para uma linha do cadastro, e renomear
+                lá muda aqui.
+
+                O projeto depende do cliente: sem cliente escolhido ele não tem
+                o que oferecer, e por isso fica desabilitado em vez de mostrar
+                uma lista de projetos soltos de donos diferentes.
+              */}
+              <Field
+                label="Cliente"
+                hint={
+                  cadastro.length === 0
+                    ? "Cadastre em Gerenciar › Clientes e projetos."
+                    : undefined
+                }
+              >
+                <Select
+                  value={form.cliente_id}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      cliente_id: e.target.value,
+                      /* Trocar de cliente zera o projeto: manter o anterior
+                         deixaria a demanda apontando para um projeto de outro
+                         dono, que é pior que não ter projeto. */
+                      projeto_id: "",
+                    })
+                  }
+                >
+                  <option value="">Sem cliente</option>
+                  {cadastro.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nome}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field
+                label="Projeto"
+                hint={
+                  !form.cliente_id
+                    ? "Escolha um cliente primeiro."
+                    : projetosDoCliente.length === 0
+                      ? "Este cliente ainda não tem projeto."
+                      : undefined
+                }
+              >
+                <Select
+                  value={form.projeto_id}
+                  disabled={!form.cliente_id || projetosDoCliente.length === 0}
+                  onChange={(e) =>
+                    setForm({ ...form, projeto_id: e.target.value })
+                  }
+                >
+                  <option value="">Sem projeto</option>
+                  {projetosDoCliente.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nome}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Prioridade">
+                <Select
+                  value={form.priority}
+                  onChange={(e) =>
+                    setForm({ ...form, priority: e.target.value as Priority })
+                  }
+                >
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      {PRIORITY_LABEL[p]}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            </div>
+
+            {/* A linha fica no MESMO lugar nos dois tipos, para o
+                formulario nao saltar ao trocar de avulsa para recorrente. */}
+            {!form.recurring ? (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Field label="Prazo">
+                  <SeletorDeData
+                    value={form.due_date}
+                    onChange={(due_date) => setForm({ ...form, due_date })}
+                  />
+                </Field>
+                {/*
+                  Horário é opcional, e o campo diz isso sem precisar de rótulo
+                  extra: ele só liga quando há um dia escolhido.
+
+                  A maioria das demandas é do dia inteiro — "gravar o vídeo" não
+                  tem hora. Um campo obrigatório faria inventar uma hora para
+                  todas, e aí o cartão mostraria um horário que não quer dizer
+                  nada. Desligado sem data porque hora de dia nenhum não tem
+                  onde aparecer.
+                */}
+                <Field
+                  label="Horário"
+                  hint={form.due_date ? "Opcional." : "Escolha o prazo primeiro."}
+                >
+                  <Input
+                    type="time"
+                    value={form.due_time}
+                    disabled={!form.due_date}
+                    onChange={(e) => setForm({ ...form, due_time: e.target.value })}
+                  />
+                </Field>
+                <Field label="Status">
+                  <Select
+                    value={form.status}
+                    onChange={(e) =>
+                      setForm({ ...form, status: e.target.value as TaskStatus })
+                    }
+                  >
+                    {COLUMNS.map((s) => (
+                      <option key={s} value={s}>
+                        {STATUS_LABEL[s]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Frequência">
+                  <Select
+                    value={form.frequency}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        frequency: e.target.value as Frequency,
+                      })
+                    }
+                  >
+                    {FREQS.map((f) => (
+                      <option key={f} value={f}>
+                        {FREQUENCY_LABEL[f]}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                {form.frequency === "weekly" && (
+                  <Field
+                    label="Dias da semana"
+                    hint={
+                      form.weekdays.length > 1
+                        ? "A demanda volta em cada dia marcado."
+                        : undefined
+                    }
+                  >
+                    {/*
+                      Caixinhas em vez de um select: com vários dias, um
+                      select múltiplo esconde o que está escolhido atrás de
+                      uma rolagem. Aqui os sete dias e o que está marcado se
+                      leem de uma vez, no mesmo formato das bolinhas de
+                      hábitos.
+                    */}
+                    <div className="flex gap-1">
+                      {WEEKDAYS_SIGLA.map((sigla, i) => {
+                        const marcado = form.weekdays.includes(i);
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            aria-label={WEEKDAYS[i]}
+                            aria-pressed={marcado}
+                            onClick={() =>
+                              setForm({
+                                ...form,
+                                /*
+                                  Nunca deixa ficar sem nenhum: uma regra
+                                  semanal sem dia não dispararia nunca, e a
+                                  tela não teria como avisar disso.
+                                */
+                                weekdays: marcado
+                                  ? form.weekdays.length > 1
+                                    ? form.weekdays.filter((d) => d !== i)
+                                    : form.weekdays
+                                  : [...form.weekdays, i].sort((a, b) => a - b),
+                              })
+                            }
+                            className={cx(
+                              "h-9 flex-1 rounded-[12px] text-[12.5px] font-bold transition-colors",
+                              marcado
+                                ? "bg-brand-500 text-on-brand"
+                                : "bg-ink-800 text-fg-mute hover:text-fg-dim"
+                            )}
+                          >
+                            {sigla}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </Field>
+                )}
+
+                {form.frequency === "biweekly" && (
+                  <Field label="Dia da semana">
                     <Select
-                      value={form.frequency}
+                      value={String(form.weekday)}
                       onChange={(e) =>
-                        setForm({
-                          ...form,
-                          frequency: e.target.value as Frequency,
-                        })
+                        setForm({ ...form, weekday: Number(e.target.value) })
                       }
                     >
-                      {FREQS.map((f) => (
-                        <option key={f} value={f}>
-                          {FREQUENCY_LABEL[f]}
+                      {WEEKDAYS.map((w, i) => (
+                        <option key={w} value={i}>
+                          {w}
                         </option>
                       ))}
                     </Select>
                   </Field>
+                )}
 
-                  {form.frequency === "weekly" && (
-                    <Field
-                      label="Dias da semana"
-                      hint={
-                        form.weekdays.length > 1
-                          ? "A demanda volta em cada dia marcado."
-                          : undefined
+                {["monthly", "quarterly", "yearly"].includes(
+                  form.frequency
+                ) && (
+                  <Field
+                    label="Dia do mês"
+                    hint="Em meses curtos, cai no último dia."
+                  >
+                    <Input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={form.day_of_month}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          day_of_month: Number(e.target.value),
+                        })
                       }
-                    >
-                      {/*
-                        Caixinhas em vez de um select: com vários dias, um
-                        select múltiplo esconde o que está escolhido atrás de
-                        uma rolagem. Aqui os sete dias e o que está marcado se
-                        leem de uma vez, no mesmo formato das bolinhas de
-                        hábitos.
-                      */}
-                      <div className="flex gap-1">
-                        {WEEKDAYS_SIGLA.map((sigla, i) => {
-                          const marcado = form.weekdays.includes(i);
-                          return (
-                            <button
-                              key={i}
-                              type="button"
-                              aria-label={WEEKDAYS[i]}
-                              aria-pressed={marcado}
-                              onClick={() =>
-                                setForm({
-                                  ...form,
-                                  /*
-                                    Nunca deixa ficar sem nenhum: uma regra
-                                    semanal sem dia não dispararia nunca, e a
-                                    tela não teria como avisar disso.
-                                  */
-                                  weekdays: marcado
-                                    ? form.weekdays.length > 1
-                                      ? form.weekdays.filter((d) => d !== i)
-                                      : form.weekdays
-                                    : [...form.weekdays, i].sort((a, b) => a - b),
-                                })
-                              }
-                              className={cx(
-                                "h-9 flex-1 rounded-[12px] text-[12.5px] font-bold transition-colors",
-                                marcado
-                                  ? "bg-brand-500 text-on-brand"
-                                  : "bg-ink-800 text-fg-mute hover:text-fg-dim"
-                              )}
-                            >
-                              {sigla}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </Field>
-                  )}
+                    />
+                  </Field>
+                )}
 
-                  {form.frequency === "biweekly" && (
-                    <Field label="Dia da semana">
-                      <Select
-                        value={String(form.weekday)}
-                        onChange={(e) =>
-                          setForm({ ...form, weekday: Number(e.target.value) })
-                        }
-                      >
-                        {WEEKDAYS.map((w, i) => (
-                          <option key={w} value={i}>
-                            {w}
-                          </option>
-                        ))}
-                      </Select>
-                    </Field>
-                  )}
+                <p className="text-[11.5px] text-fg-mute sm:col-span-2">
+                  {frequencyDescription({
+                    frequency: form.frequency,
+                    weekday: form.weekday,
+                    weekdays: form.weekdays,
+                    day_of_month: form.day_of_month,
+                  })}
+                  .
+                </p>
+              </div>
+            )}
+          </div>
 
-                  {["monthly", "quarterly", "yearly"].includes(
-                    form.frequency
-                  ) && (
-                    <Field
-                      label="Dia do mês"
-                      hint="Em meses curtos, cai no último dia."
-                    >
-                      <Input
-                        type="number"
-                        min={1}
-                        max={31}
-                        value={form.day_of_month}
-                        onChange={(e) =>
-                          setForm({
-                            ...form,
-                            day_of_month: Number(e.target.value),
-                          })
-                        }
-                      />
-                    </Field>
-                  )}
+          <div className="space-y-4 border-t border-line-soft pt-5">
+            <Field label="Descrição">
+              <Textarea
+                rows={3}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="Contexto, o que precisa ser entregue..."
+              />
+            </Field>
 
-                  <p className="text-[11.5px] text-fg-mute sm:col-span-2">
-                    {frequencyDescription({
-                      frequency: form.frequency,
-                      weekday: form.weekday,
-                      weekdays: form.weekdays,
-                      day_of_month: form.day_of_month,
-                    })}
-                    .
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
+            <Field
+              label="Links do material"
+              hint="Roteiro, vídeo bruto, pasta. Abrem em outra aba."
+            >
+              <EditorLinks
+                links={form.links}
+                onChange={(links) => setForm({ ...form, links })}
+              />
+            </Field>
+
+            <Field
+              label="Checklist"
+              hint={
+                form.recurring
+                  ? "Vira o modelo da recorrência: cada dia nasce com estes itens desmarcados."
+                  : "A demanda só vai para Concluída com todos marcados."
+              }
+            >
+              <EditorChecklist itens={checklist} onChange={setChecklist} />
+            </Field>
+          </div>
 
           {err && (
             <p className="rounded-xl border border-neg/30 bg-neg/10 p-3 text-xs text-neg">

@@ -36,11 +36,19 @@ import {
 /** As colunas, na ordem em que a demanda anda. */
 export const COLUNAS_DO_QUADRO: TaskStatus[] = ["todo", "doing", "review", "done"];
 
-export const TONE: Record<Priority, "neutral" | "media" | "warn" | "neg"> = {
-  low: "neutral",
+/**
+ * A escala de prioridade, do mais quieto ao mais alto.
+ *
+ * Quatro degraus que sobem: contorno, cinza cheio, ambar, vermelho. Antes
+ * eram quatro cores sem ordem entre si -- e a do meio era o roxo do app, o
+ * mesmo que diz "isto esta selecionado". Como media e o padrao, a maioria
+ * dos cartoes vinha com a cor mais forte da fila no rodape.
+ */
+export const TONE: Record<Priority, "baixa" | "media" | "alta" | "urgente"> = {
+  low: "baixa",
   medium: "media",
-  high: "warn",
-  urgent: "neg",
+  high: "alta",
+  urgent: "urgente",
 };
 
 

@@ -470,11 +470,19 @@ export function Badge({
     | "neg"
     | "warn"
     | "violet"
-    /* Estes dois nao sao cores, sao PAPEIS: eles mudam de cor com o tema.
-       No claro sao o accent e o roxo; no escuro sao cinza, porque la cinco
-       cores na mesma linha de cartao viram um semaforo. Os valores estao em
-       `--pri-media-*` e `--recorrente-*`, no globals.css. */
+    /*
+       Estes nao sao cores, sao PAPEIS na escala de prioridade, e mudam de
+       cor com o tema. Os valores estao em `--pri-*` e `--recorrente-*`, no
+       globals.css.
+
+       `baixa` e o unico sem preenchimento: numa escala, o degrau mais baixo
+       tem que ser o mais quieto, e nao mais um chip cheio competindo com os
+       outros tres.
+    */
+    | "baixa"
     | "media"
+    | "alta"
+    | "urgente"
     | "recorrente";
   className?: string;
   children: React.ReactNode;
@@ -488,8 +496,12 @@ export function Badge({
     /* `violeta` é token do app, e não o violet do Tailwind: o built-in tem um
        valor só, e um tom escolhido para fundo branco fica ilegível no escuro. */
     violet: "bg-violeta/12 text-violeta border-transparent",
+    baixa: "border-line bg-transparent text-[var(--pri-baixa-txt)]",
     media:
       "border-transparent bg-[var(--pri-media-bg)] text-[var(--pri-media-txt)]",
+    alta: "border-transparent bg-[var(--pri-alta-bg)] text-[var(--pri-alta-txt)]",
+    urgente:
+      "border-transparent bg-[var(--pri-urgente-bg)] text-[var(--pri-urgente-txt)]",
     recorrente:
       "border-transparent bg-[var(--recorrente-bg)] text-[var(--recorrente-txt)]",
   }[tone];
@@ -525,8 +537,18 @@ export function Segmented<T extends string>({
           onClick={() => onChange(o.value)}
           className={cx(
             "h-7 rounded-lg px-3 text-xs font-medium transition-colors",
+            /*
+              O escolhido é roxo cheio, não uma lasca branca levantada.
+              
+              Era `bg-ink-900` com texto roxo: uma pastilha da cor do cartão
+              dentro de um trilho cinza, que no claro ficava branco sobre
+              quase-branco — a diferença entre escolhido e não escolhido era a
+              sombra. Com o roxo cheio, qual filtro está ligado se lê de
+              longe, e é o mesmo tratamento do botão primário e das pílulas de
+              categoria, que já são o jeito do app dizer "este aqui".
+            */
             value === o.value
-              ? "bg-ink-900 text-brand-400 shadow-[var(--elev-1)]"
+              ? "bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand shadow-[var(--brilho)]"
               : "text-fg-mute hover:text-fg-dim"
           )}
         >

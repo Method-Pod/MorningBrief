@@ -210,8 +210,28 @@
   --capa-txt-c: 0.14;
 
   --tinta-cor: #ffffff;
-  --pri-media-txt: var(--a-text);
-  --pri-media-bg: color-mix(in srgb, var(--a) 12%, transparent);
+  /*
+   * A prioridade é uma ESCALA, e a cor dela tem que subir junto.
+   *
+   * Eram quatro cores sem ordem entre si: cinza, roxo, laranja e vermelho —
+   * e o roxo era o do app, o mesmo que diz "isto está selecionado". Média,
+   * que é o padrão e portanto a maioria dos cartões, era a mais colorida da
+   * fila.
+   *
+   * Agora sobe de intensidade: baixa é um contorno sem preenchimento, média
+   * é cinza cheio, alta é âmbar e urgente é vermelho. Cor só a partir do que
+   * pede atenção; o caso comum fica quieto.
+   */
+  /* Medidos contra o fundo do PROPRIO chip sobre o cartao, e nao
+     contra o cartao: o chip tem preenchimento, e e nele que a letra
+     pousa. Os quatro degraus passam de 4.5:1, piso para 11px. */
+  --pri-baixa-txt: var(--txt-mute);
+  --pri-media-txt: var(--txt-dim);
+  --pri-media-bg: var(--a-sink);
+  --pri-alta-txt: #9b590b;
+  --pri-alta-bg: color-mix(in srgb, var(--cor-warn) 16%, transparent);
+  --pri-urgente-txt: #c6352a;
+  --pri-urgente-bg: color-mix(in srgb, var(--cor-neg) 12%, transparent);
   --recorrente-txt: var(--cor-violeta);
   --recorrente-bg: color-mix(in srgb, var(--cor-violeta) 12%, transparent);
   --chip-link: var(--a-text);
@@ -492,8 +512,16 @@
      * a clara estava boa. O excesso e do escuro, onde tudo brilha mais
      * contra o chao e cinco cores na mesma linha viram um semaforo.
      */
+    /* Medidos contra o fundo do PROPRIO chip sobre o cartao, e nao
+       contra o cartao: o chip tem preenchimento, e e nele que a letra
+       pousa. Os quatro degraus passam de 4.5:1, piso para 11px. */
+    --pri-baixa-txt: #9a9791;
     --pri-media-txt: var(--txt-dim);
     --pri-media-bg: var(--a-sink);
+    --pri-alta-txt: #eba84a;
+    --pri-alta-bg: color-mix(in srgb, var(--cor-warn) 18%, transparent);
+    --pri-urgente-txt: var(--cor-neg);
+    --pri-urgente-bg: color-mix(in srgb, var(--cor-neg) 12%, transparent);
     --recorrente-txt: var(--txt-dim);
     --recorrente-bg: var(--a-sink);
     --chip-link: var(--txt-dim);
@@ -622,8 +650,16 @@
    * a clara estava boa. O excesso e do escuro, onde tudo brilha mais
    * contra o chao e cinco cores na mesma linha viram um semaforo.
    */
+  /* Medidos contra o fundo do PROPRIO chip sobre o cartao, e nao
+     contra o cartao: o chip tem preenchimento, e e nele que a letra
+     pousa. Os quatro degraus passam de 4.5:1, piso para 11px. */
+  --pri-baixa-txt: #9a9791;
   --pri-media-txt: var(--txt-dim);
   --pri-media-bg: var(--a-sink);
+  --pri-alta-txt: #eba84a;
+  --pri-alta-bg: color-mix(in srgb, var(--cor-warn) 18%, transparent);
+  --pri-urgente-txt: var(--cor-neg);
+  --pri-urgente-bg: color-mix(in srgb, var(--cor-neg) 12%, transparent);
   --recorrente-txt: var(--txt-dim);
   --recorrente-bg: var(--a-sink);
   --chip-link: var(--txt-dim);
