@@ -60,7 +60,12 @@ export const TONE: Record<Priority, "baixa" | "media" | "alta" | "urgente"> = {
  * vermelha na lista. Com um lugar só, as três visões não têm como discordar.
  */
 export const tomDaPrioridade = (t: Pick<Task, "status" | "priority">) =>
-  t.status === "done" ? ("neutral" as const) : TONE[t.priority];
+  /* Urgente fica vermelho mesmo concluída, a pedido dele ("pode deixar
+     vermelho como era"): é o único degrau que continua dizendo algo depois
+     de feito -- que aquilo foi urgente. Os outros esfriam para cinza. */
+  t.status === "done" && t.priority !== "urgent"
+    ? ("neutral" as const)
+    : TONE[t.priority];
 
 
 /**
