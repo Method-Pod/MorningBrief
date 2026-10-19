@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { CalendarDays, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { brl, dataCurta, valorDigitado } from "@/lib/format";
 import { mesesAdiante } from "./ContasExtras";
 import { Input, cx } from "./ui";
+import { SeletorDeData } from "./SeletorDeData";
 import { useBordasRolagem } from "./bordasRolagem";
 
 export type Parcela = { due_date: string; amount: number };
@@ -191,22 +192,20 @@ export function EditorParcelas({
                 e os dois campos ficam indistinguíveis. Assim cada um se
                 identifica na própria linha.
               */}
-              <div className="relative min-w-0 flex-1 sm:flex-none">
-                {/*
-                  O ícone só aparece de 640px para cima. Em 375px ele custaria
-                  14px de recuo justo na coluna mais apertada, e ali é
-                  redundante: o campo já mostra dd/mm/aaaa e o vizinho tem R$.
-                */}
-                <CalendarDays
-                  size={13}
-                  className="pointer-events-none absolute left-2 top-1/2 hidden -translate-y-1/2 text-fg-mute sm:block"
-                />
-                <Input
-                  type="date"
+              {/*
+                O ícone de calendário e o recuo do texto agora moram no
+                SeletorDeData, no modo compacto: no computador o ícone vira o
+                botão que abre o calendário do app; no celular continua o
+                enfeite de antes, só de 640px para cima, e o campo abre a roda
+                do sistema.
+              */}
+              <div className="min-w-0 flex-1 sm:flex-none">
+                <SeletorDeData
+                  compacto
                   value={p.due_date}
-                  onChange={(e) => mudar(i, "due_date", e.target.value)}
+                  onChange={(v) => mudar(i, "due_date", v)}
                   aria-label={`Vencimento da parcela ${de + i} de ${total}`}
-                  className="h-9 !pl-2 !pr-1 text-[12px] sm:!pl-[26px]"
+                  className="h-9 text-[12px]"
                 />
               </div>
             </div>

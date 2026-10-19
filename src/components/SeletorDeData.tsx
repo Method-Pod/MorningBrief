@@ -51,10 +51,25 @@ export function SeletorDeData({
   onChange,
   disabled,
   className,
+  compacto = false,
   ...rest
 }: Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> & {
   value: string;
   onChange: (valor: string) => void;
+  /*
+   * Para célula apertada, como a grade de parcelas.
+   *
+   * Lá a célula já tinha um ícone de calendário à ESQUERDA, só decorativo, e
+   * um segundo ícone à direita espremeria a data em 12px. No modo compacto o
+   * ícone que já existia vira o botão: a linha fica igual, só passa a abrir o
+   * nosso calendário.
+   *
+   * O recuo do texto é decidido AQUI, e não por quem chama: só este
+   * componente sabe se está no celular (nativo) ou no computador (nosso), e
+   * duas classes de recuo com `!` vindas de lugares diferentes brigariam pela
+   * ordem do CSS gerado, não pela ordem em que foram escritas.
+   */
+  compacto?: boolean;
 }) {
   const [nosso, setNosso] = React.useState(false);
   const [aberto, setAberto] = React.useState(false);
@@ -170,11 +185,36 @@ export function SeletorDeData({
         disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
         className={cx(
-          nosso && "pr-10 [&::-webkit-calendar-picker-indicator]:hidden",
+          compacto
+            ? nosso
+              ? "!pl-[26px] !pr-1 [&::-webkit-calendar-picker-indicator]:hidden"
+              : /* Exatamente o recuo que a célula de parcela já tinha. */
+                "!pl-2 !pr-1 sm:!pl-[26px]"
+            : nosso && "pr-10 [&::-webkit-calendar-picker-indicator]:hidden",
           className
         )}
       />
-      {nosso && (
+      {compacto && !nosso && (
+        /* No celular continua o enfeite de antes, que só aparece de 640px
+           para cima: em 375px ele custaria recuo na coluna mais apertada. */
+        <CalendarDays
+          size={13}
+          className="pointer-events-none absolute left-2 top-1/2 hidden -translate-y-1/2 text-fg-mute sm:block"
+        />
+      )}
+      {compacto && nosso && (
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label="Abrir calendário"
+          disabled={disabled}
+          onClick={() => (aberto ? setAberto(false) : abrir())}
+          className="absolute left-0.5 top-1/2 grid h-7 w-6 -translate-y-1/2 place-items-center rounded-[8px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg disabled:opacity-40"
+        >
+          <CalendarDays size={13} />
+        </button>
+      )}
+      {!compacto && nosso && (
         <button
           type="button"
           tabIndex={-1}
