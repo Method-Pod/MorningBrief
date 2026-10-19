@@ -151,3 +151,23 @@ test("a mensagem entra na frase que notice.check monta", () => {
   assert.ok(!m.startsWith("Nada foi gravado"), "esse comeco e o do NADA_GRAVADO");
   assert.ok(NADA_GRAVADO.startsWith("Nada foi gravado"));
 });
+
+/* ---------------------------- horaCurta ---------------------------- */
+
+import { horaCurta } from "../src/lib/format.ts";
+
+test("horaCurta tira os segundos que o Postgres manda", () => {
+  assert.equal(horaCurta("14:30:00"), "14:30");
+});
+
+test("horaCurta deixa passar o que ja vem curto", () => {
+  assert.equal(horaCurta("09:05"), "09:05");
+});
+
+test("sem hora, nao inventa zero hora", () => {
+  /* "" e nao "00:00": a demanda sem hora nao tem hora, e mostrar 00:00
+     seria um dado falso em todo cartao que so tem dia. */
+  assert.equal(horaCurta(null), "");
+  assert.equal(horaCurta(undefined), "");
+  assert.equal(horaCurta(""), "");
+});

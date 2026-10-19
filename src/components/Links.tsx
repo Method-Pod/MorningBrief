@@ -103,10 +103,20 @@ export function ChipsDeLink({
   links,
   max = 3,
   tamanho = "sm",
+  tom = "link",
 }: {
   links: string[] | null | undefined;
   max?: number;
   tamanho?: "sm" | "md";
+  /*
+   * `mudo` tira a cor e deixa o elo e o sublinhado dizerem que clica.
+   *
+   * No rodapé do cartão do quadro, `link` punha um terceiro roxo numa linha
+   * que já tinha o da prioridade — no claro, onde `--chip-link` é o accent.
+   * Três roxos lado a lado param de significar "clicável" e passam a
+   * significar nada. Fora do quadro o padrão continua sendo `link`.
+   */
+  tom?: "link" | "mudo";
 }) {
   const lista = links?.filter(Boolean) ?? [];
   if (!lista.length) return null;
@@ -136,7 +146,8 @@ export function ChipsDeLink({
                Um cartao do quadro tem ate dois links, mais a prioridade, o
                cliente e a data — no escuro isso virava um semaforo. O icone
                de elo e o sublinhado ao passar dizem que da para clicar. */
-            "inline-flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 text-[var(--chip-link)] transition-colors hover:bg-ink-750 hover:text-brand-400 hover:underline",
+            "inline-flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-ink-750 hover:text-brand-400 hover:underline",
+            tom === "mudo" ? "text-fg-mute" : "text-[var(--chip-link)]",
             tamanho === "sm" ? "text-[10px]" : "text-[10.5px]"
           )}
         >

@@ -37,7 +37,7 @@ import {
   type RecurringTask,
   nomeDoCliente,
 } from "@/lib/types";
-import { dateBR, daysUntil, todayISO } from "@/lib/format";
+import { dateBR, daysUntil, horaCurta, todayISO } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import {
   Badge,
@@ -59,6 +59,18 @@ import {
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
 import { useArrastarCartao } from "@/components/arrastarCartao";
 import { MenuSuspenso } from "@/components/MenuSuspenso";
+import {
+  COLUNAS_OPCIONAIS,
+  colunaQueFaltou,
+  semColuna,
+  type ColunaOpcional,
+} from "@/lib/colunaOpcional";
+import {
+  CartaoDeDemanda,
+  COLUNAS_DO_QUADRO,
+  FATO,
+  TONE,
+} from "@/components/CartaoDeDemanda";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import {
   EditorChecklist,
@@ -67,7 +79,9 @@ import {
   type ItemEmEdicao,
 } from "@/components/Checklist";
 
-const COLUMNS: TaskStatus[] = ["todo", "doing", "review", "done"];
+/* A ordem das colunas mora com o cartão, que é quem precisa saber qual é
+   a próxima. */
+const COLUMNS = COLUNAS_DO_QUADRO;
 
 /*
  * Chave do grupo de quem não tem cliente.
@@ -87,12 +101,20 @@ const RANK: Record<Priority, number> = { urgent: 0, high: 1, medium: 2, low: 3 }
  * pintava o quadro inteiro de uma cor que queria dizer "normal". No claro
  * isso nao incomodava, e foi o que ele disse. Ver `--pri-media-*`.
  */
-const TONE: Record<Priority, "neutral" | "media" | "warn" | "neg"> = {
-  low: "neutral",
-  medium: "media",
-  high: "warn",
-  urgent: "neg",
-};
+/**
+ * O horário como ele vai para o banco.
+ *
+ * Sempre presente, inclusive nulo: na edição, omitir significa "não mexe", e
+ * sem gravar nulo apagar a hora na tela não apagaria nada no banco — o mesmo
+ * tropeço que os links já tinham.
+ *
+ * Sem data não há hora. Uma demanda com "14:30" e sem dia é uma hora de dia
+ * nenhum: ela não teria onde aparecer, e ainda assim ocuparia o canto do
+ * cartão dizendo algo que ninguém consegue usar.
+ */
+const horaGravada = (f: { due_date: string; due_time: string }) => ({
+  due_time: f.due_date && f.due_time ? f.due_time : null,
+});
 
 const FREQS: Frequency[] = [
   "daily",
@@ -115,6 +137,7 @@ const blank = () => ({
   priority: "medium" as Priority,
   status: "todo" as TaskStatus,
   due_date: "",
+  due_time: "",
   // recorrencia: quando marcada, a demanda passa a ser uma regra que se repete
   recurring: false,
   frequency: "weekly" as Frequency,
@@ -241,6 +264,7 @@ export default function DemandasPage() {
       priority: t.priority,
       status: t.status,
       due_date: t.due_date?.slice(0, 10) ?? "",
+      due_time: horaCurta(t.due_time),
       recurring: false,
       frequency: "weekly",
       weekday: new Date().getDay(),
@@ -330,6 +354,7 @@ export default function DemandasPage() {
         ...comCliente,
         status: form.status,
           due_date: form.due_date || null,
+          ...horaGravada(form),
           /*
            * Preserva a conclusão original.
            *
@@ -359,23 +384,14 @@ export default function DemandasPage() {
        * o que investigar. Com a linha de volta, zero atingidas é uma falha
        * visível.
        */
-      let { data: salvo, error } = await supabase
-        .from("tasks")
-        .update({ ...mudanca, links: links.length ? links : null })
-        .eq("id", editing.id)
-        .select("id");
-
-      if (error && /links/.test(error.message)) {
-        ({ data: salvo, error } = await supabase
-          .from("tasks")
-          .update(mudanca)
-          .eq("id", editing.id)
-          .select("id"));
-        if (!error && links.length)
-          notice.show(
-            "Demanda salva, mas os links não: rode supabase/LINK-NA-DEMANDA.sql no banco."
-          );
-      }
+      const { data: salvo, error, faltaram } = await gravarTolerando<
+        { id: string }[]
+      >(
+        { ...mudanca, links: links.length ? links : null },
+        (campos) =>
+          supabase.from("tasks").update(campos).eq("id", editing.id).select("id")
+      );
+      if (!error && faltaram.length) notice.show(recadoDoQueFaltou(faltaram));
 
       if (error) {
         setBusy(false);
@@ -551,21 +567,22 @@ export default function DemandasPage() {
       return load();
     }
 
-    const { data: criada, error } = await supabase
-      .from("tasks")
-      .insert({
-      ...base,
-      ...comLink,
-      ...comCliente,
-      user_id: uid,
-      status: form.status,
-      due_date: form.due_date || null,
-      completed_at: form.status === "done" ? new Date().toISOString() : null,
-    })
-      .select("id")
-      .single();
+    const { data: criada, error, faltaram } = await gravarTolerando<{ id: string }>(
+      {
+        ...base,
+        ...comLink,
+        ...comCliente,
+        user_id: uid,
+        status: form.status,
+        due_date: form.due_date || null,
+        ...horaGravada(form),
+        completed_at: form.status === "done" ? new Date().toISOString() : null,
+      },
+      (campos) => supabase.from("tasks").insert(campos).select("id").single()
+    );
     setBusy(false);
     if (error) return setErr(error.message);
+    if (faltaram.length) notice.show(recadoDoQueFaltou(faltaram));
 
     if (criada && checklist.length)
       await supabase.from("task_items").insert(
@@ -830,7 +847,14 @@ export default function DemandasPage() {
       .sort((a, b) => {
         if (RANK[a.priority] !== RANK[b.priority])
           return RANK[a.priority] - RANK[b.priority];
-        return (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999");
+        const porData = (a.due_date ?? "9999").localeCompare(b.due_date ?? "9999");
+        if (porData) return porData;
+        /* Mesma prioridade e mesmo dia: quem tem hora marcada vem na ordem do
+           relógio, e quem não tem vai para o fim do dia — a demanda sem hora
+           não disputa horário com a que tem. */
+        return (horaCurta(a.due_time) || "99:99").localeCompare(
+          horaCurta(b.due_time) || "99:99"
+        );
       });
   }, [rows, q, prio, cliente, nomeDe]);
 
@@ -1138,7 +1162,7 @@ export default function DemandasPage() {
                     />
                   ) : (
                     items.map((t, i) => (
-                      <TaskCard
+                      <CartaoDeDemanda
                         key={t.id}
                         indice={i}
                         t={t}
@@ -1225,15 +1249,21 @@ export default function DemandasPage() {
                           >
                             {t.title}
                           </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                          {/* Mesma voz do rodapé do cartão do quadro: uma
+                              pastilha só, o resto em `FATO`, e "recorrente"
+                              como glifo. As duas telas mostram a mesma
+                              demanda; falarem diferente é que era o estranho. */}
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                             <Badge tone={TONE[t.priority]}>
                               {PRIORITY_LABEL[t.priority]}
                             </Badge>
                             {t.origin_id && (
-                              <Badge tone="recorrente">
-                                <Repeat2 size={10} />
-                                recorrente
-                              </Badge>
+                              <span
+                                title="Gerada por uma recorrência"
+                                className="text-[var(--recorrente-txt)]"
+                              >
+                                <Repeat2 size={11} />
+                              </span>
                             )}
                             {doChecklist.length > 0 && (
                               <ProgressoChecklist
@@ -1242,11 +1272,12 @@ export default function DemandasPage() {
                                 className="w-[86px]"
                               />
                             )}
-                            <ChipsDeLink links={t.links} tamanho="md" />
+                            <ChipsDeLink links={t.links} tamanho="md" tom="mudo" />
                             {t.due_date && (
                               <span
                                 className={cx(
-                                  "inline-flex items-center gap-1 text-[10.5px] tnum",
+                                  FATO,
+                                  "tnum",
                                   late ? "text-neg" : "text-fg-mute"
                                 )}
                               >
@@ -1256,6 +1287,11 @@ export default function DemandasPage() {
                                   <CalendarDays size={10} />
                                 )}
                                 {dateBR(t.due_date)}
+                                {horaCurta(t.due_time) && (
+                                  <span className="opacity-80">
+                                    · {horaCurta(t.due_time)}
+                                  </span>
+                                )}
                               </span>
                             )}
                           </div>
@@ -1380,6 +1416,9 @@ export default function DemandasPage() {
                           )}
                         >
                           {dateBR(t.due_date)}
+                          {horaCurta(t.due_time) && (
+                            <span className="text-fg-mute"> · {horaCurta(t.due_time)}</span>
+                          )}
                         </span>
                       ) : (
                         <span className="text-xs text-fg-mute">—</span>
@@ -1578,12 +1617,33 @@ export default function DemandasPage() {
           {/* Prazo e status só fazem sentido em demanda avulsa: numa recorrente
               quem manda na data é a frequência, e ela sempre nasce "a fazer". */}
           {!form.recurring && (
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Prazo">
                 <Input
                   type="date"
                   value={form.due_date}
                   onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                />
+              </Field>
+              {/*
+                Horário é opcional, e o campo diz isso sem precisar de rótulo
+                extra: ele só liga quando há um dia escolhido.
+
+                A maioria das demandas é do dia inteiro — "gravar o vídeo" não
+                tem hora. Um campo obrigatório faria inventar uma hora para
+                todas, e aí o cartão mostraria um horário que não quer dizer
+                nada. Desligado sem data porque hora de dia nenhum não tem
+                onde aparecer.
+              */}
+              <Field
+                label="Horário"
+                hint={form.due_date ? "Opcional." : "Escolha o prazo primeiro."}
+              >
+                <Input
+                  type="time"
+                  value={form.due_time}
+                  disabled={!form.due_date}
+                  onChange={(e) => setForm({ ...form, due_time: e.target.value })}
                 />
               </Field>
               <Field label="Status">
@@ -1776,137 +1836,47 @@ export default function DemandasPage() {
   );
 }
 
-/* ------------------------------ card do quadro ------------------------------ */
+/**
+ * Grava, e se o banco não conhecer uma coluna opcional, grava sem ela.
+ *
+ * Duas colunas desta tela vêm de arquivos SQL que podem não ter rodado:
+ * `links` e `due_time`. A tentativa se repete sem quem faltou, e devolve a
+ * lista do que ficou de fora para a tela avisar qual arquivo rodar.
+ *
+ * O limite de voltas é o número de colunas opcionais: sem ele, um erro que
+ * sempre casa giraria para sempre.
+ */
+type Campos = Record<string, unknown>;
 
-function TaskCard({
-  t,
-  itens,
-  onAlternarItem,
-  marcando,
-  onPointerDown,
-  onEdit,
-  onDelete,
-  onAdvance,
-  onClient,
-  indice,
-}: {
-  t: Task;
-  itens: TaskItem[];
-  onAlternarItem: (i: TaskItem) => void;
-  marcando: string | null;
-  onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onAdvance: () => void;
-  onClient: (c: string) => void;
-  /** Posição na coluna, para a entrada em cascata. */
-  indice: number;
-}) {
-  const feitos = itens.filter((i) => i.done).length;
-  const late = t.status !== "done" && t.due_date && daysUntil(t.due_date) < 0;
-  const isToday = t.due_date?.slice(0, 10) === todayISO();
-
-  return (
-    <div
-      onPointerDown={onPointerDown}
-      /* `--i` alimenta o atraso da cascata; `levanta` troca o realce de borda
-         por um deslocamento de 2px, que o compositor resolve e que não empurra
-         o conteúdo como mudar espessura de borda fazia. */
-      style={{ "--i": indice } as React.CSSProperties}
-      className="group entra levanta cursor-grab rounded-xl border border-line bg-ink-850 p-3 active:cursor-grabbing"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <p
-          className={cx(
-            "text-[13px] font-medium leading-snug",
-            t.status === "done" && "text-fg-mute line-through"
-          )}
-        >
-          {t.title}
-        </p>
-        <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100">
-          {t.status !== "done" && (
-            <button
-              onClick={onAdvance}
-              aria-label="Avançar status"
-              className="rounded-md p-1 text-fg-mute hover:bg-ink-750 hover:text-brand-400"
-            >
-              <ArrowRight size={13} />
-            </button>
-          )}
-          <button
-            onClick={onEdit}
-            aria-label="Editar"
-            className="rounded-md p-1 text-fg-mute hover:bg-ink-750 hover:text-fg"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            onClick={onDelete}
-            aria-label="Excluir"
-            className="rounded-md p-1 text-fg-mute hover:bg-neg/15 hover:text-neg"
-          >
-            <Trash2 size={13} />
-          </button>
-        </div>
-      </div>
-
-      {t.description && (
-        <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-fg-mute">
-          {t.description}
-        </p>
-      )}
-
-      {/*
-        Checklist no próprio cartão, com o progresso acima.
-
-        Marcar é um clique, sem abrir modal e sem salvar: o ciclo real é fazer
-        um corte e riscar. Se exigisse editar a demanda, o checklist viraria
-        trabalho em vez de atalho.
-      */}
-      {itens.length > 0 && (
-        <div className="mt-2">
-          <ProgressoChecklist feitos={feitos} total={itens.length} />
-          <ListaDeItens
-            itens={itens}
-            onAlternar={onAlternarItem}
-            ocupado={marcando}
-          />
-        </div>
-      )}
-
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-        <Badge tone={TONE[t.priority]}>{PRIORITY_LABEL[t.priority]}</Badge>
-        {t.origin_id && (
-          <Badge tone="recorrente">
-            <Repeat2 size={10} />
-            recorrente
-          </Badge>
-        )}
-        {t.client && (
-          <button
-            type="button"
-            onClick={() => onClient(t.client)}
-            title={`Ver só ${t.client}`}
-            className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10px] text-fg-mute transition-colors hover:bg-ink-750 hover:text-brand-400"
-          >
-            <Building2 size={9} />
-            {t.client}
-          </button>
-        )}
-        <ChipsDeLink links={t.links} max={2} />
-        {t.due_date && (
-          <span
-            className={cx(
-              "inline-flex items-center gap-1 text-[10px] tnum",
-              late ? "text-neg" : isToday ? "text-warn" : "text-fg-mute"
-            )}
-          >
-            {late ? <AlertCircle size={9} /> : <CalendarDays size={9} />}
-            {isToday ? "hoje" : dateBR(t.due_date)}
-          </span>
-        )}
-      </div>
-    </div>
-  );
+async function gravarTolerando<R>(
+  campos: Campos,
+  /* PromiseLike e não Promise: o builder do Supabase é um thenable, e exigir
+     Promise obrigaria um `await` extra em cada chamada só para agradar o
+     tipo. `any` no retorno do builder vem da própria biblioteca. */
+  executar: (
+    campos: Campos
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) => PromiseLike<{ data: any; error: { message: string } | null }>
+): Promise<{
+  data: R | null;
+  error: { message: string } | null;
+  faltaram: ColunaOpcional[];
+}> {
+  let atual = campos;
+  const faltaram: ColunaOpcional[] = [];
+  for (let volta = 0; volta <= COLUNAS_OPCIONAIS.length; volta++) {
+    const r = await executar(atual);
+    const falta = colunaQueFaltou(r.error?.message);
+    if (!falta || !(falta.coluna in atual)) return { ...r, faltaram };
+    faltaram.push(falta);
+    atual = semColuna(atual, falta.coluna);
+  }
+  const r = await executar(atual);
+  return { ...r, faltaram };
 }
+
+/** "Demanda salva, mas os links não: rode supabase/X.sql no banco." */
+const recadoDoQueFaltou = (faltaram: ColunaOpcional[]) =>
+  `Demanda salva, mas ${faltaram.map((f) => f.rotulo).join(" e ")} não: rode ${faltaram
+    .map((f) => "supabase/" + f.arquivo)
+    .join(" e ")} no banco.`;

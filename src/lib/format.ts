@@ -349,3 +349,13 @@ export function decodificarEntidades(v: string) {
     )
     .replace(/&amp;/g, "&");
 }
+
+/**
+ * "14:30:00" → "14:30". Vazio quando não há hora.
+ *
+ * O Postgres devolve `time` com os segundos, e o input de hora grava sem
+ * eles. Sem cortar, o mesmo campo apareceria de dois jeitos na mesma tela:
+ * "14:30" logo depois de salvar e "14:30:00" quando a página recarregasse.
+ */
+export const horaCurta = (hora: string | null | undefined) =>
+  hora ? hora.slice(0, 5) : "";

@@ -142,6 +142,14 @@ export type Task = {
   priority: Priority;
   status: TaskStatus;
   due_date: string | null;
+  /*
+   * A hora do dia, quando a demanda tem hora. Nulo é o caso comum.
+   *
+   * Vem como "14:30:00" do Postgres (tipo `time`) e é gravada como "14:30",
+   * que é o que o input entrega — por isso tudo que mostra passa por
+   * `horaCurta`. Nulo também em base sem HORARIO-NA-DEMANDA.sql.
+   */
+  due_time: string | null;
   /* Endereços do material. Nulo em base sem LINK-NA-DEMANDA.sql. */
   links: string[] | null;
   origin_id: string | null;
