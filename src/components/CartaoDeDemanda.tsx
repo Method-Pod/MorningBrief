@@ -76,8 +76,11 @@ export const tomDaPrioridade = (t: Pick<Task, "status" | "priority">) =>
  * em 10px com outra cor. Com um valor só, não há como voltar a divergir sem
  * perceber.
  */
+/* Altura de linha 1,5 e sem recuo vertical: da a mesma altura de antes
+   (15px) sem cortar letra. Com `leading-none` o "p" e o "g" dos nomes de
+   projeto saiam cortados; ver `truncate-livre` no globals.css. */
 export const FATO =
-  "inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-[10.5px] leading-none";
+  "inline-flex items-center gap-1 rounded-md px-1 text-[10.5px] leading-[1.5]";
 
 export function CartaoDeDemanda({
   t,
@@ -239,7 +242,7 @@ export function CartaoDeDemanda({
             className={cx(FATO, "max-w-full hover:bg-ink-750 hover:text-brand-400")}
           >
             <Building2 size={10} className="shrink-0" />
-            <span className="truncate">{t.client}</span>
+            <span className="truncate-livre">{t.client}</span>
           </button>
         )}
         <ChipsDeLink links={t.links} max={2} tamanho="md" tom="mudo" />

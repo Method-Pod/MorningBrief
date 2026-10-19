@@ -848,6 +848,30 @@ body {
   color: oklch(var(--capa-txt-l) var(--capa-txt-c) var(--capa-h, 210));
 }
 
+/*
+ * `truncate` que nao corta as letras por cima nem por baixo.
+ *
+ * O `truncate` do Tailwind poe `overflow: hidden` para as reticencias
+ * funcionarem, e esse corte e na altura da linha, nao na da tinta. Na Plus
+ * Jakarta Sans a perna do "g" desce 3px, um a mais do que a propria fonte
+ * declara; com altura de linha 1, o "p" de "Papo" e o "g" de "Agenda" saiam
+ * cortados, e o acento de "Á" sairia cortado em cima. Medido: em 10,5px o
+ * corte era de 2,25px embaixo e 1,25px em cima.
+ *
+ * Os 2px de respiro ficam DENTRO da caixa de corte (padding) e sao
+ * devolvidos por fora (margem negativa): a tinta ganha espaco e o layout
+ * nao muda de altura. Use no lugar de `truncate` sempre que o texto for um
+ * nome que a pessoa escreveu -- cliente, projeto, link --, porque nao da
+ * para saber de antemao que letras ele vai ter.
+ */
+@utility truncate-livre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-block: 2px;
+  margin-block: -2px;
+}
+
 @utility card {
   background: var(--sup-cartao);
   border: 1px solid var(--cartao-borda);

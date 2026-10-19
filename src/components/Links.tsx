@@ -152,7 +152,7 @@ export function ChipsDeLink({
           )}
         >
           <Link2 size={tamanho === "sm" ? 9 : 10} className="shrink-0" />
-          <span className="truncate">{rotuloDeLink(l)}</span>
+          <span className="truncate-livre">{rotuloDeLink(l)}</span>
         </a>
       ))}
       {sobra > 0 && (
