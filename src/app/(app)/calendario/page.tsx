@@ -51,6 +51,7 @@ import {
   cx,
   EsqueletoPagina,
 } from "@/components/ui";
+import { SeletorDeData } from "@/components/SeletorDeData";
 
 const MONTHS = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -806,10 +807,9 @@ export default function CalendarioPage() {
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Data" className="sm:col-span-1">
-              <Input
-                type="date"
+              <SeletorDeData
                 value={form.date}
-                onChange={(e) => setForm({ ...form, date: e.target.value })}
+                onChange={(date) => setForm({ ...form, date })}
               />
             </Field>
             <Field label="Início">

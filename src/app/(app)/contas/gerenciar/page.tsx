@@ -24,6 +24,7 @@ import {
   useNotice,
   ErroDeCarga,
 } from "@/components/ui";
+import { SeletorDeData } from "@/components/SeletorDeData";
 
 type Tipo = "fixa" | "parcelada" | "abatida" | "avulsa";
 type Filtro = "todas" | Tipo;
@@ -969,11 +970,7 @@ function Editor({
                   : undefined
               }
             >
-              <Input
-                type="date"
-                value={vencimento}
-                onChange={(e) => setVencimento(e.target.value)}
-              />
+              <SeletorDeData value={vencimento} onChange={setVencimento} />
             </Field>
             <Field label="Situação">
               <Select value={status} onChange={(e) => setStatus(e.target.value)}>

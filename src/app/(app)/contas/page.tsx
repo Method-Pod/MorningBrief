@@ -84,6 +84,7 @@ import {
   EsqueletoPagina,
   ErroDeCarga,
 } from "@/components/ui";
+import { SeletorDeData } from "@/components/SeletorDeData";
 
 /* ------------------------------ filtros e ordem ------------------------------ */
 
@@ -1624,10 +1625,9 @@ export default function ContasPage() {
                   : undefined
               }
             >
-              <Input
-                type="date"
+              <SeletorDeData
                 value={form.due_date}
-                onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                onChange={(due_date) => setForm({ ...form, due_date })}
               />
             </Field>
           </div>

@@ -56,6 +56,7 @@ import {
   EsqueletoLista,
   ErroDeCarga,
 } from "@/components/ui";
+import { SeletorDeData } from "@/components/SeletorDeData";
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
 import { useArrastarCartao } from "@/components/arrastarCartao";
 import { MenuSuspenso } from "@/components/MenuSuspenso";
@@ -1619,10 +1620,9 @@ export default function DemandasPage() {
           {!form.recurring && (
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Prazo">
-                <Input
-                  type="date"
+                <SeletorDeData
                   value={form.due_date}
-                  onChange={(e) => setForm({ ...form, due_date: e.target.value })}
+                  onChange={(due_date) => setForm({ ...form, due_date })}
                 />
               </Field>
               {/*
