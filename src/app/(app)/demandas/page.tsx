@@ -70,7 +70,7 @@ import {
   CartaoDeDemanda,
   COLUNAS_DO_QUADRO,
   FATO,
-  TONE,
+  tomDaPrioridade,
 } from "@/components/CartaoDeDemanda";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import {
@@ -1213,8 +1213,10 @@ export default function DemandasPage() {
                   <span className="text-[11px] text-fg-mute tnum">
                     {g.abertas} aberta{g.abertas === 1 ? "" : "s"}
                   </span>
+                  {/* O vermelho medido do urgente: o `neg` antigo dava 3,58:1
+                      no claro, abaixo do piso de 4,5:1. */}
                   {g.atrasadas > 0 && (
-                    <Badge tone="neg">
+                    <Badge tone="urgente">
                       {g.atrasadas} atrasada{g.atrasadas === 1 ? "" : "s"}
                     </Badge>
                   )}
@@ -1255,7 +1257,7 @@ export default function DemandasPage() {
                               como glifo. As duas telas mostram a mesma
                               demanda; falarem diferente é que era o estranho. */}
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <Badge tone={TONE[t.priority]}>
+                            <Badge tone={tomDaPrioridade(t)}>
                               {PRIORITY_LABEL[t.priority]}
                             </Badge>
                             {t.origin_id && (
@@ -1322,21 +1324,26 @@ export default function DemandasPage() {
                           </Select>
                         </div>
 
-                        <div className="flex shrink-0 items-center gap-1 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                          <button
-                            onClick={() => startEdit(t)}
-                            aria-label="Editar"
-                            className="rounded-lg p-1.5 text-fg-mute hover:bg-ink-750 hover:text-fg"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            onClick={() => remove(t)}
-                            aria-label="Excluir"
-                            className="rounded-lg p-1.5 text-fg-mute hover:bg-neg/15 hover:text-neg"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                        {/* O mesmo menu do cartao do quadro: a demanda e a mesma nas tres
+                            visoes, e o jeito de agir sobre ela tambem. Sem "mover para" aqui
+                            porque a linha ja tem o seletor de status ao lado. */}
+                        <div className="shrink-0 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                          <MenuSuspenso
+                            rotulo={`Ações de ${t.title}`}
+                            itens={[
+                              {
+                                rotulo: "Editar",
+                                icone: <Pencil size={14} />,
+                                aoEscolher: () => startEdit(t),
+                              },
+                              {
+                                rotulo: "Excluir",
+                                icone: <Trash2 size={14} />,
+                                aoEscolher: () => remove(t),
+                                perigo: true,
+                              },
+                            ]}
+                          />
                         </div>
                       </li>
                     );
@@ -1402,7 +1409,7 @@ export default function DemandasPage() {
                       )}
                     </td>
                     <td className="px-3 py-3">
-                      <Badge tone={TONE[t.priority]}>
+                      <Badge tone={tomDaPrioridade(t)}>
                         {PRIORITY_LABEL[t.priority]}
                       </Badge>
                     </td>
@@ -1439,21 +1446,26 @@ export default function DemandasPage() {
                       </Select>
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                        <button
-                          onClick={() => startEdit(t)}
-                          aria-label="Editar"
-                          className="rounded-lg p-1.5 text-fg-mute hover:bg-ink-750 hover:text-fg"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        <button
-                          onClick={() => remove(t)}
-                          aria-label="Excluir"
-                          className="rounded-lg p-1.5 text-fg-mute hover:bg-neg/15 hover:text-neg"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                      {/* O mesmo menu do cartao do quadro: a demanda e a mesma nas tres
+                          visoes, e o jeito de agir sobre ela tambem. Sem "mover para" aqui
+                          porque a linha ja tem o seletor de status ao lado. */}
+                      <div className="flex justify-end transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                        <MenuSuspenso
+                          rotulo={`Ações de ${t.title}`}
+                          itens={[
+                            {
+                              rotulo: "Editar",
+                              icone: <Pencil size={14} />,
+                              aoEscolher: () => startEdit(t),
+                            },
+                            {
+                              rotulo: "Excluir",
+                              icone: <Trash2 size={14} />,
+                              aoEscolher: () => remove(t),
+                              perigo: true,
+                            },
+                          ]}
+                        />
                       </div>
                     </td>
                   </tr>

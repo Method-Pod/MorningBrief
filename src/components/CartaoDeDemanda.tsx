@@ -51,6 +51,17 @@ export const TONE: Record<Priority, "baixa" | "media" | "alta" | "urgente"> = {
   urgent: "urgente",
 };
 
+/**
+ * O tom do selo de prioridade de UMA demanda.
+ *
+ * Função, e não o mapa direto, porque há uma regra além da escala: concluída
+ * não tem urgência, e a prioridade dela vira cinza. Essa regra vivia só no
+ * cartão do quadro, e a mesma demanda concluída aparecia cinza no quadro e
+ * vermelha na lista. Com um lugar só, as três visões não têm como discordar.
+ */
+export const tomDaPrioridade = (t: Pick<Task, "status" | "priority">) =>
+  t.status === "done" ? ("neutral" as const) : TONE[t.priority];
+
 
 /**
  * A voz dos fatos do rodapé: mesmo tamanho, mesma tinta, mesma caixa.
@@ -212,7 +223,7 @@ export function CartaoDeDemanda({
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1">
         {/* Concluída não tem urgência: a prioridade vira cinza. Laranja ou
             vermelho num cartão já riscado pedem atenção para o que acabou. */}
-        <Badge tone={t.status === "done" ? "neutral" : TONE[t.priority]}>
+        <Badge tone={tomDaPrioridade(t)}>
           {PRIORITY_LABEL[t.priority]}
         </Badge>
         {t.client && (
