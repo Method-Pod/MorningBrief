@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AbasCrescimento } from "@/components/AbasCrescimento";
+import { CabecalhoCrescimento } from "@/components/AbasCrescimento";
+import { FaixaResumo } from "@/components/FaixaResumo";
 import { MenuSuspenso } from "@/components/MenuSuspenso";
 import {
   Check,
@@ -963,73 +964,148 @@ export default function AulasPage() {
 
   return (
     <div className="space-y-5 rise">
-      <AbasCrescimento />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="titulo-pagina">Aulas</h1>
-          <p className="mt-1 text-sm text-fg-mute">
-            {contagem("fila")} para assistir · {contagem("feitas")} assistida
-            {contagem("feitas") === 1 ? "" : "s"}
-            {cursos.length > 0 && (
-              <>
-                {" "}
-                · {emAndamento.length} curso
-                {emAndamento.length === 1 ? "" : "s"} em andamento
-              </>
+      <CabecalhoCrescimento
+        acoes={
+          <>
+            {/*
+              Uma ação em destaque, e as outras quatro recolhidas — mesmo padrão de
+              Contas a pagar.
+
+              Eram cinco botões na linha, e o aperto já era admitido no código: os
+              rótulos sumiam no telefone para "Curso" e "Aula" não aparecerem
+              cortados como "C…" e "A…". O contorno resolvia o corte e deixava
+              quatro ícones sem nome lado a lado, que é outro problema.
+
+              Com o menu, os rótulos voltam inteiros nos dois tamanhos de tela, e
+              "Aula" — que se aperta várias vezes por semana, enquanto Etiquetas
+              talvez uma vez por mês — para de disputar espaço com o resto.
+            */}
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <MenuSuspenso
+                rotulo="Gerenciar aulas"
+                rotuloVisivel="Gerenciar"
+                className="shrink-0"
+                itens={[
+                  {
+                    rotulo: "Etiquetas",
+                    icone: <Tag size={15} />,
+                    aoEscolher: () => setGerindo(true),
+                  },
+                  {
+                    rotulo: "Playlist",
+                    icone: <ListVideo size={15} />,
+                    aoEscolher: () => setImportando(true),
+                  },
+                  {
+                    rotulo: "Canal",
+                    icone: <Tv size={15} />,
+                    aoEscolher: () => abrirCanal(),
+                  },
+                  {
+                    rotulo: "Curso",
+                    icone: <Layers size={15} />,
+                    aoEscolher: () => abrirCurso(),
+                  },
+                ]}
+              />
+              <Button
+                variant="primary"
+                onClick={() => setAddAula(true)}
+                className="min-w-0 flex-1 sm:flex-none"
+              >
+                <Plus size={15} className="shrink-0" />
+                <span className="truncate">Aula</span>
+              </Button>
+            </div>
+          </>
+        }
+      />
+
+      {/*
+        Os numeros da tela numa faixa so, no desenho do Inicio.
+
+        Antes eram dois lugares: a frase cinza embaixo do titulo ("15 para
+        assistir · 0 assistidas") e, mais embaixo, uma tira fina com a meta
+        e o aviso de que as assistidas saem em sete dias. Agora a meta e a
+        celula dela -- com o MESMO editor de antes no lugar do detalhe -- e
+        o aviso virou o detalhe de Assistidas, que e onde ele faz sentido.
+      */}
+      <FaixaResumo
+        itens={[
+          {
+            rotulo: "Para assistir",
+            valor: contagem("fila"),
+            detalhe: contagem("fila") === 1 ? "aula na fila" : "aulas na fila",
+          },
+          {
+            rotulo: "Assistidas",
+            valor: contagem("feitas"),
+            detalhe: `saem em ${DIAS_RETENCAO_AULAS} dias`,
+          },
+          {
+            rotulo: "Esta semana",
+            valor: meta ? `${naSemana}/${meta}` : naSemana,
+            tom: meta && naSemana >= meta ? "pos" : undefined,
+            detalhe: (
+              <span className="flex items-center gap-1.5">
+                <span>{meta ? "da meta" : naSemana === 1 ? "assistida" : "assistidas"}</span>
+                <span className="opacity-40">·</span>
+            {editandoMeta ? (
+              <span className="flex items-center gap-1">
+                <span className="w-[58px]">
+                  <Input
+                    autoFocus
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={metaEmEdicao}
+                    onChange={(e) => setMetaEmEdicao(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        salvarMeta();
+                      }
+                      if (e.key === "Escape") setEditandoMeta(false);
+                    }}
+                    placeholder="3"
+                    aria-label="Aulas por semana"
+                    className="h-7 text-center text-[11.5px]"
+                  />
+                </span>
+                <button
+                  type="button"
+                  onClick={salvarMeta}
+                  className="font-semibold text-brand-400 hover:underline"
+                >
+                  ok
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMetaEmEdicao(meta ? String(meta) : "");
+                  setEditandoMeta(true);
+                }}
+                className="text-fg-mute underline decoration-line underline-offset-2 transition-colors hover:text-brand-400"
+              >
+                {meta ? "mudar" : "definir meta"}
+              </button>
             )}
-          </p>
-        </div>
-        {/*
-          Uma ação em destaque, e as outras quatro recolhidas — mesmo padrão de
-          Contas a pagar.
-
-          Eram cinco botões na linha, e o aperto já era admitido no código: os
-          rótulos sumiam no telefone para "Curso" e "Aula" não aparecerem
-          cortados como "C…" e "A…". O contorno resolvia o corte e deixava
-          quatro ícones sem nome lado a lado, que é outro problema.
-
-          Com o menu, os rótulos voltam inteiros nos dois tamanhos de tela, e
-          "Aula" — que se aperta várias vezes por semana, enquanto Etiquetas
-          talvez uma vez por mês — para de disputar espaço com o resto.
-        */}
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <MenuSuspenso
-            rotulo="Gerenciar aulas"
-            rotuloVisivel="Gerenciar"
-            className="shrink-0"
-            itens={[
-              {
-                rotulo: "Etiquetas",
-                icone: <Tag size={15} />,
-                aoEscolher: () => setGerindo(true),
-              },
-              {
-                rotulo: "Playlist",
-                icone: <ListVideo size={15} />,
-                aoEscolher: () => setImportando(true),
-              },
-              {
-                rotulo: "Canal",
-                icone: <Tv size={15} />,
-                aoEscolher: () => abrirCanal(),
-              },
-              {
-                rotulo: "Curso",
-                icone: <Layers size={15} />,
-                aoEscolher: () => abrirCurso(),
-              },
-            ]}
-          />
-          <Button
-            variant="primary"
-            onClick={() => setAddAula(true)}
-            className="min-w-0 flex-1 sm:flex-none"
-          >
-            <Plus size={15} className="shrink-0" />
-            <span className="truncate">Aula</span>
-          </Button>
-        </div>
-      </div>
+              </span>
+            ),
+          },
+          ...(cursos.length > 0
+            ? [
+                {
+                  rotulo: "Cursos",
+                  valor: emAndamento.length,
+                  detalhe: "em andamento",
+                },
+              ]
+            : []),
+        ]}
+      />
 
       {/*
         Aviso com saída.
@@ -1114,23 +1190,23 @@ export default function AulasPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex shrink-0 items-center gap-0.5 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                      <button
-                        type="button"
-                        onClick={() => abrirCurso(c)}
-                        aria-label={`Editar ${c.title}`}
-                        className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-ink-750 hover:text-fg"
-                      >
-                        <Pencil size={13} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removerCurso(c)}
-                        aria-label={`Tirar ${c.title}`}
-                        className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                    <div className="-mr-1 shrink-0 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+                      <MenuSuspenso
+                        rotulo={`Ações de ${c.title}`}
+                        itens={[
+                          {
+                            rotulo: "Editar",
+                            icone: <Pencil size={14} />,
+                            aoEscolher: () => abrirCurso(c),
+                          },
+                          {
+                            rotulo: "Tirar curso",
+                            icone: <Trash2 size={14} />,
+                            aoEscolher: () => removerCurso(c),
+                            perigo: true,
+                          },
+                        ]}
+                      />
                     </div>
                   </div>
 
@@ -1266,32 +1342,28 @@ export default function AulasPage() {
                   cartão no hover, com o fundo esmaecendo o que está atrás para
                   os ícones não brigarem com o texto.
                 */}
-                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 rounded-r-[1.375rem] pl-6 pr-1.5 opacity-0 transition-opacity [background:linear-gradient(to_right,transparent,#fff_24px)] group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-                  <button
-                    type="button"
-                    onClick={() => aulaDoCanal(c)}
-                    aria-label={`Cadastrar aula de ${c.name}`}
-                    title="Cadastrar uma aula deste canal"
-                    className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-brand-500/15 hover:text-brand-400"
-                  >
-                    <Plus size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => abrirCanal(c)}
-                    aria-label={`Editar ${c.name}`}
-                    className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-ink-750 hover:text-fg"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => removerCanal(c)}
-                    aria-label={`Tirar ${c.name}`}
-                    className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center gap-0.5 rounded-r-[1.375rem] pl-6 pr-1.5 opacity-0 transition-opacity [background:linear-gradient(to_right,transparent,var(--sup-cartao)_24px)] group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                  <MenuSuspenso
+                    rotulo={`Ações de ${c.name}`}
+                    itens={[
+                      {
+                        rotulo: "Cadastrar aula",
+                        icone: <Plus size={14} />,
+                        aoEscolher: () => aulaDoCanal(c),
+                      },
+                      {
+                        rotulo: "Editar",
+                        icone: <Pencil size={14} />,
+                        aoEscolher: () => abrirCanal(c),
+                      },
+                      {
+                        rotulo: "Tirar canal",
+                        icone: <Trash2 size={14} />,
+                        aoEscolher: () => removerCanal(c),
+                        perigo: true,
+                      },
+                    ]}
+                  />
                 </span>
               </Card>
             ))}
@@ -1301,87 +1373,6 @@ export default function AulasPage() {
 
       {/* ------------------------------ aulas ------------------------------ */}
       <div className="space-y-3">
-        {/*
-          Meta e aviso de retenção na mesma linha fina, como na estante: são
-          referência de canto de olho, não a razão de abrir a tela.
-        */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-fg-mute sm:text-[12px]">
-          <span className="flex items-center gap-2">
-            <Target size={13} className="shrink-0" />
-            {meta ? (
-              <>
-                <span className="font-semibold text-fg-dim tnum">
-                  {naSemana}/{meta}
-                </span>
-                <span>aulas esta semana</span>
-                <span className="h-1 w-[52px] overflow-hidden rounded-full bg-ink-800">
-                  <span
-                    className={cx(
-                      "block h-full w-full origin-left rounded-full transition-transform duration-[320ms]",
-                      naSemana >= meta ? "bg-pos" : "bg-brand-500"
-                    )}
-                    style={{
-                      transform: `scaleX(${Math.min(1, naSemana / meta)})`,
-                    }}
-                  />
-                </span>
-              </>
-            ) : (
-              <span>
-                {naSemana} assistida{naSemana === 1 ? "" : "s"} esta semana
-              </span>
-            )}
-
-            {editandoMeta ? (
-              <span className="flex items-center gap-1">
-                <span className="w-[58px]">
-                  <Input
-                    autoFocus
-                    type="number"
-                    min={1}
-                    max={99}
-                    value={metaEmEdicao}
-                    onChange={(e) => setMetaEmEdicao(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        salvarMeta();
-                      }
-                      if (e.key === "Escape") setEditandoMeta(false);
-                    }}
-                    placeholder="3"
-                    aria-label="Aulas por semana"
-                    className="h-7 text-center text-[11.5px]"
-                  />
-                </span>
-                <button
-                  type="button"
-                  onClick={salvarMeta}
-                  className="font-semibold text-brand-400 hover:underline"
-                >
-                  ok
-                </button>
-              </span>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  setMetaEmEdicao(meta ? String(meta) : "");
-                  setEditandoMeta(true);
-                }}
-                className="text-fg-mute underline decoration-line underline-offset-2 transition-colors hover:text-brand-400"
-              >
-                {meta ? "mudar" : "definir meta"}
-              </button>
-            )}
-          </span>
-
-          <span className="flex items-center gap-1.5">
-            <span className="text-fg-mute">·</span>
-            <Check size={12} className="shrink-0" />
-            Assistidas saem em {DIAS_RETENCAO_AULAS} dias
-          </span>
-        </div>
 
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
           <div className="-mx-1 max-w-full overflow-x-auto px-1 pb-0.5">
@@ -1545,8 +1536,24 @@ export default function AulasPage() {
                         )}
                       </div>
 
+                      {/*
+                        O "parei aqui" aparecia em TODA aula da fila, inclusive
+                        nas nunca começadas -- um campo vazio e um botão
+                        apagado por linha, quinze vezes. Na aula começada ele
+                        continua sempre à vista, porque ali há progresso para
+                        mostrar. Na nunca começada, no computador, aparece ao
+                        passar o mouse ou chegar pelo teclado, como as ações da
+                        linha. No celular nada muda: lá não existe passar o
+                        mouse.
+                      */}
                       {!l.feita && duracaoDaAula(l) && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <div
+                          className={cx(
+                            "mt-2 flex flex-wrap items-center gap-2",
+                            pct === null &&
+                              "lg:hidden lg:group-hover:flex lg:group-focus-within:flex"
+                          )}
+                        >
                           {pct !== null && (
                             <>
                               <span className="h-1 min-w-[48px] flex-1 overflow-hidden rounded-full bg-ink-800">

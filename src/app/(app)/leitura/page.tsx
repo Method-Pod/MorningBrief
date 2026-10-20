@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AbasCrescimento } from "@/components/AbasCrescimento";
+import { CabecalhoCrescimento } from "@/components/AbasCrescimento";
+import { FaixaResumo } from "@/components/FaixaResumo";
 import { useSearchParams } from "next/navigation";
 import {
   BookOpen,
@@ -1024,21 +1025,95 @@ export default function LeituraPage() {
 
   return (
     <div className="space-y-5 rise">
-      <AbasCrescimento />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="titulo-pagina">Leitura</h1>
-          <p className="mt-1 text-sm text-fg-mute">
-            {contagem("reading")} lendo · {contagem("queue")} na fila ·{" "}
-            {contagem("done")} lido{contagem("done") === 1 ? "" : "s"} ·{" "}
-            {contagem("want")} na lista de desejos
-          </p>
-        </div>
-        <Button variant="primary" onClick={() => setAdd(true)}>
-          <Plus size={15} />
-          Adicionar livro
-        </Button>
-      </div>
+      <CabecalhoCrescimento
+        acoes={
+          <Button variant="primary" onClick={() => setAdd(true)}>
+            <Plus size={15} />
+            Adicionar livro
+          </Button>
+        }
+      />
+
+      {/*
+        Os numeros da estante numa faixa so, no desenho do Inicio.
+
+        Antes eram dois lugares: a frase cinza embaixo do titulo e, mais
+        embaixo do livro aberto, uma tira fina com a meta do ano e as
+        paginas da semana. A meta virou a celula dela, com o MESMO editor
+        de antes no detalhe.
+      */}
+      <FaixaResumo
+        itens={[
+          {
+            rotulo: "Lendo",
+            valor: contagem("reading"),
+            detalhe: contagem("reading") === 1 ? "livro aberto" : "livros abertos",
+          },
+          {
+            rotulo: "Na fila",
+            valor: contagem("queue"),
+            detalhe: `${contagem("want")} na lista de desejos`,
+          },
+          {
+            rotulo: `Lidos em ${anoAtual}`,
+            valor: meta ? `${lidosNoAno}/${meta}` : lidosNoAno,
+            tom: meta && lidosNoAno >= meta ? "pos" : undefined,
+            detalhe: (
+              <span className="flex items-center gap-1.5">
+                <span>{meta ? "da meta" : "sem meta"}</span>
+                <span className="opacity-40">·</span>
+            {editandoMeta ? (
+              <span className="flex items-center gap-1">
+                <span className="w-[62px]">
+                  <Input
+                    autoFocus
+                    type="number"
+                    min={1}
+                    max={999}
+                    value={metaEmEdicao}
+                    onChange={(e) => setMetaEmEdicao(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        salvarMeta();
+                      }
+                      if (e.key === "Escape") setEditandoMeta(false);
+                    }}
+                    placeholder="12"
+                    aria-label={`Meta de livros para ${anoAtual}`}
+                    className="h-7 text-center text-[11.5px]"
+                  />
+                </span>
+                <button
+                  type="button"
+                  onClick={salvarMeta}
+                  className="font-semibold text-brand-400 hover:underline"
+                >
+                  ok
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMetaEmEdicao(meta ? String(meta) : "");
+                  setEditandoMeta(true);
+                }}
+                className="text-fg-mute underline decoration-line underline-offset-2 transition-colors hover:text-brand-400"
+              >
+                {meta ? "mudar" : "definir meta"}
+              </button>
+            )}
+              </span>
+            ),
+          },
+          {
+            rotulo: "Páginas",
+            valor: naSemana,
+            detalhe: "nos últimos 7 dias",
+          },
+        ]}
+      />
 
       {/* Aviso com saída: erro passageiro não pode virar caixa parada. */}
       {falta && (
@@ -1142,103 +1217,6 @@ export default function LeituraPage() {
         </div>
       )}
 
-      {/* ------------------------------ resumo ------------------------------ */}
-      {/*
-        Meta e ritmo numa tira, não em dois cartões.
-        
-        Os dois cartões ocupavam mais altura que o livro que você está lendo, e
-        nenhum dos dois é a razão de abrir a tela — são referência de canto de
-        olho. Como detalhe eles informam igual e param de competir com a
-        estante.
-      */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1 text-[11.5px] text-fg-mute">
-        <span className="flex items-center gap-2">
-          <Target size={13} className="shrink-0" />
-          {meta ? (
-            <>
-              <span className="font-semibold text-fg-dim tnum">
-                {lidosNoAno}/{meta}
-              </span>
-              <span>livros em {anoAtual}</span>
-              <span className="h-1 w-[52px] overflow-hidden rounded-full bg-ink-800">
-                <span
-                  className={cx(
-                    "block h-full w-full origin-left rounded-full transition-transform duration-[320ms]",
-                    lidosNoAno >= meta ? "bg-pos" : "bg-brand-500"
-                  )}
-                  style={{
-                    transform: `scaleX(${Math.min(1, lidosNoAno / meta)})`,
-                  }}
-                />
-              </span>
-            </>
-          ) : (
-            <span>
-              {lidosNoAno} lido{lidosNoAno === 1 ? "" : "s"} em {anoAtual}
-            </span>
-          )}
-
-          {editandoMeta ? (
-            <span className="flex items-center gap-1">
-              <span className="w-[62px]">
-                <Input
-                  autoFocus
-                  type="number"
-                  min={1}
-                  max={999}
-                  value={metaEmEdicao}
-                  onChange={(e) => setMetaEmEdicao(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      salvarMeta();
-                    }
-                    if (e.key === "Escape") setEditandoMeta(false);
-                  }}
-                  placeholder="12"
-                  aria-label={`Meta de livros para ${anoAtual}`}
-                  className="h-7 text-center text-[11.5px]"
-                />
-              </span>
-              <button
-                type="button"
-                onClick={salvarMeta}
-                className="font-semibold text-brand-400 hover:underline"
-              >
-                ok
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setMetaEmEdicao(meta ? String(meta) : "");
-                setEditandoMeta(true);
-              }}
-              className="text-fg-mute underline decoration-line underline-offset-2 transition-colors hover:text-brand-400"
-            >
-              {meta ? "mudar" : "definir meta"}
-            </button>
-          )}
-        </span>
-
-        {naSemana > 0 && (
-          <span className="flex items-center gap-2">
-            <span className="text-fg-mute">·</span>
-            {/*
-              Só o número, sem gráfico.
-              
-              Sete barras de 3px não diziam nada além do que o número já diz —
-              na prática viravam um risco solto do lado do texto. O ritmo por
-              dia é uma pergunta de outra tela, não de um detalhe de canto.
-            */}
-            <span className="font-semibold text-fg-dim tnum">{naSemana}</span>
-            <span>
-              página{naSemana === 1 ? "" : "s"} nos últimos 7 dias
-            </span>
-          </span>
-        )}
-      </div>
 
       {/* ------------------------------ estante ------------------------------ */}
       <div className="space-y-3">
