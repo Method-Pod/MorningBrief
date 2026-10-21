@@ -92,7 +92,17 @@ export function Button({
     subtle: "bg-ink-800 text-fg-dim hover:bg-brand-500/12 hover:text-brand-400",
     danger: "bg-neg/10 text-neg hover:bg-neg/20",
   }[variant];
-  return <button className={cx(base, sizes, variants, className)} {...rest} />;
+  /* `type="button"` de padrão, antes do `...rest` para quem quiser enviar
+     declarar `type="submit"` -- que é o que os três envios do app (login,
+     nova senha, captura rápida do Início) já fazem. Sem padrão, todo Button
+     posto dentro de um <form> virava botão de enviar sem ninguém pedir. */
+  return (
+    <button
+      type="button"
+      className={cx(base, sizes, variants, className)}
+      {...rest}
+    />
+  );
 }
 
 /* ------------------------------ Inputs ------------------------------ */
@@ -534,6 +544,13 @@ export function Segmented<T extends string>({
       {options.map((o) => (
         <button
           key={o.value}
+          /*
+           * `type="button"` sempre. Sem ele, dentro de um <form> o botão é de
+           * ENVIAR: escolher "Recorrente" na nova demanda ou "Fixa" na nova
+           * conta mandava o formulário, e só não gravava quando a validação
+           * barrava por campo vazio. Fora de formulário não muda nada.
+           */
+          type="button"
           onClick={() => onChange(o.value)}
           className={cx(
             "h-7 rounded-lg px-3 text-xs font-medium transition-colors",

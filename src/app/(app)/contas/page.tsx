@@ -83,6 +83,7 @@ import {
   useNotice,
   EsqueletoPagina,
   ErroDeCarga,
+  Segmented,
 } from "@/components/ui";
 import { SeletorDeData } from "@/components/SeletorDeData";
 
@@ -140,6 +141,31 @@ const vazio = () => ({
   cartaoId: "",
   fechaDia: "",
 });
+
+type TipoDaConta = "unica" | "fixa" | "parcelada" | "abatida";
+
+/**
+ * O tipo que o formulario mostra, lido das marcas que o banco guarda.
+ *
+ * Mesma ordem de prioridade de `tipoDe` em Gerenciar contas: parcelada vence
+ * abatida, que vence fixa. So importa para conta antiga com duas marcas ao
+ * mesmo tempo -- nos dados dele nao ha nenhuma.
+ */
+const tipoDaConta = (f: {
+  parcelado: boolean;
+  abatida: boolean;
+  recurring: boolean;
+}): TipoDaConta =>
+  f.parcelado ? "parcelada" : f.abatida ? "abatida" : f.recurring ? "fixa" : "unica";
+
+/** Uma linha, no lugar dos quatro textos de tamanhos diferentes. */
+const DICA_DO_TIPO: Record<TipoDaConta, string> = {
+  unica: "Uma vez só, no vencimento escolhido.",
+  fixa: "Lançada sozinha todo dia 1º do mês.",
+  parcelada: "Tem fim: mostra 2/4 na lista e não se repete depois da última.",
+  abatida:
+    "Paga aos poucos, sem data marcada. Fica como dívida do mês atual até o abatimento cobrir o total.",
+};
 
 export default function ContasPage() {
   const router = useRouter();
@@ -425,9 +451,19 @@ export default function ContasPage() {
       form.valorVariavel ||
       editing?.valor_variavel ||
       editing?.cartao_id != null;
+    /*
+     * Cartão e "valor muda" só valem para conta FIXA.
+     *
+     * Eles moram dentro do tipo Fixa no formulário. Trocar o tipo os esconde,
+     * mas não os apaga do estado -- de propósito, para quem troca e volta não
+     * ter que redigitar. Sem esta trava, uma conta trocada para Única
+     * gravaria um cartão que já não aparece em lugar nenhum da tela.
+     */
+    const ehFixa = form.recurring && !form.parcelado;
+    const variavel = ehFixa && form.valorVariavel;
     const payload = {
       description: desc,
-      amount: form.valorVariavel && !Number.isFinite(valor) ? 0 : valor,
+      amount: variavel && !Number.isFinite(valor) ? 0 : valor,
       due_date: form.due_date,
       /* Nunca em branco. Conta sem categoria some dos agrupamentos e da
          soma por categoria — e enquanto o seletor esteve quebrado, dava
@@ -457,9 +493,9 @@ export default function ContasPage() {
        */
       ...(temCartao
         ? {
-            valor_variavel: form.valorVariavel,
-            cartao_id: form.cartaoId || null,
-            fecha_dia: form.fechaDia ? Number(form.fechaDia) : null,
+            valor_variavel: variavel,
+            cartao_id: ehFixa ? form.cartaoId || null : null,
+            fecha_dia: ehFixa && form.fechaDia ? Number(form.fechaDia) : null,
           }
         : {}),
       /* paid_amount vem de ABATIDAS.sql. Só entra no payload quando a conta é
@@ -1608,253 +1644,225 @@ export default function ContasPage() {
             />
           </Field>
 
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="Valor (R$)">
-              <Input
-                inputMode="decimal"
-                value={form.amount}
-                onChange={(e) => setForm({ ...form, amount: e.target.value })}
-                placeholder="1500,00"
-              />
-            </Field>
-            <Field
-              label={form.abatida ? "Data de referência" : "Vencimento"}
-              hint={
-                form.abatida
-                  ? "Conta abatida não tem vencimento; serve só para ordenar."
-                  : undefined
-              }
-            >
-              <SeletorDeData
-                value={form.due_date}
-                onChange={(due_date) => setForm({ ...form, due_date })}
-              />
-            </Field>
-          </div>
-
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field
-              label="Categoria"
-              hint={
-                !editing &&
-                !form.categoriaEscolhida &&
-                sugerirCategoria(form.description, categorias.nomes) ===
-                  form.category
-                  ? "sugerida pela descrição · troque se quiser"
-                  : undefined
-              }
-            >
-              <Select
-                value={form.category}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    category: e.target.value,
-                    categoriaEscolhida: true,
-                  })
-                }
-              >
-                {/* a categoria da conta em edição pode não estar mais na lista,
-                    se foi excluída; incluí-la evita o select cair no primeiro
-                    item e trocar a categoria sem a pessoa pedir.
-
-                    O `form.category &&` é a trava contra a linha em branco:
-                    conta sem categoria entrava aqui como uma opção vazia no
-                    topo da lista — um item clicável que não diz nada. */}
-                {(!form.category || categorias.nomes.includes(form.category)
-                  ? categorias.nomes
-                  : [form.category, ...categorias.nomes]
-                ).map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Status">
-              <Select
-                value={form.status}
-                onChange={(e) =>
-                  setForm({ ...form, status: e.target.value as BillStatus })
-                }
-              >
-                <option value="pending">Em aberto</option>
-                <option value="paid">Paga</option>
-              </Select>
-            </Field>
-          </div>
-
-          <Field label="Observações">
-            <Textarea
-              rows={2}
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Boleto no e-mail, pagar via PIX..."
-            />
-          </Field>
-
-          <label
-            className={cx(
-              "flex items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3",
-              form.parcelado ? "cursor-not-allowed opacity-60" : "cursor-pointer"
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={form.recurring && !form.parcelado}
-              disabled={form.parcelado}
-              onChange={(e) => setForm({ ...form, recurring: e.target.checked })}
-              className="h-4 w-4 accent-[var(--a)]"
-            />
-            <span className="text-sm text-fg-dim">
-              Conta fixa
-              <span className="ml-1 text-[11px] text-fg-mute">
-                {form.parcelado
-                  ? "(parcelada tem fim — não pode ser fixa)"
-                  : editing?.recurring && !form.recurring
-                    ? "(desmarcar encerra a série: o próximo mês não é mais lançado)"
-                    : "(lançada sozinha todo dia 1º do mês)"}
-              </span>
-            </span>
-          </label>
 
           {/*
-            O valor muda todo mês.
+            O TIPO da conta, numa escolha so, logo depois do nome.
 
-            Fica logo abaixo de "Conta fixa" porque só faz sentido junto com
-            ela: é a fixa que gera o mês seguinte, e esta caixa muda *como* ele
-            é gerado — vazio, em vez de com o valor repetido.
+            Eram quatro caixas soltas no fim do formulario -- Conta fixa, O
+            valor muda todo mes, Conta abatida, Parcelada -- cada uma com um
+            texto de tamanho e peso diferentes, e travas escondidas entre
+            elas (parcelada desligava a fixa). Nos dados dele as 17 contas
+            caem em quatro formas, todas de um tipo so: 12 fixas, 3 fixas
+            de cartao com valor variavel, 1 parcelada e 1 avulsa. Entao e
+            um tipo, e nao quatro interruptores; "o valor muda todo mes"
+            virou ajuste DE DENTRO da fixa, que e o unico lugar onde ele
+            aparece.
+
+            Vem antes do valor porque muda o que os campos significam: na
+            abatida o vencimento vira data de referencia, na parcelada o
+            valor pode ser o total a dividir.
           */}
-          <div className="rounded-[14px] bg-ink-800 p-3.5">
-            <label className="flex cursor-pointer items-start gap-2.5">
-              <input
-                type="checkbox"
-                checked={form.valorVariavel}
-                onChange={(e) =>
-                  setForm({ ...form, valorVariavel: e.target.checked })
-                }
-                className="mt-0.5 h-4 w-4 accent-[var(--a)]"
-              />
-              <span className="text-sm text-fg-dim">
-                <span className="font-semibold text-fg">
-                  O valor muda todo mês
-                </span>
-                <span className="mt-0.5 block text-[11.5px] text-fg-mute">
-                  Fatura de cartão, luz, água. Todo mês a conta nasce vazia
-                  esperando o valor, em vez de repetir o do mês passado.
-                </span>
-              </span>
-            </label>
+          <div>
+            <Segmented
+              value={tipoDaConta(form)}
+              onChange={(t) =>
+                setForm({
+                  ...form,
+                  recurring: t === "fixa",
+                  parcelado: t === "parcelada",
+                  abatida: t === "abatida",
+                })
+              }
+              options={[
+                { value: "unica", label: "Única" },
+                { value: "fixa", label: "Fixa" },
+                { value: "parcelada", label: "Parcelada" },
+                { value: "abatida", label: "Abatida" },
+              ]}
+            />
+            <p
+              className={cx(
+                "mt-1.5 text-[11.5px]",
+                editing?.recurring && !form.recurring ? "text-warn" : "text-fg-mute"
+              )}
+            >
+              {editing?.recurring && !form.recurring
+                ? "Deixar de ser fixa encerra a série: o próximo mês não é mais lançado."
+                : DICA_DO_TIPO[tipoDaConta(form)]}
+            </p>
+          </div>
 
-            {form.valorVariavel && (
-              <div className="mt-3 grid gap-3 border-t border-line-soft pt-3 sm:grid-cols-2">
-                <Field label="Cartão (opcional)">
-                  <Select
-                    value={form.cartaoId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      const c = cartoes.find((x) => x.id === id);
-                      /* Escolher o cartão preenche o dia do fechamento: é
-                         dado que já existe na ficha dele, e redigitar seria
-                         só chance de divergir. */
-                      setForm({
-                        ...form,
-                        cartaoId: id,
-                        fechaDia: c ? String(c.fecha_dia) : form.fechaDia,
-                      });
-                    }}
-                  >
-                    <option value="">Nenhum</option>
-                    {cartoes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nome}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="Fecha dia">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={form.fechaDia}
+          <div className="flex flex-col gap-3.5 border-t border-line-soft pt-4">
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <Field label="Valor (R$)">
+                <Input
+                  inputMode="decimal"
+                  value={form.amount}
+                  onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                  placeholder="1500,00"
+                />
+              </Field>
+              <Field
+                label={form.abatida ? "Data de referência" : "Vencimento"}
+                hint={
+                  form.abatida
+                    ? "Conta abatida não tem vencimento; serve só para ordenar."
+                    : undefined
+                }
+              >
+                <SeletorDeData
+                  value={form.due_date}
+                  onChange={(due_date) => setForm({ ...form, due_date })}
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <Field
+                label="Categoria"
+                hint={
+                  !editing &&
+                  !form.categoriaEscolhida &&
+                  sugerirCategoria(form.description, categorias.nomes) ===
+                    form.category
+                    ? "sugerida pela descrição · troque se quiser"
+                    : undefined
+                }
+              >
+                <Select
+                  value={form.category}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      category: e.target.value,
+                      categoriaEscolhida: true,
+                    })
+                  }
+                >
+                  {/* a categoria da conta em edição pode não estar mais na lista,
+                      se foi excluída; incluí-la evita o select cair no primeiro
+                      item e trocar a categoria sem a pessoa pedir.
+
+                      O `form.category &&` é a trava contra a linha em branco:
+                      conta sem categoria entrava aqui como uma opção vazia no
+                      topo da lista — um item clicável que não diz nada. */}
+                  {(!form.category || categorias.nomes.includes(form.category)
+                    ? categorias.nomes
+                    : [form.category, ...categorias.nomes]
+                  ).map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Status">
+                <Select
+                  value={form.status}
+                  onChange={(e) =>
+                    setForm({ ...form, status: e.target.value as BillStatus })
+                  }
+                >
+                  <option value="pending">Em aberto</option>
+                  <option value="paid">Paga</option>
+                </Select>
+              </Field>
+            </div>
+
+            {/* O que cada tipo pede a mais, logo embaixo do valor e da data,
+                que e a que se refere. */}
+            {tipoDaConta(form) === "fixa" && (
+              <div className="rounded-[14px] bg-ink-800 p-3.5">
+                <label className="flex cursor-pointer items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={form.valorVariavel}
                     onChange={(e) =>
-                      setForm({ ...form, fechaDia: e.target.value })
+                      setForm({ ...form, valorVariavel: e.target.checked })
                     }
-                    placeholder="1"
+                    className="mt-0.5 h-4 w-4 accent-[var(--a)]"
                   />
-                </Field>
-                <p className="text-[11.5px] leading-relaxed text-fg-mute sm:col-span-2">
-                  {cartoes.length === 0 ? (
-                    <>
-                      Nenhum cartão cadastrado ainda —{" "}
-                      <Link
-                        href="/contas/cartoes"
-                        className="font-semibold text-brand-400 hover:underline"
+                  <span className="text-sm text-fg-dim">
+                    <span className="font-semibold text-fg">
+                      O valor muda todo mês
+                    </span>
+                    <span className="mt-0.5 block text-[11.5px] text-fg-mute">
+                      Fatura de cartão, luz, água. Todo mês a conta nasce vazia
+                      esperando o valor, em vez de repetir o do mês passado.
+                    </span>
+                  </span>
+                </label>
+
+                {form.valorVariavel && (
+                  <div className="mt-3 grid gap-3 border-t border-line-soft pt-3 sm:grid-cols-2">
+                    <Field label="Cartão (opcional)">
+                      <Select
+                        value={form.cartaoId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          const c = cartoes.find((x) => x.id === id);
+                          /* Escolher o cartão preenche o dia do fechamento: é
+                             dado que já existe na ficha dele, e redigitar seria
+                             só chance de divergir. */
+                          setForm({
+                            ...form,
+                            cartaoId: id,
+                            fechaDia: c ? String(c.fecha_dia) : form.fechaDia,
+                          });
+                        }}
                       >
-                        cadastre em Meus cartões
-                      </Link>
-                      . O dia do fechamento também pode ser digitado aqui.
-                    </>
-                  ) : (
-                    "A partir do dia do fechamento, o Início cobra o valor. Em branco, cobra assim que a conta existe."
-                  )}
-                </p>
+                        <option value="">Nenhum</option>
+                        {cartoes.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.nome}
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field label="Fecha dia">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={form.fechaDia}
+                        onChange={(e) =>
+                          setForm({ ...form, fechaDia: e.target.value })
+                        }
+                        placeholder="1"
+                      />
+                    </Field>
+                    <p className="text-[11.5px] leading-relaxed text-fg-mute sm:col-span-2">
+                      {cartoes.length === 0 ? (
+                        <>
+                          Nenhum cartão cadastrado ainda —{" "}
+                          <Link
+                            href="/contas/cartoes"
+                            className="font-semibold text-brand-400 hover:underline"
+                          >
+                            cadastre em Meus cartões
+                          </Link>
+                          . O dia do fechamento também pode ser digitado aqui.
+                        </>
+                      ) : (
+                        "A partir do dia do fechamento, o Início cobra o valor. Em branco, cobra assim que a conta existe."
+                      )}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
-          </div>
-
-          <div className="rounded-[14px] bg-ink-800 p-3.5">
-            <label className="flex cursor-pointer items-start gap-2.5">
-              <input
-                type="checkbox"
-                checked={form.abatida}
-                onChange={(e) =>
-                  setForm({ ...form, abatida: e.target.checked })
-                }
-                className="mt-0.5 h-4 w-4 accent-[var(--a)]"
-              />
-              <span className="text-sm text-fg-dim">
-                <span className="font-semibold text-fg">Conta abatida</span>
-                <span className="mt-0.5 block text-[11.5px] text-fg-mute">
-                  Paga aos poucos, sem data marcada. Fica como dívida do mês
-                  atual até o abatimento cobrir o total.
-                </span>
-              </span>
-            </label>
-            {form.abatida && (
-              <div className="mt-3.5 border-t border-line-soft pt-3.5">
-                <Field label="Já abatido (R$)" hint="Depois, use o botão Abater na lista para somar cada pagamento.">
-                  <Input
-                    inputMode="decimal"
-                    value={form.paid_amount}
-                    onChange={(e) =>
-                      setForm({ ...form, paid_amount: e.target.value })
-                    }
-                    placeholder="0,00"
-                  />
-                </Field>
-              </div>
+            {tipoDaConta(form) === "abatida" && (
+              <Field label="Já abatido (R$)" hint="Depois, use o botão Abater na lista para somar cada pagamento.">
+                <Input
+                  inputMode="decimal"
+                  value={form.paid_amount}
+                  onChange={(e) =>
+                    setForm({ ...form, paid_amount: e.target.value })
+                  }
+                  placeholder="0,00"
+                />
+              </Field>
             )}
-          </div>
-
-          <div className="rounded-[14px] bg-ink-800 p-3.5">
-            <label className="flex cursor-pointer items-center gap-2.5">
-              <input
-                type="checkbox"
-                checked={form.parcelado}
-                onChange={(e) =>
-                  setForm({ ...form, parcelado: e.target.checked })
-                }
-                className="h-4 w-4 accent-[var(--a)]"
-              />
-              <span className="text-sm text-fg-dim">
-                <span className="font-semibold text-fg">Parcelada</span>
-                <span className="ml-1 text-[11px] text-fg-mute">
-                  (mostra 2/4 na lista)
-                </span>
-              </span>
-            </label>
-            {form.parcelado && (
-              <div className="mt-3.5 border-t border-line-soft pt-3.5">
+            {tipoDaConta(form) === "parcelada" && (
+              <div className="rounded-[14px] bg-ink-800 p-3.5">
                 {!editing && (
                   <div className="mb-3.5">
                     <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-fg-mute">
@@ -1982,6 +1990,17 @@ export default function ContasPage() {
                 )}
               </div>
             )}
+          </div>
+
+          <div className="border-t border-line-soft pt-4">
+            <Field label="Observações">
+              <Textarea
+                rows={2}
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Boleto no e-mail, pagar via PIX..."
+              />
+            </Field>
           </div>
 
           {err && (
