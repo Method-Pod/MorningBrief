@@ -146,7 +146,9 @@ export function ChipsDeLink({
                Um cartao do quadro tem ate dois links, mais a prioridade, o
                cliente e a data — no escuro isso virava um semaforo. O icone
                de elo e o sublinhado ao passar dizem que da para clicar. */
-            "inline-flex max-w-full items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-ink-750 hover:text-brand-400 hover:underline",
+            /* `min-w-0`: sem ele, numa linha que nao quebra, o link nao encolhe
+               abaixo do proprio texto e empurra o vizinho para fora. */
+            "inline-flex min-w-0 max-w-full items-center gap-1 rounded-md px-1 py-0.5 transition-colors hover:bg-ink-750 hover:text-brand-400 hover:underline",
             tom === "mudo" ? "text-fg-mute" : "text-[var(--chip-link)]",
             tamanho === "sm" ? "text-[10px]" : "text-[10.5px]"
           )}

@@ -219,7 +219,8 @@ export function CartaoDeDemanda({
 
         O fio acima separa o que a demanda É do que se sabe sobre ela.
       */}
-      <div className="mt-3 flex items-start gap-2 border-t border-line-soft pt-2.5">
+      <div className="mt-3 border-t border-line-soft pt-2.5">
+      <div className="flex items-start gap-2">
         {/*
           Duas zonas, e só a da esquerda quebra linha.
 
@@ -245,7 +246,6 @@ export function CartaoDeDemanda({
             <span className="truncate-livre">{t.client}</span>
           </button>
         )}
-        <ChipsDeLink links={t.links} max={2} tamanho="md" tom="mudo" />
         </div>
 
         <span className="flex shrink-0 items-center gap-1.5 pt-0.5">
@@ -276,6 +276,22 @@ export function CartaoDeDemanda({
             </span>
           )}
         </span>
+      </div>
+
+      {/*
+        Os links numa linha PRÓPRIA, lado a lado.
+
+        Antes eles entravam na mesma fila da prioridade e do cliente, e a fila
+        quebrava onde dava: o primeiro link ficava ao lado do cliente e o
+        segundo caía sozinho embaixo. Juntos e sem quebra, cada um encolhe o
+        nome com reticências quando falta largura -- o elo e o domínio
+        continuam dizendo o que é, e o endereço inteiro está no `title`.
+      */}
+      {(t.links?.filter(Boolean).length ?? 0) > 0 && (
+        <div className="mt-1.5 flex min-w-0 items-center gap-1.5">
+          <ChipsDeLink links={t.links} max={2} tamanho="md" tom="mudo" />
+        </div>
+      )}
       </div>
     </div>
   );
