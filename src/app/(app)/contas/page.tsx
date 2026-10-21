@@ -86,6 +86,12 @@ import {
   Segmented,
 } from "@/components/ui";
 import { SeletorDeData } from "@/components/SeletorDeData";
+import {
+  marcarEditadas,
+  oQueFaltaParaAjustar,
+  recomporParcelas,
+  type Ajuste,
+} from "@/lib/ajusteDeParcelas";
 
 /* ------------------------------ filtros e ordem ------------------------------ */
 
@@ -130,6 +136,8 @@ const vazio = () => ({
   /** "iguais": mesma data e valor todo mês. "variaveis": cada parcela por si. */
   modoParcelas: "iguais" as "iguais" | "variaveis",
   parcelas: [] as Parcela[],
+  /* Campos da grade ajustados a mao ("2:valor", "0:data"); ver `recomporParcelas`. */
+  parcelasEditadas: [] as Ajuste[],
   // conta paga aos poucos, sem data marcada
   abatida: false,
   paid_amount: "0",
@@ -238,6 +246,10 @@ export default function ContasPage() {
   const [form, setForm] = React.useState(vazio());
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
+  /* Clicou em "ajustar cada uma" sem o que a grade precisa? O aviso
+     aparece colado no botao enquanto o motivo durar -- preencher o valor
+     o apaga sozinho. Ver `oQueFaltaParaAjustar`. */
+  const [pediuAjuste, setPediuAjuste] = React.useState(false);
   const confirm = useConfirm();
   const notice = useNotice();
   const categorias = useCategorias(supabase);
@@ -306,6 +318,7 @@ export default function ContasPage() {
     setEditing(null);
     setForm(vazio());
     setErr("");
+    setPediuAjuste(false);
     setOpen(true);
   };
 
@@ -376,6 +389,7 @@ export default function ContasPage() {
       categoriaEscolhida: true,
     });
     setErr("");
+    setPediuAjuste(false);
     setOpen(true);
   };
 
@@ -399,6 +413,7 @@ export default function ContasPage() {
       categoriaEscolhida: true,
       modoParcelas: "iguais" as const,
       parcelas: [],
+      parcelasEditadas: [],
       abatida: ehAbatida(b),
       paid_amount: String(b.paid_amount ?? 0),
       valorVariavel: !!b.valor_variavel,
@@ -406,6 +421,7 @@ export default function ContasPage() {
       fechaDia: b.fecha_dia == null ? "" : String(b.fecha_dia),
     });
     setErr("");
+    setPediuAjuste(false);
     setOpen(true);
   };
 
@@ -982,21 +998,24 @@ export default function ContasPage() {
     modo: "iguais" | "variaveis",
     forcar = false
   ) => {
-    if (modo === "iguais") return setForm({ ...form, modoParcelas: "iguais" });
+    if (modo === "iguais") {
+      setPediuAjuste(false);
+      return setForm({ ...form, modoParcelas: "iguais" });
+    }
 
+    /*
+     * Faltando algo, o aviso vai para baixo do proprio botao, e nao para o
+     * `err` do rodape: la ele ficava embaixo de Observacoes, fora da vista,
+     * e o botao parecia nao funcionar.
+     */
+    if (oQueFaltaParaAjustar(form, MAX_PARCELAS)) {
+      setPediuAjuste(true);
+      return;
+    }
+    setPediuAjuste(false);
     const valor = valorDigitado(form.amount);
     const de = Number(form.installment_no);
     const total = Number(form.installment_total);
-    if (
-      !Number.isFinite(valor) ||
-      valor <= 0 ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(form.due_date) ||
-      total - de + 1 < 1 ||
-      total > MAX_PARCELAS
-    ) {
-      setErr("Informe valor, vencimento e o total de parcelas antes de ajustar.");
-      return;
-    }
 
     setErr("");
     const base = parcelasIguais({
@@ -1009,23 +1028,30 @@ export default function ContasPage() {
     setForm({
       ...form,
       modoParcelas: "variaveis",
-      /* Sem forçar, preserva o que já foi ajustado e só completa o que falta. */
+      /* Sem forçar, preserva o que foi ajustado À MÃO e recalcula o resto;
+         "recalcular iguais" (forcar) zera também a lembrança das editadas. */
       parcelas:
         forcar || !form.parcelas.length
           ? base
-          : base.map((b, i) => form.parcelas[i] ?? b),
+          : recomporParcelas(base, form.parcelas, form.parcelasEditadas),
+      parcelasEditadas: forcar ? [] : form.parcelasEditadas,
     });
   };
 
   /*
-   * Mexer em "Parcela" ou "De" muda quantas linhas a lista precisa ter.
-   * Estender ou cortar aqui evita gravar uma quantidade diferente da que está
-   * na tela, e preserva as linhas já ajustadas.
+   * A grade segue a BASE: o valor, o primeiro vencimento, quantas parcelas e
+   * se o valor é "de cada parcela" ou "o total a dividir".
+   *
+   * Antes ela só acompanhava a QUANTIDADE. Trocar para "o total a dividir"
+   * com quatro parcelas de R$ 300 abertas deixava as quatro em R$ 300 e a
+   * soma em R$ 1.200, quando os R$ 300 tinham virado o total -- e gravaria
+   * isso. Agora toda linha que ninguém tocou é refeita a partir da base, e só
+   * as ajustadas à mão ficam como estão.
    */
   React.useEffect(() => {
     if (form.modoParcelas !== "variaveis" || !form.parcelas.length) return;
     const alvo = Number(form.installment_total) - Number(form.installment_no) + 1;
-    if (alvo < 1 || alvo === form.parcelas.length) return;
+    if (alvo < 1) return;
 
     const valor = valorDigitado(form.amount);
     if (!Number.isFinite(valor) || valor <= 0) return;
@@ -1038,10 +1064,17 @@ export default function ContasPage() {
     });
     setForm((f) => ({
       ...f,
-      parcelas: base.map((b, i) => f.parcelas[i] ?? b),
+      parcelas: recomporParcelas(base, f.parcelas, f.parcelasEditadas),
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.installment_no, form.installment_total, form.modoParcelas]);
+  }, [
+    form.installment_no,
+    form.installment_total,
+    form.modoParcelas,
+    form.amount,
+    form.due_date,
+    form.valorTotal,
+  ]);
 
   /**
    * Prévia do parcelamento, com os mesmos cálculos da gravação.
@@ -1942,6 +1975,11 @@ export default function ContasPage() {
                         </button>
                       ))}
                     </div>
+                    {pediuAjuste && oQueFaltaParaAjustar(form, MAX_PARCELAS) && (
+                      <p role="status" className="mt-1.5 text-[11.5px] font-medium text-warn">
+                        {oQueFaltaParaAjustar(form, MAX_PARCELAS)}
+                      </p>
+                    )}
                   </div>
                 )}
 
@@ -1951,7 +1989,17 @@ export default function ContasPage() {
                     <EditorParcelas
                       parcelas={form.parcelas}
                       de={Number(form.installment_no)}
-                      onChange={(parcelas) => setForm({ ...form, parcelas })}
+                      onChange={(parcelas) =>
+                        setForm({
+                          ...form,
+                          parcelas,
+                          parcelasEditadas: marcarEditadas(
+                            form.parcelas,
+                            parcelas,
+                            form.parcelasEditadas
+                          ),
+                        })
+                      }
                       onRecalcular={() => trocarModoParcelas("variaveis", true)}
                     />
                   )}
