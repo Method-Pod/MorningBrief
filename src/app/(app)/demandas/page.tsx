@@ -79,6 +79,11 @@ import {
   ProgressoChecklist,
   type ItemEmEdicao,
 } from "@/components/Checklist";
+import {
+  avisoDoChecklist,
+  confirmacaoDoChecklist,
+  pedeChecklistCompleto,
+} from "@/lib/regraDoChecklist";
 
 /* A ordem das colunas mora com o cartão, que é quem precisa saber qual é
    a próxima. */
@@ -285,19 +290,15 @@ export default function DemandasPage() {
     if (!form.title.trim()) return setErr("Informe o título da demanda.");
 
     /*
-     * O campo Status é o outro caminho para "concluída", e vale a mesma regra.
+     * O campo Status é o outro caminho para Revisão e Concluída, e vale a
+     * mesma regra.
      *
      * Aqui a checagem é sobre o checklist EM EDIÇÃO, não sobre o gravado: se a
      * pessoa acabou de marcar tudo na tela, o gravado ainda está desatualizado.
      */
-    if (form.status === "done" && checklist.length) {
+    if (pedeChecklistCompleto(form.status) && checklist.length) {
       const faltam = checklist.filter((i) => !i.done).length;
-      if (faltam > 0)
-        return setErr(
-          `Faltam ${faltam} ${
-            faltam === 1 ? "item" : "itens"
-          } do checklist. Marque tudo antes de concluir a demanda.`
-        );
+      if (faltam > 0) return setErr(avisoDoChecklist(faltam, form.status));
     }
 
     setBusy(true);
@@ -747,28 +748,21 @@ export default function DemandasPage() {
     if (t.status === status) return;
 
     /*
-     * Concluir exige o checklist inteiro feito.
+     * Revisão e Concluída exigem o checklist inteiro feito.
      *
      * Em vez de só recusar, oferece o atalho: quem terminou os cinco cortes e
      * não marcou nenhum quer concluir tudo, não voltar e clicar cinco vezes.
      * Cancelar não muda nada.
      */
-    const faltam = status === "done" ? faltamNoChecklist(t.id) : 0;
+    const faltam = pedeChecklistCompleto(status) ? faltamNoChecklist(t.id) : 0;
     if (faltam > 0) {
+      const c = confirmacaoDoChecklist(t.title, faltam, status);
       confirm.ask(
-        `"${t.title}" tem ${faltam} ${
-          faltam === 1 ? "item" : "itens"
-        } do checklist em aberto. Concluir ${
-          faltam === 1 ? "ele" : "eles"
-        } e a demanda?`,
+        c.texto,
         async () => {
           if (await concluirItens(t.id)) await aplicarStatus(t, status);
         },
-        {
-          titulo: "Concluir a demanda",
-          rotulo: "Concluir tudo",
-          variante: "primary",
-        }
+        { titulo: c.titulo, rotulo: c.rotulo, variante: "primary" }
       );
       return;
     }
@@ -779,7 +773,7 @@ export default function DemandasPage() {
   /*
    * O arrasto entrega a coluna onde o cartão foi solto, e `move` decide o
    * resto — inclusive a regra do checklist, que continua valendo: soltar em
-   * "Concluída" com item em aberto abre a mesma confirmação do botão.
+   * Revisão ou Concluída com item em aberto abre a mesma confirmação do botão.
    */
   const { iniciar: iniciarArrasto } = useArrastarCartao<Task>({
     onSoltar: (t, coluna) => move(t, coluna as TaskStatus),
@@ -1846,7 +1840,7 @@ export default function DemandasPage() {
               hint={
                 form.recurring
                   ? "Vira o modelo da recorrência: cada dia nasce com estes itens desmarcados."
-                  : "A demanda só vai para Concluída com todos marcados."
+                  : "A demanda só vai para Revisão ou Concluída com todos marcados."
               }
             >
               <EditorChecklist itens={checklist} onChange={setChecklist} />
