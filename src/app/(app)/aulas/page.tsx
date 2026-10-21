@@ -6,8 +6,10 @@ import { FaixaResumo } from "@/components/FaixaResumo";
 import { MenuSuspenso } from "@/components/MenuSuspenso";
 import {
   Check,
+  ChevronDown,
   Clock,
   ExternalLink,
+  FolderOpen,
   GraduationCap,
   Layers,
   ListVideo,
@@ -23,11 +25,13 @@ import {
   Tv,
   Youtube,
 } from "lucide-react";
+import { montarListaDeAulas, type ItemDaLista } from "@/lib/pastasDeAulas";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   FONTE_AULA_LABEL,
   type Channel,
+  type PastaDePlaylist,
   type Course,
   type FonteAula,
   type Lesson,
@@ -193,6 +197,12 @@ export default function AulasPage() {
   const supabase = React.useMemo(() => createClient(), []);
   const [rows, setRows] = useEstadoCacheado<Lesson[]>("lessons", []);
   const [cursos, setCursos] = useEstadoCacheado<Course[]>("courses", []);
+  /* Playlists importadas, cada uma uma pasta na lista. Ver
+     PASTAS-DE-PLAYLIST.sql e lib/pastasDeAulas. */
+  const [pastas, setPastas] = useEstadoCacheado<PastaDePlaylist[]>("playlists", []);
+  /* Quais pastas estão abertas. Começam fechadas: a pasta existe para a
+     lista ficar curta, e abrir todas de início desfaria isso. */
+  const [abertas, setAbertas] = React.useState<Set<string>>(() => new Set());
   const [assuntos, setAssuntos] = useEstadoCacheado<Subject[]>("subjects", []);
   const [loading, setLoading] = React.useState(
     () => !temCache("lessons", "courses", "subjects")
@@ -249,6 +259,12 @@ export default function AulasPage() {
   const [importando, setImportando] = React.useState(false);
   const [linkPlaylist, setLinkPlaylist] = React.useState("");
   const [achados, setAchados] = React.useState<AulaDaPlaylist[] | null>(null);
+  /* O nome e a capa da playlist, que viram o nome e a capa da pasta. */
+  const [infoPlaylist, setInfoPlaylist] = React.useState<{
+    title: string | null;
+    canal: string | null;
+    thumb_url: string | null;
+  } | null>(null);
   const [assuntoImport, setAssuntoImport] = React.useState("");
   const [buscandoPlaylist, setBuscandoPlaylist] = React.useState(false);
   const [erroImport, setErroImport] = React.useState("");
@@ -257,7 +273,7 @@ export default function AulasPage() {
   const notice = useNotice();
 
   const load = React.useCallback(async () => {
-    const [l, c, a, m, ca] = await Promise.all([
+    const [l, c, a, m, ca, pl] = await Promise.all([
       supabase
         .from("lessons")
         .select("*")
@@ -271,6 +287,9 @@ export default function AulasPage() {
       /* Canais também toleram: sem CANAIS.sql a seção não aparece, e o resto
          da aba não sabe que ela existe. */
       supabase.from("channels").select("*").order("name"),
+      /* Pastas também toleram: sem PASTAS-DE-PLAYLIST.sql não há pasta, e as
+         aulas aparecem soltas como sempre apareceram. */
+      supabase.from("playlists").select("*").order("created_at", { ascending: false }),
     ]);
 
     /* Tabela que falta é recado que fica na tela, não aviso que passa. */
@@ -304,9 +323,10 @@ export default function AulasPage() {
        lista vazia, e o recado do modal explica o que rodar. */
     setSemTabelaCanais(!!ca.error);
     setCanais((ca.data as Channel[]) ?? []);
+    setPastas(pl.error ? [] : ((pl.data as PastaDePlaylist[]) ?? []));
     setLoading(false);
     setBuscandoMais(false);
-  }, [supabase, setRows, setCursos, setAssuntos, setMeta, setCanais, paginas]);
+  }, [supabase, setRows, setCursos, setAssuntos, setMeta, setCanais, setPastas, paginas]);
 
   React.useEffect(() => {
     load();
@@ -495,6 +515,36 @@ export default function AulasPage() {
     if (!notice.check(error ?? nenhumaLinha(gravadas), "gravar o minuto"))
       patch(l.id, { em_minuto: Math.round(n) });
   };
+
+  /**
+   * Tirar a pasta tira as aulas dela (cascade no banco).
+   *
+   * Deixá-las soltas faria a playlist reaparecer espalhada na lista, que é
+   * justamente o que a pasta veio resolver. A confirmação diz quantas vão.
+   */
+  const removerPasta = (p: PastaDePlaylist, n: number) =>
+    confirm.ask(
+      `Tirar a playlist "${p.title}" e as ${n} aula${n === 1 ? "" : "s"} dela?`,
+      async () => {
+        const { data: saiu, error } = await supabase
+          .from("playlists")
+          .delete()
+          .eq("id", p.id)
+          .select("id");
+        if (notice.check(error, "tirar a playlist")) return;
+        if (!saiu?.length) return notice.show(NADA_GRAVADO);
+        setPastas((v) => v.filter((x) => x.id !== p.id));
+        setRows((v) => v.filter((l) => l.playlist_id !== p.id));
+      }
+    );
+
+  const alternarPasta = (id: string) =>
+    setAbertas((v) => {
+      const n = new Set(v);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
 
   const removerAula = (l: Lesson) =>
     confirm.ask(`Tirar "${l.title}" da lista?`, async () => {
@@ -797,6 +847,7 @@ export default function AulasPage() {
       );
     setErroImport("");
     setAchados(null);
+    setInfoPlaylist(null);
     setBuscandoPlaylist(true);
     try {
       const r = await fetch(`/api/playlist?id=${encodeURIComponent(id)}`);
@@ -806,6 +857,7 @@ export default function AulasPage() {
         return;
       }
       setAchados(d.itens ?? []);
+      setInfoPlaylist(d.playlist ?? null);
       if (!d.itens?.length)
         setErroImport("A playlist respondeu, mas sem nenhum vídeo utilizável.");
     } catch {
@@ -831,53 +883,133 @@ export default function AulasPage() {
       return notice.show(SESSION_EXPIRED);
     }
 
-    /* O que já está na lista não entra de novo: reimportar uma playlist que
-       ganhou aulas novas deve trazer só as novas. */
-    const jaTenho = new Set(rows.map((l) => l.url).filter(Boolean));
-    const novas = achados.filter((a) => !jaTenho.has(a.url));
+    /*
+     * Primeiro a PASTA. `upsert` pelo id da playlist no YouTube: importar a
+     * mesma playlist de novo reaproveita a pasta (e atualiza nome e capa) em
+     * vez de criar uma segunda.
+     */
+    const ytId = idDaPlaylist(linkPlaylist) ?? "";
+    const canalDaPlaylist = infoPlaylist?.canal ?? achados[0]?.canal ?? null;
+    const { data: pasta, error: erroPasta } = await supabase
+      .from("playlists")
+      .upsert(
+        {
+          user_id: uid,
+          youtube_id: ytId,
+          title:
+            infoPlaylist?.title ??
+            (canalDaPlaylist ? `Playlist de ${canalDaPlaylist}` : "Playlist"),
+          canal: canalDaPlaylist,
+          thumb_url: infoPlaylist?.thumb_url ?? achados[0]?.thumb_url ?? null,
+          url: `https://www.youtube.com/playlist?list=${ytId}`,
+          subject_id: assuntoImport || null,
+        },
+        { onConflict: "user_id,youtube_id" }
+      )
+      .select("*")
+      .single();
 
-    if (!novas.length) {
+    if (erroPasta || !pasta) {
       setSalvando(false);
-      setErroImport("Todas as aulas dessa playlist já estão na sua lista.");
+      /* Sem a tabela, NAO importa solto: soltar os videos na lista e
+         exatamente o que ele pediu para parar de acontecer. */
+      if (erroPasta && /playlists|playlist_id|schema cache|does not exist/i.test(erroPasta.message))
+        return setErroImport(
+          "As pastas de playlist precisam de supabase/PASTAS-DE-PLAYLIST.sql no banco. Rode o arquivo e importe de novo."
+        );
+      notice.check(erroPasta, "criar a pasta da playlist");
       return;
     }
+    const idPasta = (pasta as PastaDePlaylist).id;
 
-    const { data, error } = await supabase
-      .from("lessons")
-      .insert(
-        novas.map((a) => ({
-          user_id: uid,
-          title: a.title,
-          url: a.url,
-          fonte: "youtube" as const,
-          canal: a.canal,
-          thumb_url: a.thumb_url,
-          subject_id: assuntoImport || null,
-          duracao_seg: a.duracao_seg,
-          feita: false,
-        }))
+    /*
+     * Depois as aulas, cada uma com a posicao dela na playlist.
+     *
+     * O que ja esta na lista nao entra de novo. Se estava SOLTA, entra na
+     * pasta (sem perder o que ja foi marcado). Se ja e desta pasta, fica como
+     * esta -- reimportar uma playlist que ganhou videos traz so os novos.
+     */
+    const porUrl = new Map(rows.filter((l) => l.url).map((l) => [l.url as string, l]));
+    const novas: { a: AulaDaPlaylist; i: number }[] = [];
+    const anexar: { id: string; i: number }[] = [];
+    achados.forEach((a, i) => {
+      const ja = porUrl.get(a.url);
+      if (!ja) novas.push({ a, i });
+      else if (!ja.playlist_id) anexar.push({ id: ja.id, i });
+    });
+
+    let inseridas: Lesson[] = [];
+    if (novas.length) {
+      const { data, error } = await supabase
+        .from("lessons")
+        .insert(
+          novas.map(({ a, i }) => ({
+            user_id: uid,
+            title: a.title,
+            url: a.url,
+            fonte: "youtube" as const,
+            canal: a.canal,
+            thumb_url: a.thumb_url,
+            subject_id: assuntoImport || null,
+            duracao_seg: a.duracao_seg,
+            feita: false,
+            playlist_id: idPasta,
+            posicao: i,
+          }))
+        )
+        .select("*");
+      if (error && /duracao_seg/.test(error.message)) {
+        setSalvando(false);
+        setErroImport(
+          "A duração em segundos precisa de supabase/DURACAO-EXATA.sql no banco. Rode o arquivo e recarregue."
+        );
+        return;
+      }
+      if (notice.check(error, "importar a playlist")) {
+        setSalvando(false);
+        return;
+      }
+      inseridas = (data as Lesson[]) ?? [];
+    }
+
+    const anexadas = await Promise.all(
+      anexar.map(({ id, i }) =>
+        supabase
+          .from("lessons")
+          .update({ playlist_id: idPasta, posicao: i })
+          .eq("id", id)
+          .select("id")
       )
-      .select("*");
+    );
+    const okAnexo = new Map(
+      anexar
+        .filter((_, k) => !anexadas[k].error && anexadas[k].data?.length)
+        .map((x) => [x.id, x.i])
+    );
     setSalvando(false);
 
-    if (error && /duracao_seg/.test(error.message)) {
-      setErroImport(
-        "A duração em segundos precisa de supabase/DURACAO-EXATA.sql no banco. Rode o arquivo e recarregue."
-      );
-      return;
-    }
-    if (notice.check(error, "importar a playlist")) return;
-    if (data) setRows((v) => [...(data as Lesson[]), ...v]);
-    const pulou = achados.length - novas.length;
+    setPastas((v) => [pasta as PastaDePlaylist, ...v.filter((x) => x.id !== idPasta)]);
+    setRows((v) => [
+      ...inseridas,
+      ...v.map((l) =>
+        okAnexo.has(l.id) ? { ...l, playlist_id: idPasta, posicao: okAnexo.get(l.id)! } : l
+      ),
+    ]);
+
+    const nome = (pasta as PastaDePlaylist).title;
+    const total = inseridas.length + okAnexo.size;
     notice.show(
-      `${novas.length} aula${novas.length === 1 ? "" : "s"} importada${
-        novas.length === 1 ? "" : "s"
-      }${pulou ? ` · ${pulou} já estava${pulou === 1 ? "" : "m"} na lista` : ""}.`,
+      total
+        ? `Pasta “${nome}” com ${total} aula${total === 1 ? "" : "s"}${
+            okAnexo.size ? ` · ${okAnexo.size} que já estava${okAnexo.size === 1 ? "" : "m"} solta${okAnexo.size === 1 ? "" : "s"} entr${okAnexo.size === 1 ? "ou" : "aram"} nela` : ""
+          }.`
+        : `A pasta “${nome}” já tinha todas as aulas dessa playlist.`,
       "ok"
     );
     setImportando(false);
     setLinkPlaylist("");
     setAchados(null);
+    setInfoPlaylist(null);
     setAssuntoImport("");
     setAba("fila");
   };
@@ -915,17 +1047,11 @@ export default function AulasPage() {
     ];
   }, [assuntos, usosDoAssunto, rows]);
 
-  const lista = React.useMemo(
-    () =>
-      rows
-        .filter((l) =>
-          aba === "todas" ? true : aba === "feitas" ? l.feita : !l.feita
-        )
-        .filter(
-          (l) =>
-            filtro === "all" || (l.subject_id || SEM_ASSUNTO) === filtro
-        ),
-    [rows, aba, filtro]
+  /* Pastas de playlist e aulas soltas, com as regras de aba e assunto em
+     lib/pastasDeAulas. */
+  const itens = React.useMemo(
+    () => montarListaDeAulas(rows, pastas, aba, filtro, SEM_ASSUNTO),
+    [rows, pastas, aba, filtro]
   );
 
   /**
@@ -961,6 +1087,332 @@ export default function AulasPage() {
         ? "bg-brand-500 text-on-brand"
         : "bg-ink-800 text-fg-mute hover:text-fg-dim"
     );
+
+  /*
+   * Uma aula da lista. Funcao, e nao o corpo do `map`, porque a MESMA
+   * linha aparece solta e dentro da pasta de playlist: marcar assistida,
+   * "parei aqui" e tirar continuam sendo um codigo so.
+   */
+  const linhaDaAula = (l: Lesson, i: number) => {
+    const Icone = ICONE[l.fonte];
+    const pct = pctAssistido(l);
+    return (
+      /*
+        No telefone a capa sobe para o topo; no desktop nada muda.
+                    
+        Feito com `flex-wrap` e `order`, e não com duas árvores de
+        JSX: duplicar a linha para "versão telefone" e "versão
+        desktop" dobraria cada conserto futuro, e o React montaria
+        as duas para esconder uma. Aqui a capa é `w-full` e quebra
+        a linha sozinha; a caixa de marcar e o texto dividem a
+        segunda. No `sm` o `nowrap` desfaz tudo.
+      */
+      <li
+        key={l.id}
+        className="entra group flex flex-wrap items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800/40 sm:flex-nowrap sm:gap-3.5 sm:px-5"
+        style={{ "--i": i } as React.CSSProperties}
+      >
+        <button
+          type="button"
+          onClick={() => alternar(l)}
+          disabled={marcando === l.id}
+          aria-label={`${l.feita ? "Desmarcar" : "Marcar"} ${l.title}`}
+          aria-pressed={l.feita}
+          className={cx(
+            "order-2 mt-[3px] grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-[180ms] disabled:opacity-50 sm:order-none",
+            l.feita
+              ? "border-pos bg-pos text-sobre-cor"
+              : "border-line bg-ink-900 hover:border-brand-400"
+          )}
+        >
+          <Check
+            size={13}
+            strokeWidth={3.5}
+            className={cx(
+              "transition-[transform,opacity] duration-[180ms] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
+              l.feita ? "scale-100 opacity-100" : "scale-50 opacity-0"
+            )}
+          />
+        </button>
+
+        <MiniaturaAula
+          url={l.thumb_url}
+          fonte={l.fonte}
+          feita={l.feita}
+          /* 3:2 e largura cheia no telefone; a miniatura 16:9 de
+             sempre a partir do `sm`. */
+          className="order-1 aspect-[3/2] w-full rounded-xl sm:order-none sm:aspect-video sm:w-[104px] sm:rounded-[10px]"
+        />
+
+        <div className="order-3 min-w-0 flex-1 py-0.5 sm:order-none">
+          <p
+            className={cx(
+              "text-[13.5px] font-semibold leading-snug",
+              l.feita ? "text-fg-mute line-through" : "text-fg"
+            )}
+          >
+            {l.title}
+          </p>
+
+          {/*
+            Uma linha de metadados com pesos diferentes, não quatro
+            textos cinzas iguais.
+
+            Antes o canal, a duração e o "abrir" tinham o mesmo
+            tamanho e a mesma cor: o olho não achava onde começar.
+            Agora o canal é o texto, a duração é uma pastilha com
+            número, e "abrir" é um botão pequeno.
+          */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-[11.5px] text-fg-dim">
+              <Icone size={12} className="shrink-0 text-fg-mute" />
+              <span className="truncate">
+                {l.canal || FONTE_AULA_LABEL[l.fonte]}
+              </span>
+            </span>
+
+            {duracaoExata(duracaoDaAula(l)) && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-ink-800 px-2 py-0.5 text-[10px] font-semibold text-fg-mute tnum">
+                <Clock size={9} />
+                {duracaoExata(duracaoDaAula(l))}
+              </span>
+            )}
+
+            <Etiqueta nome={nomeDoAssunto.get(l.subject_id ?? "")} />
+
+            {l.feita && l.feita_em && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-pos/12 px-2 py-0.5 text-[10px] font-semibold text-pos">
+                <Check size={9} strokeWidth={3} />
+                visto {dataCurta(localDay(l.feita_em))}
+              </span>
+            )}
+
+            {l.url && (
+              <a
+                href={l.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-ink-900 px-2.5 text-[10.5px] font-semibold text-brand-400 transition-colors hover:border-brand-400 hover:bg-brand-500/8"
+              >
+                <ExternalLink size={10} />
+                abrir
+              </a>
+            )}
+          </div>
+
+          {/*
+            O "parei aqui" aparecia em TODA aula da fila, inclusive
+            nas nunca começadas -- um campo vazio e um botão
+            apagado por linha, quinze vezes. Na aula começada ele
+            continua sempre à vista, porque ali há progresso para
+            mostrar. Na nunca começada, no computador, aparece ao
+            passar o mouse ou chegar pelo teclado, como as ações da
+            linha. No celular nada muda: lá não existe passar o
+            mouse.
+          */}
+          {!l.feita && duracaoDaAula(l) && (
+            <div
+              className={cx(
+                "mt-2 flex flex-wrap items-center gap-2",
+                pct === null &&
+                  "lg:hidden lg:group-hover:flex lg:group-focus-within:flex"
+              )}
+            >
+              {pct !== null && (
+                <>
+                  <span className="h-1 min-w-[48px] flex-1 overflow-hidden rounded-full bg-ink-800">
+                    <span
+                      className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
+                      style={{ transform: `scaleX(${pct / 100})` }}
+                    />
+                  </span>
+                  <span className="text-[10px] font-bold text-fg-mute tnum">
+                    {l.em_minuto}min de{" "}
+                    {duracaoExata(duracaoDaAula(l))}
+                  </span>
+                </>
+              )}
+              <span className="flex items-center gap-1.5">
+                <span className="w-[62px]">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={Math.ceil(duracaoDaAula(l)! / 60)}
+                    value={minutoEmEdicao[l.id] ?? ""}
+                    onChange={(e) =>
+                      setMinutoEmEdicao((r) => ({
+                        ...r,
+                        [l.id]: e.target.value,
+                      }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        gravarMinuto(l);
+                      }
+                    }}
+                    placeholder="min"
+                    aria-label={`Minuto atual de ${l.title}`}
+                    className="h-7 text-center text-[11px]"
+                  />
+                </span>
+                <Button
+                  size="sm"
+                  onClick={() => gravarMinuto(l)}
+                  disabled={!(minutoEmEdicao[l.id] ?? "").trim()}
+                >
+                  Parei aqui
+                </Button>
+              </span>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => removerAula(l)}
+          aria-label={`Tirar ${l.title} da lista`}
+          className="order-4 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg sm:order-none lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
+        >
+          <Trash2 size={14} />
+        </button>
+      </li>
+    );
+  };
+
+  /*
+   * A pasta de uma playlist: uma linha que abre ali mesmo.
+   *
+   * A capa vem com duas lâminas atrás, para ler como "várias" antes de ler o
+   * texto, e o número de aulas no canto, como o YouTube faz nas playlists.
+   * O progresso conta TODAS as aulas da pasta -- as assistidas ficam nela.
+   */
+  const linhaDaPasta = (
+    it: Extract<ItemDaLista<Lesson, PastaDePlaylist>, { tipo: "pasta" }>,
+    i: number
+  ) => {
+    const p = it.pasta;
+    const aberta = abertas.has(p.id);
+    const total = it.aulas.length;
+    const duracao = it.aulas.reduce((s, a) => s + (duracaoDaAula(a) ?? 0), 0);
+    const capa = p.thumb_url ?? it.aulas[0]?.thumb_url ?? null;
+    const completa = it.feitas === total;
+    return (
+      <li
+        key={`pasta-${p.id}`}
+        className="entra"
+        style={{ "--i": i } as React.CSSProperties}
+      >
+        <div className="group flex items-center gap-2 px-4 py-3.5 transition-colors hover:bg-ink-800/40">
+          <button
+            type="button"
+            onClick={() => alternarPasta(p.id)}
+            aria-expanded={aberta}
+            aria-label={`${aberta ? "Fechar" : "Abrir"} a playlist ${p.title}`}
+            className="flex min-w-0 flex-1 items-center gap-3.5 text-left"
+          >
+            <span className="relative mt-1.5 h-[54px] w-24 shrink-0">
+              <span className="absolute inset-x-2.5 -top-1.5 h-full rounded-[10px] border border-line bg-ink-800" />
+              <span className="absolute inset-x-1 -top-[3px] h-full rounded-[10px] border border-line bg-ink-850" />
+              {capa ? (
+                <img
+                  src={capa}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="relative h-full w-full rounded-[10px] object-cover"
+                />
+              ) : (
+                <span className="relative grid h-full w-full place-items-center rounded-[10px] bg-ink-800 text-fg-mute">
+                  <ListVideo size={18} />
+                </span>
+              )}
+              <span className="absolute bottom-1 right-1 inline-flex items-center gap-1 rounded-md bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold text-white tnum">
+                <ListVideo size={10} />
+                {total}
+              </span>
+            </span>
+
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-brand-400">
+                <FolderOpen size={11} />
+                Playlist
+              </span>
+              <span className="truncate-livre mt-0.5 block text-[13.5px] font-semibold text-fg">
+                {p.title}
+              </span>
+              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-fg-mute">
+                {p.canal && <span className="truncate-livre max-w-full">{p.canal}</span>}
+                <span className="tnum">
+                  {total} aula{total === 1 ? "" : "s"}
+                </span>
+                {duracao > 0 && <span className="tnum">{duracaoExata(duracao)}</span>}
+              </span>
+              <span className="mt-1.5 flex items-center gap-2">
+                <span className="h-1 w-28 overflow-hidden rounded-full bg-ink-800">
+                  <span
+                    className={cx(
+                      "block h-full rounded-full",
+                      completa ? "bg-pos" : "bg-brand-500"
+                    )}
+                    style={{ width: `${total ? (it.feitas / total) * 100 : 0}%` }}
+                  />
+                </span>
+                <span
+                  className={cx(
+                    "text-[10.5px] font-semibold tnum",
+                    completa ? "text-pos" : "text-fg-mute"
+                  )}
+                >
+                  {it.feitas} de {total} assistida{total === 1 ? "" : "s"}
+                </span>
+              </span>
+            </span>
+
+            <ChevronDown
+              size={17}
+              className={cx(
+                "shrink-0 text-fg-mute transition-transform duration-200",
+                aberta && "rotate-180"
+              )}
+            />
+          </button>
+
+          <div className="shrink-0 transition-opacity lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+            <MenuSuspenso
+              rotulo={`Ações de ${p.title}`}
+              itens={[
+                {
+                  rotulo: "Abrir no YouTube",
+                  icone: <ExternalLink size={14} />,
+                  aoEscolher: () =>
+                    window.open(
+                      p.url ?? `https://www.youtube.com/playlist?list=${p.youtube_id}`,
+                      "_blank",
+                      "noopener,noreferrer"
+                    ),
+                },
+                {
+                  rotulo: "Tirar playlist",
+                  icone: <Trash2 size={14} />,
+                  aoEscolher: () => removerPasta(p, total),
+                  perigo: true,
+                },
+              ]}
+            />
+          </div>
+        </div>
+
+        {/* As aulas, com o fio roxo marcando que são da pasta. Na ordem da
+            playlist, e todas elas -- inclusive as assistidas. */}
+        {aberta && (
+          <ul className="mb-2 ml-5 divide-y divide-line-soft border-l-2 border-brand-500/30 sm:ml-[3.25rem]">
+            {it.aulas.map((a, j) => linhaDaAula(a, j))}
+          </ul>
+        )}
+      </li>
+    );
+  };
 
   return (
     <div className="space-y-5 rise">
@@ -1412,7 +1864,7 @@ export default function AulasPage() {
           )}
         </div>
 
-        {loading ? <div className="card p-4"><EsqueletoLista linhas={5} /></div> : lista.length === 0 ? (
+        {loading ? <div className="card p-4"><EsqueletoLista linhas={5} /></div> : itens.length === 0 ? (
           <Card>
             <Empty
               icon={<GraduationCap size={18} />}
@@ -1429,192 +1881,9 @@ export default function AulasPage() {
         ) : (
           <Card className="overflow-hidden">
             <ul className="divide-y divide-line-soft">
-              {lista.map((l, i) => {
-                const Icone = ICONE[l.fonte];
-                const pct = pctAssistido(l);
-                return (
-                  /*
-                    No telefone a capa sobe para o topo; no desktop nada muda.
-                    
-                    Feito com `flex-wrap` e `order`, e não com duas árvores de
-                    JSX: duplicar a linha para "versão telefone" e "versão
-                    desktop" dobraria cada conserto futuro, e o React montaria
-                    as duas para esconder uma. Aqui a capa é `w-full` e quebra
-                    a linha sozinha; a caixa de marcar e o texto dividem a
-                    segunda. No `sm` o `nowrap` desfaz tudo.
-                  */
-                  <li
-                    key={l.id}
-                    className="entra group flex flex-wrap items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800/40 sm:flex-nowrap sm:gap-3.5 sm:px-5"
-                    style={{ "--i": i } as React.CSSProperties}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => alternar(l)}
-                      disabled={marcando === l.id}
-                      aria-label={`${l.feita ? "Desmarcar" : "Marcar"} ${l.title}`}
-                      aria-pressed={l.feita}
-                      className={cx(
-                        "order-2 mt-[3px] grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] border-[1.5px] transition-[background-color,border-color] duration-[180ms] disabled:opacity-50 sm:order-none",
-                        l.feita
-                          ? "border-pos bg-pos text-sobre-cor"
-                          : "border-line bg-ink-900 hover:border-brand-400"
-                      )}
-                    >
-                      <Check
-                        size={13}
-                        strokeWidth={3.5}
-                        className={cx(
-                          "transition-[transform,opacity] duration-[180ms] ease-[cubic-bezier(0.34,1.4,0.64,1)]",
-                          l.feita ? "scale-100 opacity-100" : "scale-50 opacity-0"
-                        )}
-                      />
-                    </button>
-
-                    <MiniaturaAula
-                      url={l.thumb_url}
-                      fonte={l.fonte}
-                      feita={l.feita}
-                      /* 3:2 e largura cheia no telefone; a miniatura 16:9 de
-                         sempre a partir do `sm`. */
-                      className="order-1 aspect-[3/2] w-full rounded-xl sm:order-none sm:aspect-video sm:w-[104px] sm:rounded-[10px]"
-                    />
-
-                    <div className="order-3 min-w-0 flex-1 py-0.5 sm:order-none">
-                      <p
-                        className={cx(
-                          "text-[13.5px] font-semibold leading-snug",
-                          l.feita ? "text-fg-mute line-through" : "text-fg"
-                        )}
-                      >
-                        {l.title}
-                      </p>
-
-                      {/*
-                        Uma linha de metadados com pesos diferentes, não quatro
-                        textos cinzas iguais.
-
-                        Antes o canal, a duração e o "abrir" tinham o mesmo
-                        tamanho e a mesma cor: o olho não achava onde começar.
-                        Agora o canal é o texto, a duração é uma pastilha com
-                        número, e "abrir" é um botão pequeno.
-                      */}
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5">
-                        <span className="inline-flex min-w-0 items-center gap-1.5 text-[11.5px] text-fg-dim">
-                          <Icone size={12} className="shrink-0 text-fg-mute" />
-                          <span className="truncate">
-                            {l.canal || FONTE_AULA_LABEL[l.fonte]}
-                          </span>
-                        </span>
-
-                        {duracaoExata(duracaoDaAula(l)) && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-ink-800 px-2 py-0.5 text-[10px] font-semibold text-fg-mute tnum">
-                            <Clock size={9} />
-                            {duracaoExata(duracaoDaAula(l))}
-                          </span>
-                        )}
-
-                        <Etiqueta nome={nomeDoAssunto.get(l.subject_id ?? "")} />
-
-                        {l.feita && l.feita_em && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-pos/12 px-2 py-0.5 text-[10px] font-semibold text-pos">
-                            <Check size={9} strokeWidth={3} />
-                            visto {dataCurta(localDay(l.feita_em))}
-                          </span>
-                        )}
-
-                        {l.url && (
-                          <a
-                            href={l.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex h-6 items-center gap-1 rounded-full border border-line bg-ink-900 px-2.5 text-[10.5px] font-semibold text-brand-400 transition-colors hover:border-brand-400 hover:bg-brand-500/8"
-                          >
-                            <ExternalLink size={10} />
-                            abrir
-                          </a>
-                        )}
-                      </div>
-
-                      {/*
-                        O "parei aqui" aparecia em TODA aula da fila, inclusive
-                        nas nunca começadas -- um campo vazio e um botão
-                        apagado por linha, quinze vezes. Na aula começada ele
-                        continua sempre à vista, porque ali há progresso para
-                        mostrar. Na nunca começada, no computador, aparece ao
-                        passar o mouse ou chegar pelo teclado, como as ações da
-                        linha. No celular nada muda: lá não existe passar o
-                        mouse.
-                      */}
-                      {!l.feita && duracaoDaAula(l) && (
-                        <div
-                          className={cx(
-                            "mt-2 flex flex-wrap items-center gap-2",
-                            pct === null &&
-                              "lg:hidden lg:group-hover:flex lg:group-focus-within:flex"
-                          )}
-                        >
-                          {pct !== null && (
-                            <>
-                              <span className="h-1 min-w-[48px] flex-1 overflow-hidden rounded-full bg-ink-800">
-                                <span
-                                  className="block h-full w-full origin-left rounded-full bg-brand-500 transition-transform duration-300"
-                                  style={{ transform: `scaleX(${pct / 100})` }}
-                                />
-                              </span>
-                              <span className="text-[10px] font-bold text-fg-mute tnum">
-                                {l.em_minuto}min de{" "}
-                                {duracaoExata(duracaoDaAula(l))}
-                              </span>
-                            </>
-                          )}
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-[62px]">
-                              <Input
-                                type="number"
-                                min={0}
-                                max={Math.ceil(duracaoDaAula(l)! / 60)}
-                                value={minutoEmEdicao[l.id] ?? ""}
-                                onChange={(e) =>
-                                  setMinutoEmEdicao((r) => ({
-                                    ...r,
-                                    [l.id]: e.target.value,
-                                  }))
-                                }
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    gravarMinuto(l);
-                                  }
-                                }}
-                                placeholder="min"
-                                aria-label={`Minuto atual de ${l.title}`}
-                                className="h-7 text-center text-[11px]"
-                              />
-                            </span>
-                            <Button
-                              size="sm"
-                              onClick={() => gravarMinuto(l)}
-                              disabled={!(minutoEmEdicao[l.id] ?? "").trim()}
-                            >
-                              Parei aqui
-                            </Button>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => removerAula(l)}
-                      aria-label={`Tirar ${l.title} da lista`}
-                      className="order-4 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg sm:order-none lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </li>
-                );
-              })}
+              {itens.map((it, i) =>
+                it.tipo === "aula" ? linhaDaAula(it.aula, i) : linhaDaPasta(it, i)
+              )}
             </ul>
           </Card>
         )}
@@ -1986,8 +2255,8 @@ export default function AulasPage() {
             {achados && achados.length > 0 && (
               <Button variant="primary" onClick={importar} disabled={salvando}>
                 {salvando
-                  ? "Importando..."
-                  : `Importar ${achados.length} aula${achados.length === 1 ? "" : "s"}`}
+                  ? "Criando a pasta..."
+                  : `Criar pasta com ${achados.length} aula${achados.length === 1 ? "" : "s"}`}
               </Button>
             )}
           </>
@@ -2047,6 +2316,19 @@ export default function AulasPage() {
                   onGerenciar={() => setGerindo(true)}
                 />
               </Field>
+
+              {/* Diz antes de gravar que isto vira UMA pasta, e com que nome:
+                  antes a importação soltava os vídeos na lista sem avisar. */}
+              <p className="flex items-center gap-2 rounded-[12px] bg-brand-500/10 px-3 py-2 text-[12px] text-fg-dim">
+                <FolderOpen size={14} className="shrink-0 text-brand-400" />
+                <span className="min-w-0">
+                  Vira uma pasta na lista:{" "}
+                  <b className="text-fg">
+                    {infoPlaylist?.title ??
+                      (achados[0]?.canal ? `Playlist de ${achados[0].canal}` : "Playlist")}
+                  </b>
+                </span>
+              </p>
 
               <ul {...bordas} className="max-h-[38vh] divide-y divide-line-soft overflow-y-auto">
                 {achados.map((a, i) => (

@@ -569,6 +569,25 @@ export type Lesson = {
   feita: boolean;
   /** Quando foi marcada — é por esta data que a limpeza dos 7 dias conta. */
   feita_em: string | null;
+  /*
+   * A pasta de playlist desta aula, e o lugar dela na playlist. Nulo é aula
+   * solta. Opcionais porque só existem depois de PASTAS-DE-PLAYLIST.sql.
+   */
+  playlist_id?: string | null;
+  posicao?: number | null;
+  created_at: string;
+};
+
+/** Uma playlist do YouTube importada como pasta. Ver PASTAS-DE-PLAYLIST.sql. */
+export type PastaDePlaylist = {
+  id: string;
+  user_id: string;
+  youtube_id: string;
+  title: string;
+  canal: string | null;
+  thumb_url: string | null;
+  url: string | null;
+  subject_id: string | null;
   created_at: string;
 };
 

@@ -270,15 +270,31 @@ export async function limparAulasAssistidas(
 
   /* `userId` é obrigatório para quem chama com a chave de serviço, que passa
      por cima do RLS — sem o filtro, o delete alcançaria todo mundo. */
-  let consulta = supabase
-    .from("lessons")
-    .delete()
-    .eq("feita", true)
-    .not("feita_em", "is", null)
-    .lt("feita_em", limite);
-  if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
+  const montar = (soSoltas: boolean) => {
+    let consulta = supabase
+      .from("lessons")
+      .delete()
+      .eq("feita", true)
+      .not("feita_em", "is", null)
+      .lt("feita_em", limite);
+    /*
+     * Aula de PASTA de playlist não sai. Pedido dele: a assistida fica na
+     * pasta, para o "5 de 20 assistidas" continuar fazendo sentido e a
+     * playlist mostrar onde você está. Só a aula solta segue a regra dos 7
+     * dias.
+     */
+    if (soSoltas) consulta = consulta.is("playlist_id", null);
+    if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
+    return consulta.select("id");
+  };
 
-  const { data, error } = await consulta.select("id");
+  let { data, error } = await montar(true);
+  /*
+   * Banco sem PASTAS-DE-PLAYLIST.sql não tem a coluna, e o filtro falha. Aí
+   * não existe aula de pasta para proteger, então a limpeza antiga vale
+   * inteira — em vez de a limpeza parar de rodar até a migração.
+   */
+  if (error && /playlist_id/.test(error.message)) ({ data, error } = await montar(false));
   if (error) return null;
   return data?.length ?? 0;
 }

@@ -158,5 +158,27 @@ export async function GET(req: Request) {
     a.duracao_seg = mapa.get(ids[i]) ?? null;
   });
 
-  return NextResponse.json({ itens, total: itens.length });
+  /*
+   * O nome e a capa da PLAYLIST, para virar a pasta.
+   *
+   * Uma chamada a mais, de 1 unidade de cota. Falhar aqui não derruba a
+   * importação: sem o nome a tela chama a pasta pelo canal, e os vídeos
+   * continuam chegando.
+   */
+  const { d: meta } = await json(
+    "https://www.googleapis.com/youtube/v3/playlists" +
+      `?part=snippet&id=${encodeURIComponent(playlist)}` +
+      `&key=${encodeURIComponent(CHAVE)}`
+  );
+  const sn = (meta as { items?: { snippet?: Item["snippet"] }[] } | null)
+    ?.items?.[0]?.snippet;
+  const tm = sn?.thumbnails ?? {};
+  const info = {
+    id: playlist,
+    title: texto(sn?.title),
+    canal: texto(sn?.channelTitle),
+    thumb_url: texto(tm.medium?.url ?? tm.high?.url ?? tm.default?.url ?? null),
+  };
+
+  return NextResponse.json({ itens, total: itens.length, playlist: info });
 }
