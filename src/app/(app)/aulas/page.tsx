@@ -584,11 +584,15 @@ export default function AulasPage() {
     });
 
   const removerAula = (l: Lesson) =>
-    confirm.ask(`Tirar "${l.title}" da lista?`, async () => {
-      const { error } = await supabase.from("lessons").delete().eq("id", l.id);
-      if (notice.check(error, "tirar a aula")) return;
-      setRows((v) => v.filter((x) => x.id !== l.id));
-    });
+    confirm.ask(
+      `Remover "${l.title}"?`,
+      async () => {
+        const { error } = await supabase.from("lessons").delete().eq("id", l.id);
+        if (notice.check(error, "remover a aula")) return;
+        setRows((v) => v.filter((x) => x.id !== l.id));
+      },
+      { titulo: "Remover aula", rotulo: "Remover" }
+    );
 
   /* ------------------------------ canais ------------------------------ */
 
@@ -1317,7 +1321,7 @@ export default function AulasPage() {
                 aoEscolher: () => editarAula(l),
               },
               {
-                rotulo: "Tirar da lista",
+                rotulo: "Remover",
                 icone: <Trash2 size={14} />,
                 aoEscolher: () => removerAula(l),
                 perigo: true,
