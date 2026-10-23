@@ -226,6 +226,8 @@ export default function AulasPage() {
   /* modais */
   const [addAula, setAddAula] = React.useState(false);
   const [form, setForm] = React.useState(aulaVazia());
+  /* A aula aberta para edição; nulo é cadastro novo. O modal é o mesmo. */
+  const [editandoAula, setEditandoAula] = React.useState<Lesson | null>(null);
   const [buscando, setBuscando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
   const [erro, setErro] = React.useState("");
@@ -368,6 +370,10 @@ export default function AulasPage() {
   const lerLink = async (url: string) => {
     const limpo = normalizarUrl(url);
     if (!limpo) return;
+    /* Na edição, o campo de link já chega preenchido e perde o foco ao
+       primeiro clique: sem isto, abrir para corrigir o nome consultaria o
+       YouTube de novo e trocaria a capa. Só busca se o link mudou. */
+    if (editandoAula && limpo === normalizarUrl(editandoAula.url ?? "")) return;
     ultimoLink.current = limpo;
     setBuscando(true);
 
@@ -416,8 +422,24 @@ export default function AulasPage() {
     }
   };
 
+  /** Abre a aula no mesmo formulário do cadastro, com o que ela já tem. */
+  const editarAula = (l: Lesson) => {
+    setEditandoAula(l);
+    setForm({
+      url: l.url ?? "",
+      title: l.title,
+      canal: l.canal ?? "",
+      subject_id: l.subject_id ?? "",
+      duracao: textoDaDuracao(duracaoDaAula(l)),
+      thumb_url: l.thumb_url ?? "",
+    });
+    setErro("");
+    setAddAula(true);
+  };
+
   const fecharAula = () => {
     setAddAula(false);
+    setEditandoAula(null);
     setForm(aulaVazia());
     setErro("");
     /* Invalida a consulta em voo: sem isso, o oEmbed que ainda estava vindo
@@ -426,7 +448,7 @@ export default function AulasPage() {
     setBuscando(false);
   };
 
-  const adicionarAula = async () => {
+  const salvarAula = async () => {
     const title = form.title.trim();
     if (!title) return setErro("Dê um nome à aula.");
 
@@ -446,21 +468,29 @@ export default function AulasPage() {
     }
 
     const ou = (v: string) => v.trim() || null;
-    const { data, error } = await supabase
-      .from("lessons")
-      .insert({
-        user_id: uid,
-        title,
-        url: form.url.trim() ? normalizarUrl(form.url) : null,
-        fonte: form.url.trim() ? fonteDoLink(form.url) : "outro",
-        canal: ou(form.canal),
-        thumb_url: ou(form.thumb_url),
-        subject_id: form.subject_id || null,
-        duracao_seg,
-        feita: false,
-      })
-      .select("*")
-      .single();
+    const campos = {
+      title,
+      url: form.url.trim() ? normalizarUrl(form.url) : null,
+      fonte: form.url.trim() ? fonteDoLink(form.url) : "outro",
+      canal: ou(form.canal),
+      thumb_url: ou(form.thumb_url),
+      subject_id: form.subject_id || null,
+      duracao_seg,
+    } as const;
+    /* Editar mexe só no que o formulário mostra: assistida, minuto e pasta
+       ficam como estão. */
+    const { data, error } = editandoAula
+      ? await supabase
+          .from("lessons")
+          .update(campos)
+          .eq("id", editandoAula.id)
+          .select("*")
+          .maybeSingle()
+      : await supabase
+          .from("lessons")
+          .insert({ ...campos, user_id: uid, feita: false })
+          .select("*")
+          .single();
     setSalvando(false);
 
     if (error) {
@@ -476,8 +506,15 @@ export default function AulasPage() {
         );
       return setErro(error.message);
     }
-    if (data) setRows((v) => [data as Lesson, ...v]);
-    setAba("fila");
+    if (editandoAula) {
+      /* Zero linhas sem erro: a aula saiu do banco enquanto o modal estava
+         aberto. Dizer, em vez de fechar como se tivesse gravado. */
+      if (!data) return setErro(NADA_GRAVADO);
+      patch(editandoAula.id, data as Lesson);
+    } else {
+      if (data) setRows((v) => [data as Lesson, ...v]);
+      setAba("fila");
+    }
     fecharAula();
   };
 
@@ -1268,14 +1305,26 @@ export default function AulasPage() {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => removerAula(l)}
-          aria-label={`Tirar ${l.title} da lista`}
-          className="order-4 grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg sm:order-none lg:opacity-0 lg:group-hover:opacity-100 lg:focus-visible:opacity-100"
-        >
-          <Trash2 size={14} />
-        </button>
+        {/* Os três pontos de cursos, canais e pastas, no lugar da lixeira
+            sozinha: a aula só tinha como sair, não como ser corrigida. */}
+        <div className="order-4 shrink-0 transition-opacity sm:order-none lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
+          <MenuSuspenso
+            rotulo={`Ações de ${l.title}`}
+            itens={[
+              {
+                rotulo: "Editar",
+                icone: <Pencil size={14} />,
+                aoEscolher: () => editarAula(l),
+              },
+              {
+                rotulo: "Tirar da lista",
+                icone: <Trash2 size={14} />,
+                aoEscolher: () => removerAula(l),
+                perigo: true,
+              },
+            ]}
+          />
+        </div>
       </li>
     );
   };
@@ -1904,14 +1953,18 @@ export default function AulasPage() {
       <Modal
         open={addAula}
         onClose={fecharAula}
-        title="Adicionar aula"
-        sub="Cole o link. Do YouTube vêm título, canal, capa e duração."
+        title={editandoAula ? "Editar aula" : "Adicionar aula"}
+        sub={
+          editandoAula
+            ? "Trocar o link busca de novo a capa e o que estiver vazio."
+            : "Cole o link. Do YouTube vêm título, canal, capa e duração."
+        }
         size="lg"
         footer={
           <>
             <Button onClick={fecharAula}>Cancelar</Button>
-            <Button variant="primary" onClick={adicionarAula} disabled={salvando}>
-              {salvando ? "Salvando..." : "Adicionar"}
+            <Button variant="primary" onClick={salvarAula} disabled={salvando}>
+              {salvando ? "Salvando..." : editandoAula ? "Salvar" : "Adicionar"}
             </Button>
           </>
         }
