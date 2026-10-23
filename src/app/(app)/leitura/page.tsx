@@ -879,14 +879,14 @@ export default function LeituraPage() {
 
   const remover = (livro: BookLista) =>
     confirm.ask(
-      `Tirar "${livro.title}" da estante? O histórico de leitura dele sai junto.`,
+      `Remover "${livro.title}" da estante? O histórico de leitura dele sai junto.`,
       async () => {
         const uid = await currentUserId(supabase);
         /* A capa no Storage não sai por cascade — a tabela não sabe do arquivo.
            Sem isto o bucket acumularia capa de livro que já não existe. */
         if (uid) await apagarCapa(supabase, uid, livro.id);
         const { error } = await supabase.from("books").delete().eq("id", livro.id);
-        if (!notice.check(error, "tirar o livro")) {
+        if (!notice.check(error, "remover o livro")) {
           setVerId(null);
           setLivros((v) => v.filter((l) => l.id !== livro.id));
           /* As sessões saem por cascade no banco; aqui saem do estado para o
@@ -894,7 +894,8 @@ export default function LeituraPage() {
           setSessoes((v) => v.filter((x) => x.book_id !== livro.id));
           setHistorico(({ [livro.id]: _, ...resto }) => resto);
         }
-      }
+      },
+      { titulo: "Remover livro", rotulo: "Remover" }
     );
 
   /* ------------------------------ derivados ------------------------------ */
@@ -1422,7 +1423,7 @@ export default function LeituraPage() {
                 </Button>
                 <Button onClick={() => remover(ver)}>
                   <Trash2 size={14} />
-                  Tirar da estante
+                  Remover
                 </Button>
                 <Button variant="primary" onClick={() => setVerId(null)}>
                   Fechar

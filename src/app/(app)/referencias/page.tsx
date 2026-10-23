@@ -737,13 +737,13 @@ export default function ReferenciasPage() {
   };
 
   const remover = (r: Referencia) =>
-    confirm.ask(`Tirar "${r.name}" das referências?`, async () => {
+    confirm.ask(`Remover "${r.name}" das referências?`, async () => {
       const { data: saiu, error } = await supabase
         .from("referencias")
         .delete()
         .eq("id", r.id)
         .select("id");
-      if (notice.check(error, "tirar a referência")) return;
+      if (notice.check(error, "remover a referência")) return;
       if (!saiu?.length) return notice.show(NADA_GRAVADO);
 
       /*
@@ -773,7 +773,7 @@ export default function ReferenciasPage() {
 
       setRows((v) => v.filter((x) => x.id !== r.id));
       setLigacoes((v) => v.filter((x) => x.referencia_id !== r.id));
-    });
+    }, { titulo: "Remover referência", rotulo: "Remover" });
 
   /* ------------------------------ tela ------------------------------ */
 
@@ -932,7 +932,7 @@ export default function ReferenciasPage() {
                     <button
                       type="button"
                       onClick={() => remover(r)}
-                      aria-label={`Tirar ${r.name}`}
+                      aria-label={`Remover ${r.name}`}
                       className="grid h-7 w-7 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
                     >
                       <Trash2 size={13} />
@@ -1075,7 +1075,7 @@ export default function ReferenciasPage() {
                     <button
                       type="button"
                       onClick={() => remover(r)}
-                      aria-label={`Tirar ${r.name}`}
+                      aria-label={`Remover ${r.name}`}
                       className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-fg-mute hover:bg-neg/15 hover:text-neg"
                     >
                       <Trash2 size={12} />

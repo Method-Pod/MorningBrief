@@ -719,17 +719,18 @@ export default function AulasPage() {
 
   const removerCanal = (c: Channel) =>
     confirm.ask(
-      `Tirar "${c.name}" dos canais? As aulas que você já cadastrou dele continuam na lista.`,
+      `Remover "${c.name}" dos canais? As aulas que você já cadastrou dele continuam na lista.`,
       async () => {
         const { data: saiu, error } = await supabase
           .from("channels")
           .delete()
           .eq("id", c.id)
           .select("id");
-        if (notice.check(error, "tirar o canal")) return;
+        if (notice.check(error, "remover o canal")) return;
         if (!saiu?.length) return notice.show(NADA_GRAVADO);
         setCanais((v) => v.filter((x) => x.id !== c.id));
-      }
+      },
+      { titulo: "Remover canal", rotulo: "Remover" }
     );
 
   /**
@@ -1057,11 +1058,15 @@ export default function AulasPage() {
   };
 
   const removerCurso = (c: Course) =>
-    confirm.ask(`Tirar o curso "${c.title}"?`, async () => {
-      const { error } = await supabase.from("courses").delete().eq("id", c.id);
-      if (notice.check(error, "tirar o curso")) return;
-      setCursos((v) => v.filter((x) => x.id !== c.id));
-    });
+    confirm.ask(
+      `Remover o curso "${c.title}"?`,
+      async () => {
+        const { error } = await supabase.from("courses").delete().eq("id", c.id);
+        if (notice.check(error, "remover o curso")) return;
+        setCursos((v) => v.filter((x) => x.id !== c.id));
+      },
+      { titulo: "Remover curso", rotulo: "Remover" }
+    );
 
   /* ------------------------------ derivados ------------------------------ */
 
@@ -1706,7 +1711,7 @@ export default function AulasPage() {
                             aoEscolher: () => abrirCurso(c),
                           },
                           {
-                            rotulo: "Tirar curso",
+                            rotulo: "Remover",
                             icone: <Trash2 size={14} />,
                             aoEscolher: () => removerCurso(c),
                             perigo: true,
@@ -1863,7 +1868,7 @@ export default function AulasPage() {
                         aoEscolher: () => abrirCanal(c),
                       },
                       {
-                        rotulo: "Tirar canal",
+                        rotulo: "Remover",
                         icone: <Trash2 size={14} />,
                         aoEscolher: () => removerCanal(c),
                         perigo: true,
