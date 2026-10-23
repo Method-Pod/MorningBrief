@@ -561,18 +561,19 @@ export default function AulasPage() {
    */
   const removerPasta = (p: PastaDePlaylist, n: number) =>
     confirm.ask(
-      `Tirar a playlist "${p.title}" e as ${n} aula${n === 1 ? "" : "s"} dela?`,
+      `Remover a playlist "${p.title}" e as ${n} aula${n === 1 ? "" : "s"} dela?`,
       async () => {
         const { data: saiu, error } = await supabase
           .from("playlists")
           .delete()
           .eq("id", p.id)
           .select("id");
-        if (notice.check(error, "tirar a playlist")) return;
+        if (notice.check(error, "remover a playlist")) return;
         if (!saiu?.length) return notice.show(NADA_GRAVADO);
         setPastas((v) => v.filter((x) => x.id !== p.id));
         setRows((v) => v.filter((l) => l.playlist_id !== p.id));
-      }
+      },
+      { titulo: "Remover playlist", rotulo: "Remover" }
     );
 
   const alternarPasta = (id: string) =>
@@ -1446,7 +1447,7 @@ export default function AulasPage() {
                     ),
                 },
                 {
-                  rotulo: "Tirar playlist",
+                  rotulo: "Remover",
                   icone: <Trash2 size={14} />,
                   aoEscolher: () => removerPasta(p, total),
                   perigo: true,
