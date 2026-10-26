@@ -92,17 +92,23 @@ export function EditorParcelas({
   de,
   onChange,
   onRecalcular,
+  rotulos,
+  total: totalDado,
 }: {
   parcelas: Parcela[];
   /** número da primeira parcela da lista, para rotular 3/10 corretamente */
   de: number;
   onChange: (p: Parcela[]) => void;
   onRecalcular: () => void;
+  /** rótulo de cada linha, no lugar de "3/10": o mês, numa conta fixa */
+  rotulos?: string[];
+  /** total do parcelamento, quando as pagas ficam fora da lista */
+  total?: number;
 }) {
   /* Esmaecido nas pontas da lista que rola, para o corte não mentir fim. */
   const bordas = useBordasRolagem<HTMLUListElement>();
 
-  const total = de + parcelas.length - 1;
+  const total = totalDado ?? de + parcelas.length - 1;
   const soma = parcelas.reduce((t, p) => t + (Number(p.amount) || 0), 0);
 
   /*
@@ -182,7 +188,7 @@ export function EditorParcelas({
           >
             <div className={PAR_ROTULO_DATA}>
               <span className="w-[26px] shrink-0 text-[11px] font-bold text-fg-mute tnum sm:w-auto">
-                {de + i}/{total}
+                {rotulos?.[i] ?? `${de + i}/${total}`}
               </span>
               {/*
                 Ícone de calendário no campo de data e "R$" no de valor.
@@ -204,7 +210,11 @@ export function EditorParcelas({
                   compacto
                   value={p.due_date}
                   onChange={(v) => mudar(i, "due_date", v)}
-                  aria-label={`Vencimento da parcela ${de + i} de ${total}`}
+                  aria-label={
+                    rotulos?.[i]
+                      ? `Vencimento de ${rotulos[i]}`
+                      : `Vencimento da parcela ${de + i} de ${total}`
+                  }
                   className="h-9 text-[12px]"
                 />
               </div>
@@ -217,7 +227,11 @@ export function EditorParcelas({
                 inputMode="decimal"
                 value={rascunhos[i] ?? paraCampo(Number(p.amount) || 0)}
                 onChange={(e) => mudar(i, "amount", e.target.value)}
-                aria-label={`Valor da parcela ${de + i} de ${total}`}
+                aria-label={
+                  rotulos?.[i]
+                    ? `Valor de ${rotulos[i]}`
+                    : `Valor da parcela ${de + i} de ${total}`
+                }
                 className="h-9 !pl-[26px] !pr-2 text-right text-[12px] tnum"
               />
             </div>

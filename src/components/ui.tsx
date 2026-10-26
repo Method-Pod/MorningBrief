@@ -534,13 +534,21 @@ export function Segmented<T extends string>({
   value,
   onChange,
   options,
+  travado = false,
 }: {
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: string; count?: number }[];
+  /* Mostra a escolha sem deixar trocar: o tipo de uma conta que já existe. */
+  travado?: boolean;
 }) {
   return (
-    <div className="inline-flex items-center gap-1 rounded-[14px] bg-ink-800 p-1">
+    <div
+      className={cx(
+        "inline-flex items-center gap-1 rounded-[14px] bg-ink-800 p-1",
+        travado && "[&>button:not([aria-pressed=true])]:opacity-45"
+      )}
+    >
       {options.map((o) => (
         <button
           key={o.value}
@@ -552,8 +560,10 @@ export function Segmented<T extends string>({
            */
           type="button"
           onClick={() => onChange(o.value)}
+          disabled={travado}
+          aria-pressed={value === o.value}
           className={cx(
-            "h-7 rounded-lg px-3 text-xs font-medium transition-colors",
+            "h-7 rounded-lg px-3 text-xs font-medium transition-colors disabled:cursor-default",
             /*
               O escolhido é roxo cheio, não uma lasca branca levantada.
               

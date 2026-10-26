@@ -17,6 +17,7 @@ import {
   Field,
   Input,
   Modal,
+  Segmented,
   Select,
   Textarea,
   cx,
@@ -25,6 +26,16 @@ import {
   ErroDeCarga,
 } from "@/components/ui";
 import { SeletorDeData } from "@/components/SeletorDeData";
+import { EditorParcelas } from "@/components/Parcelamento";
+import { editarGrade, type Ajuste } from "@/lib/ajusteDeParcelas";
+import {
+  ajustarTotal,
+  aplicarValor,
+  aplicarVencimento,
+  editadasDentro,
+  montarGrade,
+  type LinhaDaGrade,
+} from "@/lib/edicaoDeSerie";
 
 type Tipo = "fixa" | "parcelada" | "abatida" | "avulsa";
 type Filtro = "todas" | Tipo;
@@ -55,17 +66,6 @@ const tipoDe = (b: Bill): Tipo =>
 
 /** "ago/26" → "ago". A faixa já está em ordem, o ano só polui. */
 const mesCurto = (iso: string) => rotuloMes(iso).split("/")[0];
-
-const ultimoDiaDoMes = (ano: number, mes1: number) =>
-  new Date(ano, mes1, 0).getDate();
-
-/** Mesma data, outro dia do mês, encolhido quando o mês é curto. */
-const trocarDia = (iso: string, dia: number) => {
-  const ano = Number(iso.slice(0, 4));
-  const mes = Number(iso.slice(5, 7));
-  const d = Math.min(dia, ultimoDiaDoMes(ano, mes));
-  return `${ano}-${String(mes).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-};
 
 /**
  * Quantas parcelas do total ainda não foram lançadas.
@@ -327,7 +327,7 @@ export default function GerenciarPage() {
             Gerenciar contas
           </h1>
           <p className="mt-1 text-sm text-fg-mute">
-            Altere um lançamento e os outros em aberto da mesma conta acompanham.
+            No lápis você edita a conta inteira: datas, valores e parcelas.
           </p>
         </div>
       </div>
@@ -589,9 +589,32 @@ function LinhaSerie({
 /* ------------------------------ editor ------------------------------ */
 
 const paraCampo = (n: number) => String(n).replace(".", ",");
+
+/** "3/4, 4/4 e 5/4": vírgula entre os primeiros, "e" antes do último. */
+const emLista = (itens: string[]) =>
+  itens.length < 2 ? itens.join("") : `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
 const paraNumero = (s: string) =>
   valorDigitado(s);
 
+/* O tipo daqui no vocabulário do seletor da Nova conta. */
+const NO_SELETOR: Record<Tipo, "unica" | "fixa" | "parcelada" | "abatida"> = {
+  avulsa: "unica",
+  fixa: "fixa",
+  parcelada: "parcelada",
+  abatida: "abatida",
+};
+
+/**
+ * A conta inteira aberta para edição, com a cara da Nova conta.
+ *
+ * Era um formulário em duas metades -- "Vale para a conta toda" e "Só do mês
+ * de nov" -- com dois botões de salvar, e não havia como mudar a data ou o
+ * valor de UMA parcela, nem o tamanho do parcelamento. Pedido dele: editar a
+ * conta em geral, "desde data das parcelas, valores, e tudo". Agora valor e
+ * vencimento são a base, cada lançamento em aberto tem a sua linha na grade, e
+ * mudar o total cria ou tira parcelas. Um botão só: a grade já diz o que muda
+ * em cada mês. A regra das contas está em `lib/edicaoDeSerie`, sob teste.
+ */
 function Editor({
   alvo,
   categorias,
@@ -609,186 +632,267 @@ function Editor({
   const [valor, setValor] = React.useState("");
   const [categoria, setCategoria] = React.useState("Outros");
   const [observacoes, setObservacoes] = React.useState("");
-  const [parcelaTotal, setParcelaTotal] = React.useState("");
+  const [total, setTotal] = React.useState("");
   const [fixa, setFixa] = React.useState(false);
   const [vencimento, setVencimento] = React.useState("");
   const [status, setStatus] = React.useState("pending");
   const [abatido, setAbatido] = React.useState("");
-  /*
-   * O alcance deixou de ser estado.
-   *
-   * Era um interruptor no aviso ("alterar só este mês") e um botão que lia
-   * esse estado. Quem abria o editor, digitava e clicava em "Salvar nos 2"
-   * não tinha como saber o que os 2 eram sem voltar a ler o aviso. Agora
-   * cada botão diz o que faz, e o alcance chega como argumento de `salvar`.
-   */
+  /* A grade: o que se edita, o que só se vê, e o que sai ao salvar. */
+  const [linhas, setLinhas] = React.useState<LinhaDaGrade[]>([]);
+  const [pagas, setPagas] = React.useState<LinhaDaGrade[]>([]);
+  const [removidas, setRemovidas] = React.useState<LinhaDaGrade[]>([]);
+  const [editadas, setEditadas] = React.useState<Ajuste[]>([]);
+  const [erroTotal, setErroTotal] = React.useState("");
   const [ocupado, setOcupado] = React.useState(false);
   const [erro, setErro] = React.useState("");
+  const confirm = useConfirm();
 
   const conta = alvo?.conta;
   const serie = alvo?.serie;
 
   React.useEffect(() => {
-    if (!conta) return;
+    if (!conta || !serie) return;
+    const g = montarGrade(serie.contas, conta.id, serie.tipo === "parcelada");
+    const primeira = g.editaveis[0];
+    setLinhas(g.editaveis);
+    setPagas(g.pagas);
+    setRemovidas([]);
+    setEditadas([]);
+    setErroTotal("");
     setDescricao(conta.description);
-    setValor(paraCampo(Number(conta.amount)));
+    setValor(paraCampo(primeira ? primeira.amount : Number(conta.amount)));
+    setVencimento(primeira?.due_date ?? conta.due_date.slice(0, 10));
     setCategoria(conta.category);
     setObservacoes(conta.notes ?? "");
-    setParcelaTotal(
-      conta.installment_total == null ? "" : String(conta.installment_total)
-    );
+    setTotal(conta.installment_total == null ? "" : String(conta.installment_total));
     setFixa(conta.recurring);
-    setVencimento(conta.due_date.slice(0, 10));
     setStatus(conta.status);
     setAbatido(conta.paid_amount == null ? "" : paraCampo(Number(conta.paid_amount)));
     setErro("");
-  }, [conta]);
+  }, [conta, serie]);
 
   if (!alvo || !conta || !serie) return null;
 
-  /*
-   * Alvos da propagação: o lançamento aberto no editor mais os outros em aberto
-   * da mesma série. Os pagos ficam de fora — mudar o valor de uma conta que já
-   * saiu do bolso reescreve histórico, e isso não pode acontecer sem pedido.
-   */
-  const outros = serie.emAberto.filter((b) => b.id !== conta.id);
-  const pagasDeFora = serie.contas.length - serie.emAberto.length;
+  const parcelada = serie.tipo === "parcelada";
+  const totalN = Number(total);
+  const totalRotulo = Number.isInteger(totalN) && totalN > 0 ? totalN : conta.installment_total;
+  const original = new Map(serie.contas.map((b) => [b.id, b]));
+  const emAberto = serie.emAberto.length;
+  const pagasNaSerie = serie.contas.length - emAberto;
 
-  const salvar = async (soEste: boolean) => {
-    const alvos = soEste ? [conta] : [conta, ...outros];
+  /* ---------------------------- base e grade ---------------------------- */
+
+  const mudarValor = (s: string) => {
+    setValor(s);
+    setLinhas((l) => aplicarValor(l, paraNumero(s), editadas));
+  };
+
+  const mudarVencimento = (v: string) => {
+    setVencimento(v);
+    setLinhas((l) => aplicarVencimento(l, v, editadas));
+  };
+
+  /*
+   * As tiradas ficam guardadas e voltam se o total subir de novo: digitar
+   * "12" passa por "1" no meio, e sem isso a 2ª tecla apagaria dez parcelas
+   * de verdade para recriar dez novas.
+   */
+  const mudarTotal = (s: string) => {
+    setTotal(s);
+    if (s.trim() === "") return setErroTotal("Informe o total de parcelas.");
+    const todas = [...linhas, ...removidas].sort((a, b) => (a.no ?? 0) - (b.no ?? 0));
+    const r = ajustarTotal(todas, pagas, Number(s), {
+      vencimento,
+      valor: paraNumero(valor),
+    });
+    if ("erro" in r) return setErroTotal(r.erro);
+    setErroTotal("");
+    setLinhas(r.linhas);
+    setRemovidas(r.removidas);
+    setEditadas((e) => editadasDentro(e, r.linhas.length));
+  };
+
+  /* A 1ª linha é o vencimento: mexer nela move o vencimento e as não mexidas. */
+  const mudarGrade = (novas: LinhaDaGrade[]) => {
+    const g = editarGrade(linhas, novas, editadas, vencimento);
+    setEditadas(g.editadas);
+    setVencimento(g.vencimento);
+    setLinhas(
+      g.vencimento !== vencimento
+        ? aplicarVencimento(g.parcelas, g.vencimento, g.editadas)
+        : g.parcelas
+    );
+  };
+
+  const recalcular = () => {
+    setEditadas([]);
+    setLinhas((l) => aplicarVencimento(aplicarValor(l, paraNumero(valor), []), vencimento, []));
+  };
+
+  const rotuloDa = (l: LinhaDaGrade) =>
+    l.no != null ? `${l.no}/${totalRotulo ?? "?"}` : mesCurto(l.due_date);
+
+  /* ------------------------------- gravar ------------------------------- */
+
+  const salvar = () => {
     setErro("");
     const desc = descricao.trim();
-    const v = paraNumero(valor);
     if (!desc) return setErro("Informe a descrição.");
-    /* Fatura e afins (valor variável) aceitam zero: é o "a informar" delas.
-       Antes esta tela recusava, e editar a série da fatura era impossível. */
-    const variavel = !!conta.valor_variavel;
-    if (!Number.isFinite(v) || v < 0 || (v === 0 && !variavel))
-      return setErro("Informe um valor maior que zero.");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(vencimento))
-      return setErro("Informe o vencimento deste lançamento.");
+    if (parcelada && erroTotal) return setErro(erroTotal);
 
-    const temAbatido = abatido.trim() !== "";
-    const pago = temAbatido ? paraNumero(abatido) : null;
+    /* Fatura e afins (valor variável) aceitam zero: é o "a informar" delas. */
+    const variavel = !!conta.valor_variavel;
+    for (const l of linhas) {
+      const v = Number(l.amount);
+      if (!Number.isFinite(v) || v < 0 || (v === 0 && !variavel))
+        return setErro(
+          linhas.length > 1
+            ? `Informe um valor maior que zero em ${rotuloDa(l)}.`
+            : "Informe um valor maior que zero."
+        );
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(l.due_date))
+        return setErro(
+          linhas.length > 1 ? `Informe a data de ${rotuloDa(l)}.` : "Informe o vencimento."
+        );
+    }
+
+    const daConta = linhas.find((l) => l.id === conta.id);
+    const valorDaConta = daConta ? Number(daConta.amount) : Number(conta.amount);
+    const pago = abatido.trim() !== "" ? paraNumero(abatido) : null;
     if (pago != null && (!Number.isFinite(pago) || pago < 0))
       return setErro("O valor já abatido não pode ser negativo.");
-    if (pago != null && pago > v + 0.001)
-      return setErro(`O já abatido (${brl(pago)}) passa do valor (${brl(v)}).`);
+    if (pago != null && pago > valorDaConta + 0.001)
+      return setErro(`O já abatido (${brl(pago)}) passa do valor (${brl(valorDaConta)}).`);
 
     /*
-     * O banco não aceita um valor menor do que o já abatido (regra de
-     * ABATIDAS.sql). Os outros meses da série recebem o valor novo junto, e
-     * um deles já abatido acima disso fazia parte das gravações falhar no
-     * meio — umas gravavam, outras não. Melhor recusar antes, dizendo qual.
+     * O banco não aceita valor menor do que o já abatido (ABATIDAS.sql). Recusa
+     * antes, dizendo qual mês, em vez de deixar metade das gravações falhar.
      */
-    const barrado = alvos.find(
-      (b) => b.id !== conta.id && b.paid_amount != null && Number(b.paid_amount) > v + 0.001
-    );
-    if (barrado)
-      return setErro(
-        `${dataCurta(barrado.due_date)} já tem ${brl(Number(barrado.paid_amount))} abatidos, mais que o valor novo. Salve só este lançamento ou ajuste aquele mês.`
+    const barrada = linhas.find((l) => {
+      const b = l.id ? original.get(l.id) : null;
+      return (
+        b && b.id !== conta.id && b.paid_amount != null &&
+        Number(b.paid_amount) > Number(l.amount) + 0.001
       );
+    });
+    if (barrada) {
+      const b = original.get(barrada.id!)!;
+      return setErro(
+        `${dataCurta(barrada.due_date)} já tem ${brl(Number(b.paid_amount))} abatidos, mais que o valor novo dele.`
+      );
+    }
 
-    const total = parcelaTotal.trim() === "" ? null : Number(parcelaTotal);
-    if (total != null && (!Number.isFinite(total) || total < 1))
-      return setErro("O total de parcelas precisa ser 1 ou mais.");
+    /* Apagar parcela não se desfaz: pergunta antes, dizendo quais. */
+    if (removidas.length)
+      return confirm.ask(
+        `Salvar com ${totalN} parcelas apaga ${
+          removidas.length === 1 ? "a parcela" : "as parcelas"
+        } ${emLista(removidas.map((l) => `${l.no}/${conta.installment_total}`))}, que estão em aberto. Continuar?`,
+        () => gravar(desc, pago),
+        { titulo: "Apagar parcelas", rotulo: "Salvar e apagar" }
+      );
+    gravar(desc, pago);
+  };
 
+  const gravar = async (desc: string, pago: number | null) => {
     setOcupado(true);
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      setOcupado(false);
+      return setErro(SESSION_EXPIRED);
+    }
 
-    /* O que vale para a série inteira. */
+    /* O que vale para a conta inteira. */
     const comuns = {
       description: desc,
-      amount: v,
       category: categoria,
       notes: observacoes.trim(),
-      recurring: fixa,
-      installment_total: total,
+      ...(serie.tipo === "fixa" ? { recurring: fixa } : {}),
+      ...(parcelada ? { installment_total: totalN } : {}),
     };
 
     /*
-     * Uma requisição por lançamento, e não um update em lote, porque o dia do
-     * mês depende da data de cada um: dia 31 tem de virar 28 em fevereiro, e 29
-     * em ano bissexto. Um update único não calcula isso por linha.
+     * Uma gravação por lançamento, em paralelo: cada um tem data e valor
+     * próprios, e nenhuma depende da outra. `select("id")` porque um update
+     * que não casa com nada responde sem erro (ver NADA_GRAVADO).
      */
-    /*
-     * As gravações vão juntas, e não uma esperando a outra.
-     *
-     * Uma série de doze meses eram doze idas ao banco em fila: com 120ms de
-     * ida e volta, um segundo e meio de formulário travado para gravar o que
-     * são doze escritas independentes. Elas não dependem umas das outras —
-     * cada uma mexe numa linha só —, então esperam em paralelo.
-     */
-    const resultados = await Promise.all(
-      alvos.map((b) => {
-        const ehOEditado = b.id === conta.id;
-        const proprios = ehOEditado
-          ? {
-              due_date: vencimento,
-              status,
-              paid_amount: pago,
-              paid_at:
-                status === "paid"
-                  ? (conta.paid_at ?? new Date().toISOString())
-                  : null,
-            }
-          : {
-              /*
-               * O dia sai do vencimento escolhido, e só o dia: cada mês guarda
-               * o seu. Havia um campo "Dia do mês" separado aqui, e ele
-               * disputava a mesma coluna com o vencimento — mudar o dia movia
-               * os outros meses e deixava justamente o lançamento aberto no
-               * editor para trás.
-               */
-              due_date: trocarDia(b.due_date, Number(vencimento.slice(8, 10))),
-            };
-
-        /* `select("id")` porque `.update()` responde 204 sem erro quando o
-           `eq` não casa com nada. Sem pedir a linha de volta, uma gravação
-           que não aconteceu fecharia o formulário como se tivesse dado
-           certo, e o valor antigo voltaria no próximo carregamento sem
-           nenhuma explicação. Ver NADA_GRAVADO em lib/erros. */
+    const proprios = {
+      status,
+      paid_amount: pago,
+      paid_at: status === "paid" ? (conta.paid_at ?? new Date().toISOString()) : null,
+    };
+    type Resposta = { data: unknown[] | null; error: { message: string } | null };
+    const gravacoes: PromiseLike<Resposta>[] = linhas.map((l) => {
+      if (!l.id)
         return supabase
           .from("bills")
-          .update({ ...comuns, ...proprios })
-          .eq("id", b.id)
+          .insert({
+            ...comuns,
+            user_id: uid,
+            amount: Number(l.amount),
+            due_date: l.due_date,
+            status: "pending",
+            paid_at: null,
+            recurring: false,
+            installment_no: l.no,
+          })
           .select("id");
-      })
-    );
+      return supabase
+        .from("bills")
+        .update({
+          ...comuns,
+          amount: Number(l.amount),
+          due_date: l.due_date,
+          ...(l.id === conta.id ? proprios : {}),
+        })
+        .eq("id", l.id)
+        .select("id");
+    });
 
-    const falhas: string[] = [];
-    for (const { data, error } of resultados) {
-      if (error) falhas.push(error.message);
-      else if (!data?.length) falhas.push(NADA_GRAVADO);
-    }
+    /* A paga clicada fica fora da grade, mas a situação dela é daqui. */
+    if (!linhas.some((l) => l.id === conta.id))
+      gravacoes.push(
+        supabase.from("bills").update(proprios).eq("id", conta.id).select("id")
+      );
+
+    /* Só apaga o que continua em aberto: a trava vale também no banco. */
+    if (removidas.length)
+      gravacoes.push(
+        supabase
+          .from("bills")
+          .delete()
+          .in("id", removidas.map((l) => l.id!))
+          .eq("status", "pending")
+          .select("id")
+      );
 
     /*
-     * A série acompanha, inclusive os meses pagos, em duas coisas só: o nome
-     * e se ela continua. Desmarcar "fixa" só nos meses em aberto deixava os
-     * pagos marcados, e a série renascia deles; renomear só os abertos
-     * deixava uma série com o nome velho gerando o mês seguinte. O valor dos
-     * pagos continua intocado — é histórico.
+     * As pagas acompanham em pouca coisa: o nome, o total do parcelamento e,
+     * na fixa, deixar de repetir. Valor, data e categoria delas são
+     * histórico. Renomear só as abertas partia a conta em duas na lista.
      */
-    if (!falhas.length && !soEste && serie.tipo === "fixa") {
-      const mudancas = {
-        ...(!fixa ? { recurring: false } : {}),
-        ...(desc !== conta.description ? { description: desc } : {}),
-      };
-      if (Object.keys(mudancas).length) {
-        const { error } = await supabase
+    const nasPagas = {
+      ...(desc !== conta.description ? { description: desc } : {}),
+      ...(parcelada && totalN !== conta.installment_total
+        ? { installment_total: totalN }
+        : {}),
+      ...(serie.tipo === "fixa" && !fixa ? { recurring: false } : {}),
+    };
+    if (pagas.length && Object.keys(nasPagas).length)
+      gravacoes.push(
+        supabase
           .from("bills")
-          .update(mudancas)
-          .eq("description", conta.description)
-          .eq("recurring", true);
-        if (error) falhas.push(error.message);
-      }
-    }
+          .update(nasPagas)
+          .in("id", pagas.map((l) => l.id!))
+          .select("id")
+      );
 
+    const resultados = await Promise.all(gravacoes);
     setOcupado(false);
-    if (falhas.length) {
-      const m = falhas[0];
-      /* Só quando a coluna falta de fato. Antes qualquer erro que citasse
-         paid_amount — inclusive a regra do valor abatido — mandava rodar um
-         SQL que já tinha sido rodado. */
+
+    const falha = resultados.find((r) => r.error || !r.data?.length);
+    if (falha) {
+      const m = falha.error?.message ?? NADA_GRAVADO;
       if (m.includes("paid_amount") && /column|could not find/i.test(m))
         return setErro(
           "A coluna de abatimento ainda não existe. Rode supabase/ABATIDAS.sql no SQL Editor."
@@ -801,204 +905,208 @@ function Editor({
   const listaCategorias = categorias.includes(categoria)
     ? categorias
     : [categoria, ...categorias];
+  const comGrade = linhas.length > 1 || parcelada;
 
   return (
-    <Modal
-      open
-      onClose={onFechar}
-      title={descricao || conta.description}
-      sub={`Lançamento de ${dataCurta(conta.due_date)}`}
-      footer={
-        <>
-          <Button onClick={onFechar}>Cancelar</Button>
-          {outros.length === 0 ? (
-            <Button variant="primary" onClick={() => salvar(false)} disabled={ocupado}>
+    <>
+      <Modal
+        open
+        onClose={onFechar}
+        title={descricao || conta.description}
+        sub={`${emAberto} em aberto${
+          pagasNaSerie ? ` · ${pagasNaSerie} ${pagasNaSerie === 1 ? "paga" : "pagas"}` : ""
+        }`}
+        footer={
+          <>
+            <Button onClick={onFechar}>Cancelar</Button>
+            <Button variant="primary" onClick={salvar} disabled={ocupado}>
               {ocupado ? "Salvando..." : "Salvar"}
             </Button>
-          ) : (
-            /*
-             * Duas saídas, cada uma dizendo o alcance no próprio rótulo.
-             *
-             * Era um botão só, "Salvar nos 2", e o alcance dependia de um
-             * interruptor de texto lá em cima — "alterar só este mês". Ele
-             * perguntou "quais dois?", que é a pergunta certa: o número
-             * sozinho não diz nem quais nem o que são.
-             *
-             * O rótulo pode ser curto — "em todos" — porque quem responde
-             * "quais" é o aviso logo acima, que nomeia os meses e diz quantas
-             * pagas ficam de fora. Repetir a contagem no botão era dizer
-             * duas vezes a metade pior da informação.
-             */
-            <>
-              <Button onClick={() => salvar(true)} disabled={ocupado}>
-                {ocupado ? "Salvando..." : "Só neste mês"}
-              </Button>
-              <Button variant="primary" onClick={() => salvar(false)} disabled={ocupado}>
-                {ocupado ? "Salvando..." : "Salvar em todos"}
-              </Button>
-            </>
-          )}
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        {/*
-          O aviso vem antes dos campos porque a propagação é o padrão: gravar em
-          seis lançamentos de uma vez não se desfaz, e quem abre o editor tem de
-          saber disso antes de digitar, não depois.
-        */}
-        {outros.length > 0 && (
-          <div className="rounded-[14px] bg-brand-500/10 px-3.5 py-3 text-[12px] leading-relaxed text-fg-dim">
-            {/*
-              O aviso NOMEIA os meses em vez de contá-los.
-              
-              Dizia "nos outros 2 meses em aberto", e a pergunta que isso gera
-              é imediata: quais dois? Um número não é uma resposta — e sem a
-              resposta ninguém sabe o que o botão vai alterar. Com os meses
-              escritos, o alcance se confere de relance.
-              
-              Até quatro nomes; acima disso vira "e mais N", porque uma lista
-              de doze meses numa linha de aviso deixa de ser lida.
-            */}
-            O que estiver em{" "}
-            <span className="font-bold text-fg">Vale para a conta toda</span> vai
-            junto para{" "}
-            <span className="font-bold text-fg">
-              {outros
-                .slice(0, 4)
-                .map((b) => rotuloMes(b.due_date.slice(0, 7)))
-                .join(", ")}
-              {outros.length > 4 && ` e mais ${outros.length - 4}`}
-            </span>
-            {pagasDeFora > 0 && (
-              <>
-                {" "}
-                · {pagasDeFora} {pagasDeFora === 1 ? "já paga fica" : "já pagas ficam"}{" "}
-                de fora
-              </>
-            )}
-            . O botão <span className="font-bold text-fg">Só neste mês</span>{" "}
-            grava apenas em {rotuloMes(conta.due_date.slice(0, 7))}.
-          </div>
-        )}
-
-        <section className="flex flex-col gap-3.5">
-          {outros.length > 0 && (
-            <p className="text-[10.5px] font-bold uppercase tracking-wider text-brand-400">
-              Vale para a conta toda
-            </p>
-          )}
-
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3.5">
           <Field label="Descrição">
             <Input value={descricao} onChange={(e) => setDescricao(e.target.value)} />
           </Field>
 
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field label="Valor (R$)">
-              <Input
-                inputMode="decimal"
-                value={valor}
-                onChange={(e) => setValor(e.target.value)}
+          {/* O tipo à vista, sem trocar: virar uma parcelada em fixa exigiria
+              apagar e recriar meses, e isso não é edição. */}
+          <div>
+            <Segmented
+              travado
+              value={NO_SELETOR[serie.tipo]}
+              onChange={() => {}}
+              options={[
+                { value: "unica", label: "Única" },
+                { value: "fixa", label: "Fixa" },
+                { value: "parcelada", label: "Parcelada" },
+                { value: "abatida", label: "Abatida" },
+              ]}
+            />
+            <p className="mt-1.5 text-[11.5px] text-fg-mute">
+              O tipo de uma conta que já existe não muda aqui.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3.5 border-t border-line-soft pt-4">
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <Field
+                label={parcelada ? "Valor da parcela (R$)" : "Valor (R$)"}
+                hint={comGrade ? "Vai para as linhas que você não ajustou." : undefined}
+              >
+                <Input
+                  inputMode="decimal"
+                  value={valor}
+                  onChange={(e) => mudarValor(e.target.value)}
+                />
+              </Field>
+              <Field
+                label="Vencimento"
+                hint={comGrade ? "É a data da 1ª linha da lista." : undefined}
+              >
+                <SeletorDeData value={vencimento} onChange={mudarVencimento} />
+              </Field>
+            </div>
+
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <Field label="Categoria" className={parcelada ? undefined : "sm:col-span-2"}>
+                <Select value={categoria} onChange={(e) => setCategoria(e.target.value)}>
+                  {listaCategorias.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                </Select>
+              </Field>
+              {parcelada && (
+                <Field label="Total de parcelas">
+                  <Input
+                    type="number"
+                    min={1}
+                    value={total}
+                    onChange={(e) => mudarTotal(e.target.value)}
+                  />
+                  {erroTotal && (
+                    <span role="status" className="mt-1.5 block text-[11.5px] font-medium text-warn">
+                      {erroTotal}
+                    </span>
+                  )}
+                </Field>
+              )}
+            </div>
+
+            {serie.tipo === "fixa" && (
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-[14px] bg-ink-800 p-3.5">
+                <input
+                  type="checkbox"
+                  checked={fixa}
+                  onChange={(e) => setFixa(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-[var(--a)]"
+                />
+                <span className="text-sm text-fg-dim">
+                  <span className="font-semibold text-fg">Continua todo mês</span>
+                  <span
+                    className={cx(
+                      "mt-0.5 block text-[11.5px]",
+                      fixa ? "text-fg-mute" : "text-warn"
+                    )}
+                  >
+                    {fixa
+                      ? "Entra sozinha todo dia 1º do mês."
+                      : "Desmarcada, a conta acaba: o próximo mês não entra mais."}
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {comGrade && (
+              <div className="rounded-[14px] bg-ink-800 p-3.5">
+                {pagas.length > 0 && (
+                  <p className="text-[11.5px] leading-relaxed text-fg-mute">
+                    {parcelada ? (
+                      <>
+                        <span className="font-semibold text-pos">
+                          {pagas.length === 1 ? "Paga" : "Pagas"}:
+                        </span>{" "}
+                        {pagas
+                          .map((p) => `${rotuloDa(p)} (${dataCurta(p.due_date)})`)
+                          .join(", ")}
+                        . Ficam como estão.
+                      </>
+                    ) : (
+                      <>
+                        {pagas.length} {pagas.length === 1 ? "mês pago fica" : "meses pagos ficam"}{" "}
+                        como {pagas.length === 1 ? "está" : "estão"}.
+                      </>
+                    )}
+                  </p>
+                )}
+                {linhas.length > 0 && (
+                  <EditorParcelas
+                    parcelas={linhas}
+                    de={linhas[0].no ?? 1}
+                    total={totalRotulo ?? undefined}
+                    rotulos={linhas.map(rotuloDa)}
+                    onChange={(novas) => mudarGrade(novas as LinhaDaGrade[])}
+                    onRecalcular={recalcular}
+                  />
+                )}
+                {removidas.length > 0 && (
+                  <p className="mt-2.5 rounded-[12px] bg-warn/12 px-3 py-2 text-[11.5px] text-warn">
+                    Ao salvar, {removidas.length === 1 ? "sai a parcela" : "saem as parcelas"}{" "}
+                    {emLista(removidas.map((l) => `${l.no}/${conta.installment_total}`))}.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-line-soft pt-4">
+            <Field label="Observações">
+              <Textarea
+                rows={2}
+                value={observacoes}
+                onChange={(e) => setObservacoes(e.target.value)}
               />
             </Field>
-            <Field label="Categoria">
-              <Select
-                value={categoria}
-                onChange={(e) => setCategoria(e.target.value)}
+          </div>
+
+          {/*
+            Situação e abatimento são do lançamento clicado, e de nenhum outro:
+            marcar "paga" em todos marcaria como pago o que ninguém pagou.
+          */}
+          <section className="flex flex-col gap-3.5 border-t border-line-soft pt-4">
+            <p className="text-[10.5px] font-bold uppercase tracking-wider text-fg-mute">
+              Só do lançamento de {rotuloMes(conta.due_date.slice(0, 7))}
+            </p>
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <Field label="Situação">
+                <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+                  <option value="pending">Em aberto</option>
+                  <option value="paid">Paga</option>
+                </Select>
+              </Field>
+              <Field
+                label="Já abatido (R$)"
+                hint="Preenchido, a conta passa a ser abatida aos poucos."
               >
-                {listaCategorias.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-            </Field>
-          </div>
+                <Input
+                  inputMode="decimal"
+                  value={abatido}
+                  onChange={(e) => setAbatido(e.target.value)}
+                  placeholder="vazio"
+                />
+              </Field>
+            </div>
+          </section>
 
-          <Field label="Total de parcelas" hint="Vazio se não for parcelada.">
-            <Input
-              type="number"
-              min={1}
-              value={parcelaTotal}
-              onChange={(e) => setParcelaTotal(e.target.value)}
-              placeholder="vazio"
-            />
-          </Field>
-
-          <Field label="Observações">
-            <Textarea
-              rows={2}
-              value={observacoes}
-              onChange={(e) => setObservacoes(e.target.value)}
-            />
-          </Field>
-
-          <label className="flex cursor-pointer items-center gap-2.5 rounded-[14px] bg-ink-800 px-3.5 py-3">
-            <input
-              type="checkbox"
-              checked={fixa}
-              onChange={(e) => setFixa(e.target.checked)}
-              className="h-4 w-4 accent-[var(--a)]"
-            />
-            <span className="text-sm font-semibold text-fg-dim">
-              Recorrente
-              <span className="ml-1 text-[11px] font-normal text-fg-mute">
-                {serie.tipo === "fixa" && !fixa
-                  ? "(desmarcar encerra: o próximo mês não entra mais)"
-                  : "(entra sozinha todo dia 1º do mês)"}
-              </span>
-            </span>
-          </label>
-        </section>
-
-        {/*
-          Campos de um mês só. Vencimento exato, situação e abatimento variam de
-          mês para mês por natureza: propagar "paga" para os outros marcaria como
-          pago o que ninguém pagou.
-        */}
-        <section className="flex flex-col gap-3.5 border-t border-line-soft pt-4">
-          <p className="text-[10.5px] font-bold uppercase tracking-wider text-fg-mute">
-            Só do mês de {mesCurto(conta.due_date)}
-          </p>
-
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            <Field
-              label="Vencimento"
-              hint={
-                /* Só vale quando ele salvar em todos; por isso a dica diz
-                   "se", e não afirma. */
-                outros.length
-                  ? "Salvando em todos, o dia escolhido passa a valer nos outros meses."
-                  : undefined
-              }
-            >
-              <SeletorDeData value={vencimento} onChange={setVencimento} />
-            </Field>
-            <Field label="Situação">
-              <Select value={status} onChange={(e) => setStatus(e.target.value)}>
-                <option value="pending">Em aberto</option>
-                <option value="paid">Paga</option>
-              </Select>
-            </Field>
-          </div>
-
-          <Field
-            label="Já abatido (R$)"
-            hint="Preenchido, a conta passa a ser abatida aos poucos."
-          >
-            <Input
-              inputMode="decimal"
-              value={abatido}
-              onChange={(e) => setAbatido(e.target.value)}
-              placeholder="vazio"
-            />
-          </Field>
-        </section>
-
-        {erro && (
-          <p className="rounded-[14px] bg-neg/12 px-3.5 py-3 text-xs font-medium text-neg">
-            {erro}
-          </p>
-        )}
-      </div>
-    </Modal>
+          {erro && (
+            <p className="rounded-[14px] bg-neg/12 px-3.5 py-3 text-xs font-medium text-neg">
+              {erro}
+            </p>
+          )}
+        </div>
+      </Modal>
+      {confirm.node}
+    </>
   );
 }
