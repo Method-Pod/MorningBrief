@@ -87,7 +87,7 @@ import {
 } from "@/components/ui";
 import { SeletorDeData } from "@/components/SeletorDeData";
 import {
-  marcarEditadas,
+  editarGrade,
   oQueFaltaParaAjustar,
   recomporParcelas,
   type Ajuste,
@@ -1989,17 +1989,21 @@ export default function ContasPage() {
                     <EditorParcelas
                       parcelas={form.parcelas}
                       de={Number(form.installment_no)}
-                      onChange={(parcelas) =>
+                      onChange={(novas) => {
+                        /* A data da 1ª parcela é o vencimento: muda os dois. */
+                        const g = editarGrade(
+                          form.parcelas,
+                          novas,
+                          form.parcelasEditadas,
+                          form.due_date
+                        );
                         setForm({
                           ...form,
-                          parcelas,
-                          parcelasEditadas: marcarEditadas(
-                            form.parcelas,
-                            parcelas,
-                            form.parcelasEditadas
-                          ),
-                        })
-                      }
+                          parcelas: g.parcelas,
+                          parcelasEditadas: g.editadas,
+                          due_date: g.vencimento,
+                        });
+                      }}
                       onRecalcular={() => trocarModoParcelas("variaveis", true)}
                     />
                   )}

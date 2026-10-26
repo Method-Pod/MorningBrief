@@ -71,6 +71,29 @@ export function marcarEditadas(
 }
 
 /**
+ * Uma edição na grade, com a regra do primeiro vencimento.
+ *
+ * O vencimento da conta É a data da primeira parcela: os dois campos são o
+ * mesmo dado em dois lugares. Antes eles se separavam -- mudar a data da
+ * 1ª parcela na grade deixava o Vencimento lá em cima no dia 26 e a parcela
+ * no dia 5. Agora mexer na 1ª parcela muda o vencimento, e a data dela nunca
+ * fica marcada como ajuste à mão, para mudar o vencimento sempre levá-la
+ * junto.
+ */
+export function editarGrade<T extends ParcelaAjustavel>(
+  antes: T[],
+  depois: T[],
+  editadas: Ajuste[],
+  vencimento: string
+): { parcelas: T[]; editadas: Ajuste[]; vencimento: string } {
+  return {
+    parcelas: depois,
+    editadas: marcarEditadas(antes, depois, editadas).filter((a) => a !== "0:data"),
+    vencimento: depois[0]?.due_date || vencimento,
+  };
+}
+
+/**
  * A grade recalculada a partir de uma base nova, preservando o que foi
  * ajustado à mão.
  *

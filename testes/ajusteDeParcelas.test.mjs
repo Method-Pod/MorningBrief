@@ -120,3 +120,32 @@ test("editada alem do novo tamanho simplesmente sai", () => {
   const base = [p("1", 5), p("2", 5)];
   assert.deepEqual(recomporParcelas(base, atuais, ["2:valor"]), base);
 });
+
+/* ------------------- vencimento = data da 1a parcela ------------------- */
+
+import { editarGrade } from "../src/lib/ajusteDeParcelas.ts";
+
+test("o pedido dele: mudar a data da 1a parcela muda o vencimento", () => {
+  const antes = [p("2026-10-26", 100), p("2026-11-26", 100)];
+  const depois = [p("2026-11-05", 100), p("2026-11-26", 100)];
+  const g = editarGrade(antes, depois, [], "2026-10-26");
+  assert.equal(g.vencimento, "2026-11-05");
+});
+
+test("a data da 1a parcela nunca vira ajuste a mao: o vencimento sempre a leva", () => {
+  const antes = [p("2026-10-26", 100), p("2026-11-26", 100)];
+  const depois = [p("2026-11-05", 100), p("2026-11-26", 100)];
+  const g = editarGrade(antes, depois, ["0:data"], "2026-10-26");
+  assert.deepEqual(g.editadas, []);
+  /* e com isso a recomposicao pela base nova poe a 1a no vencimento */
+  const base = [p("2026-12-01", 100), p("2027-01-01", 100)];
+  assert.equal(recomporParcelas(base, g.parcelas, g.editadas)[0].due_date, "2026-12-01");
+});
+
+test("mexer em outra parcela nao mexe no vencimento", () => {
+  const antes = [p("2026-10-26", 100), p("2026-11-26", 100)];
+  const depois = [p("2026-10-26", 100), p("2026-11-30", 150)];
+  const g = editarGrade(antes, depois, [], "2026-10-26");
+  assert.equal(g.vencimento, "2026-10-26");
+  assert.deepEqual(g.editadas, ["1:data", "1:valor"]);
+});
