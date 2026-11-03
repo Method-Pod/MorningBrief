@@ -1140,7 +1140,9 @@ export default function AulasPage() {
    * linha aparece solta e dentro da pasta de playlist: marcar assistida,
    * "parei aqui" e tirar continuam sendo um codigo so.
    */
-  const linhaDaAula = (l: Lesson, i: number) => {
+  /* `solta`: a aula fora de pasta vira um bloco de vidro próprio; dentro
+     da pasta ela fica como linha, agrupada pela pasta. */
+  const linhaDaAula = (l: Lesson, i: number, solta = false) => {
     const Icone = ICONE[l.fonte];
     const pct = pctAssistido(l);
     return (
@@ -1156,7 +1158,10 @@ export default function AulasPage() {
       */
       <li
         key={l.id}
-        className="entra group flex flex-wrap items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800/40 sm:flex-nowrap sm:gap-3.5 sm:px-5"
+        className={cx(
+          "group flex flex-wrap items-start gap-3 px-4 py-4 transition-colors sm:flex-nowrap sm:gap-3.5 sm:px-5",
+          solta ? "card hover:bg-fg/[0.03]" : "entra hover:bg-ink-800/40"
+        )}
         style={{ "--i": i } as React.CSSProperties}
       >
         <button
@@ -1359,7 +1364,7 @@ export default function AulasPage() {
     return (
       <li
         key={`pasta-${p.id}`}
-        className="entra"
+        className="card overflow-hidden"
         style={{ "--i": i } as React.CSSProperties}
       >
         <div className="group flex items-center gap-2 px-4 py-3.5 transition-colors hover:bg-ink-800/40">
@@ -1938,13 +1943,13 @@ export default function AulasPage() {
             />
           </Card>
         ) : (
-          <Card className="overflow-hidden">
-            <ul className="divide-y divide-line-soft">
-              {itens.map((it, i) =>
-                it.tipo === "aula" ? linhaDaAula(it.aula, i) : linhaDaPasta(it, i)
-              )}
-            </ul>
-          </Card>
+          /* Cada aula e cada pasta num bloco de vidro próprio, com folga entre
+             eles, como a lista do dia da agenda da referência. */
+          <ul className="flex flex-col gap-2.5">
+            {itens.map((it, i) =>
+              it.tipo === "aula" ? linhaDaAula(it.aula, i, true) : linhaDaPasta(it, i)
+            )}
+          </ul>
         )}
 
         {temMais && (

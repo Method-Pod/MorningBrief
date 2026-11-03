@@ -293,16 +293,6 @@ export default function HabitosPage() {
 
   if (loading) return <EsqueletoPagina blocos={3} />;
 
-  /*
-   * Uma grade só para o cabeçalho e as linhas: nome à esquerda, os sete dias
-   * numa coluna de largura fixa e o menu no fim. É o que deixa os dias de
-   * TODAS as linhas embaixo da mesma letra do cabeçalho. No celular a grade
-   * vira pilha: o nome em cima, os sete dias embaixo, em sete colunas iguais
-   * que também se alinham com o cabeçalho.
-   */
-  const GRADE =
-    "lg:grid lg:grid-cols-[minmax(0,1fr)_294px_32px] lg:items-center lg:gap-4";
-
   return (
     <div className="space-y-5 rise">
       <CabecalhoCrescimento
@@ -362,200 +352,191 @@ export default function HabitosPage() {
           </div>
         </Card>
       ) : (
-        <Card className="overflow-hidden">
+        <>
           {/*
-            O cabeçalho da grade: a semana e os sete dias, UMA vez.
-
-            Antes cada linha trazia as letras dentro das próprias bolinhas — com
-            cinco hábitos eram 35 letras repetindo o mesmo cabeçalho, e as
-            bolinhas marcadas perdiam a letra, então a linha ficava ilegível
-            justamente onde havia o que ler. Agora a letra e o número do dia
-            ficam aqui em cima, e hoje é a coluna em roxo.
+            A semana em foco, num cartão próprio acima da grade. Cada hábito
+            virou um cartão (o desenho dos projetos da referência), então os
+            dias saem daqui e vão para dentro de cada um.
           */}
-          <div className={cx("border-b border-line-soft px-4 py-3", GRADE)}>
-            <div className="flex items-center gap-1">
+          <Card className="flex items-center gap-1.5 px-3 py-2.5">
+            <button
+              onClick={() => setSemanas((s) => s - 1)}
+              aria-label="Semana anterior"
+              className="grid h-9 w-9 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-fg/[0.08] hover:text-fg"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span className="min-w-[128px] text-center text-[14px] font-semibold">
+              {rotuloSemana}
+            </span>
+            <button
+              onClick={() => setSemanas((s) => Math.min(0, s + 1))}
+              disabled={semanaAtual}
+              aria-label="Próxima semana"
+              className="grid h-9 w-9 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-fg/[0.08] hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <ChevronRight size={16} />
+            </button>
+            {!semanaAtual && (
               <button
-                onClick={() => setSemanas((s) => s - 1)}
-                aria-label="Semana anterior"
-                className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+                onClick={() => setSemanas(0)}
+                className="ml-1 rounded-full px-3 py-1.5 text-[12px] font-semibold text-brand-400 transition-colors hover:bg-brand-500/10"
               >
-                <ChevronLeft size={16} />
+                Hoje
               </button>
-              <span className="min-w-[118px] text-center text-[12.5px] font-semibold">
-                {rotuloSemana}
-              </span>
-              <button
-                onClick={() => setSemanas((s) => Math.min(0, s + 1))}
-                disabled={semanaAtual}
-                aria-label="Próxima semana"
-                className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
-              >
-                <ChevronRight size={16} />
-              </button>
-              {!semanaAtual && (
-                <button
-                  onClick={() => setSemanas(0)}
-                  className="ml-1 rounded-lg px-2 py-1 text-[11.5px] font-semibold text-brand-400 transition-colors hover:bg-brand-500/10"
-                >
-                  Hoje
-                </button>
-              )}
-            </div>
-            <div className="mt-3 grid grid-cols-7 lg:mt-0">
-              {semana.map((d, i) => (
-                <div
-                  key={d}
-                  className={cx(
-                    "flex flex-col items-center",
-                    d === hoje ? "text-brand-400" : "text-fg-mute"
-                  )}
-                >
-                  <span className="text-[10px] font-semibold uppercase tracking-wider">
-                    {DIAS[i][0]}
-                  </span>
-                  <span
-                    className={cx(
-                      "text-[12px] tnum",
-                      d === hoje ? "font-bold" : "font-medium"
-                    )}
-                  >
-                    {Number(d.slice(8, 10))}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <span className="hidden lg:block" />
-          </div>
+            )}
+          </Card>
 
-          <ul>
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {habits.map((h) => {
               const seq = sequencia(h.id);
               const naSemana = semana.filter((d) => marcado(h.id, d)).length;
               const meta = h.target_per_week;
               const bateu = naSemana >= meta;
-              const menu = (
-                <MenuSuspenso
-                  rotulo={`Ações de ${h.name}`}
-                  itens={[
-                    {
-                      rotulo: h.active ? "Pausar" : "Retomar",
-                      icone: <Power size={14} />,
-                      aoEscolher: () => pausar(h),
-                    },
-                    {
-                      rotulo: "Editar",
-                      icone: <Pencil size={14} />,
-                      aoEscolher: () => editar(h),
-                    },
-                    {
-                      rotulo: "Excluir",
-                      icone: <Trash2 size={14} />,
-                      aoEscolher: () => excluir(h),
-                      perigo: true,
-                    },
-                  ]}
-                />
-              );
+              const pct = Math.min(100, Math.round((naSemana / Math.max(1, meta)) * 100));
+              const R = 22;
+              const C = 2 * Math.PI * R;
               return (
                 <li
                   key={h.id}
-                  className={cx(
-                    "group border-b border-line-soft px-4 py-3.5 last:border-0",
-                    GRADE,
-                    !h.active && "opacity-55"
-                  )}
+                  className={cx("card group flex flex-col p-4", !h.active && "opacity-55")}
                 >
-                  <div className="flex min-w-0 items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      {/*
-                        Sem a bolinha roxa antes do nome: era a mesma em todos
-                        os hábitos, então não distinguia nenhum. No lugar dela,
-                        a meta virou barra — "1/5" sozinho dizia o número, mas
-                        não o quanto falta.
-                      */}
-                      <p className="truncate-livre text-[13.5px] font-semibold">
-                        {h.name}
+                  <div className="flex items-start gap-3">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500/15 text-brand-400">
+                      <Repeat2 size={16} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate-livre text-[15px] font-semibold">{h.name}</p>
+                      <p className="mt-0.5 text-[12px] text-fg-mute">
+                        meta de {meta} {meta === 1 ? "dia" : "dias"} por semana
                       </p>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-fg-mute">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="h-1 w-14 overflow-hidden rounded-full bg-ink-800">
-                            <span
-                              className={cx(
-                                "block h-full rounded-full",
-                                bateu ? "bg-pos" : "bg-brand-500"
-                              )}
-                              style={{
-                                width: `${Math.min(100, (naSemana / meta) * 100)}%`,
-                              }}
-                            />
-                          </span>
-                          <span
-                            className={cx("font-semibold tnum", bateu && "text-pos")}
-                          >
-                            {naSemana}/{meta}
-                          </span>
-                          <span>na semana</span>
-                        </span>
-                        {seq > 0 && (
-                          <span className="inline-flex items-center gap-1 font-semibold text-warn">
-                            <Flame size={11} />
-                            {seq === 1 ? "1 dia seguido" : `${seq} dias seguidos`}
-                          </span>
-                        )}
-                        {!h.active && <span>pausado</span>}
-                      </div>
                     </div>
-                    <div className="-mr-1 shrink-0 lg:hidden">{menu}</div>
+                    <div className="-mr-1 -mt-0.5 shrink-0">
+                      <MenuSuspenso
+                        rotulo={`Ações de ${h.name}`}
+                        itens={[
+                          {
+                            rotulo: h.active ? "Pausar" : "Retomar",
+                            icone: <Power size={14} />,
+                            aoEscolher: () => pausar(h),
+                          },
+                          {
+                            rotulo: "Editar",
+                            icone: <Pencil size={14} />,
+                            aoEscolher: () => editar(h),
+                          },
+                          {
+                            rotulo: "Excluir",
+                            icone: <Trash2 size={14} />,
+                            aoEscolher: () => excluir(h),
+                            perigo: true,
+                          },
+                        ]}
+                      />
+                    </div>
                   </div>
 
-                  <div className="mt-3 grid grid-cols-7 lg:mt-0">
-                    {semana.map((d) => {
+                  {/* A caixinha de progresso: o anel da meta, a frase e a barra. */}
+                  <div className="mt-3 flex items-center gap-3 rounded-[16px] border border-line bg-ink-800 p-3">
+                    <span className="relative shrink-0">
+                      <svg width="54" height="54" viewBox="0 0 54 54" className="-rotate-90">
+                        <circle cx="27" cy="27" r={R} fill="none" stroke="var(--a-line)" strokeWidth="5" />
+                        <circle
+                          cx="27"
+                          cy="27"
+                          r={R}
+                          fill="none"
+                          stroke={bateu ? "var(--cor-pos)" : "var(--a)"}
+                          strokeWidth="5"
+                          strokeLinecap="round"
+                          strokeDasharray={C.toFixed(1)}
+                          strokeDashoffset={(C * (1 - pct / 100)).toFixed(1)}
+                          className="anel-desenha"
+                          style={{ "--anel-c": C.toFixed(1) } as React.CSSProperties}
+                        />
+                      </svg>
+                      <span className="absolute inset-0 grid place-items-center text-[11px] font-semibold tnum">
+                        {pct}%
+                      </span>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className={cx("text-[13px] font-semibold tnum", bateu && "text-pos")}>
+                        {naSemana} de {meta} na semana
+                      </p>
+                      <p className="mt-0.5 flex items-center gap-1 text-[12px] text-fg-mute">
+                        {!h.active ? (
+                          "pausado"
+                        ) : seq > 0 ? (
+                          <>
+                            <Flame size={12} className="text-warn" />
+                            <span className="font-semibold text-warn">
+                              {seq === 1 ? "1 dia seguido" : `${seq} dias seguidos`}
+                            </span>
+                          </>
+                        ) : bateu ? (
+                          "meta batida"
+                        ) : (
+                          `faltam ${meta - naSemana}`
+                        )}
+                      </p>
+                      <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--a-line)]">
+                        <span
+                          className="cresce block h-full rounded-full"
+                          style={{
+                            width: `${pct}%`,
+                            background: bateu ? "var(--cor-pos)" : "var(--a)",
+                          }}
+                        />
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Os sete dias, com a letra e o número em cada um. */}
+                  <div className="mt-3 grid grid-cols-7 gap-1">
+                    {semana.map((d, i) => {
                       const on = marcado(h.id, d);
                       const futuro = d > hoje;
                       const travado = futuro || !h.active;
                       return (
-                        <div key={d} className="grid place-items-center">
+                        <div key={d} className="flex flex-col items-center gap-1">
+                          <span
+                            className={cx(
+                              "text-[10px] font-semibold uppercase",
+                              ehHoje(d) ? "text-brand-400" : "text-fg-mute"
+                            )}
+                          >
+                            {DIAS[i][0]}
+                          </span>
                           <button
                             disabled={travado}
                             onClick={() => alternar(h, d)}
-                            aria-label={`${h.name} — ${dataCurta(d)}${
-                              on ? ", feito" : ""
-                            }`}
+                            aria-label={`${h.name} — ${dataCurta(d)}${on ? ", feito" : ""}`}
                             aria-pressed={on}
                             title={dataCurta(d)}
                             className={cx(
-                              "grid h-8 w-8 place-items-center rounded-full border-[1.5px] transition-colors",
+                              "grid h-9 w-9 place-items-center rounded-full border-[1.5px] text-[11px] font-semibold tnum transition-colors",
                               on
                                 ? "border-transparent bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand"
                                 : ehHoje(d)
-                                  ? "border-brand-500 bg-brand-500/10"
+                                  ? "border-brand-500 bg-brand-500/10 text-brand-400"
                                   : futuro
-                                    ? /* Tracejado, e não apagado: o dia que ainda
-                                         não chegou continua visível, só não
-                                         aceita marca. Com 35% de opacidade ele
-                                         sumia no escuro e a linha parecia ter
-                                         só dois dias. */
-                                      "border-dashed border-line"
-                                    : "border-line",
+                                    ? "border-dashed border-line text-fg-mute"
+                                    : "border-line text-fg-dim",
                               !travado && !on && "hover:border-brand-500",
                               travado && "cursor-not-allowed"
                             )}
                           >
-                            {on && <Check size={14} strokeWidth={3} />}
+                            {on ? <Check size={14} strokeWidth={3} /> : Number(d.slice(8, 10))}
                           </button>
                         </div>
                       );
                     })}
                   </div>
-
-                  <div className="hidden justify-end transition-opacity lg:flex lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-                    {menu}
-                  </div>
                 </li>
               );
             })}
           </ul>
-        </Card>
+        </>
       )}
 
       <Modal

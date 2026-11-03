@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, CreditCard, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, CreditCard, Pencil, Plus, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
@@ -238,51 +238,32 @@ export default function CartoesPage() {
       ) : (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((c) => (
-            <Card key={c.id} className="p-[18px]">
-              <div className="flex items-start gap-2.5">
-                <div className="min-w-0 flex-1">
-                  {/*
-                    A cor virou um ponto antes do nome.
-
-                    Era um quadrado de 32px ao lado, que pesava mais que o
-                    nome do cartão e não dizia nada — cor não é logo de banco.
-                    Como ponto, ela faz o que cor faz bem: distinguir de
-                    relance na lista, sem disputar atenção com o texto.
-                  */}
-                  <p className="flex items-center gap-2 text-[14px] font-bold tracking-[-0.01em]">
-                    <span
-                      className="h-2 w-2 shrink-0 rounded-full"
-                      style={{ background: corDoRotulo(c.cor) }}
-                    />
-                    <span className="truncate">{c.nome}</span>
-                  </p>
-                  <p className="truncate text-[11.5px] text-fg-mute">
-                    {[c.banco, c.bandeira].filter(Boolean).join(" · ") ||
-                      "Sem detalhes"}
-                  </p>
-                </div>
+            <Card key={c.id} className="group p-3">
+              {/* O cartão desenhado, o mesmo do painel de edição. */}
+              <CartaoDesenhado
+                nome={c.nome}
+                banco={c.banco}
+                bandeira={c.bandeira}
+                fecha={String(c.fecha_dia)}
+                vence={String(c.vence_dia)}
+                limite={c.limite != null ? Number(c.limite) : null}
+                cor={c.cor}
+              />
+              <div className="flex items-center justify-end gap-1.5 px-1 pt-3">
                 <button
                   onClick={() => abrirEdicao(c)}
                   aria-label={`Editar ${c.nome}`}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-fg/[0.08] hover:text-fg"
                 >
                   <Pencil size={14} />
                 </button>
                 <button
                   onClick={() => remover(c)}
                   aria-label={`Excluir ${c.nome}`}
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-neg/15 hover:text-neg"
                 >
                   <Trash2 size={14} />
                 </button>
-              </div>
-
-              <div className="mt-3.5 flex items-end gap-4 border-t border-line-soft pt-3">
-                <Dado rotulo="Fecha" valor={`dia ${c.fecha_dia}`} />
-                <Dado rotulo="Vence" valor={`dia ${c.vence_dia}`} />
-                {c.limite != null && (
-                  <Dado rotulo="Limite" valor={brl(Number(c.limite))} />
-                )}
               </div>
             </Card>
           ))}
@@ -293,8 +274,30 @@ export default function CartoesPage() {
         open={aberto}
         onClose={() => setAberto(false)}
         title={editando ? "Editar cartão" : "Novo cartão"}
+        sub="Fechamento, vencimento e a cor na lista."
+        /* O cartão desenhado no topo, como o resumo dos outros painéis: ele
+           acompanha o que se digita, então mostra o cartão como vai ficar. */
+        topo={
+          <CartaoDesenhado
+            nome={form.nome}
+            banco={form.banco}
+            bandeira={form.bandeira}
+            fecha={form.fecha_dia}
+            vence={form.vence_dia}
+            limite={form.limite.trim() ? valorDigitado(form.limite) : null}
+            cor={form.cor}
+          />
+        }
+        footer={
+          <>
+            <Button onClick={() => setAberto(false)}>Cancelar</Button>
+            <Button variant="primary" onClick={salvar} disabled={salvando}>
+              {salvando ? "Salvando..." : "Salvar"}
+            </Button>
+          </>
+        }
       >
-        <div className="grid gap-3.5">
+        <div className="grid gap-4">
           <Field label="Nome">
             <Input
               value={form.nome}
@@ -304,7 +307,7 @@ export default function CartoesPage() {
             />
           </Field>
 
-          <div className="grid gap-3.5 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Banco">
               <Input
                 value={form.banco}
@@ -321,8 +324,8 @@ export default function CartoesPage() {
             </Field>
           </div>
 
-          <div className="grid gap-3.5 sm:grid-cols-3">
-            <Field label="Fecha dia">
+          <div className="grid gap-4 border-t border-line-soft pt-4 sm:grid-cols-3">
+            <Field label="Fecha dia" hint="Dia em que a fatura fecha.">
               <Input
                 type="number"
                 min={1}
@@ -331,7 +334,7 @@ export default function CartoesPage() {
                 onChange={(e) => setForm({ ...form, fecha_dia: e.target.value })}
               />
             </Field>
-            <Field label="Vence dia">
+            <Field label="Vence dia" hint="Dia de pagar.">
               <Input
                 type="number"
                 min={1}
@@ -340,7 +343,7 @@ export default function CartoesPage() {
                 onChange={(e) => setForm({ ...form, vence_dia: e.target.value })}
               />
             </Field>
-            <Field label="Limite (opcional)">
+            <Field label="Limite (R$)" hint="Opcional.">
               <Input
                 type="number"
                 step="0.01"
@@ -351,8 +354,11 @@ export default function CartoesPage() {
             </Field>
           </div>
 
-          <Field label="Cor">
-            <div className="flex flex-wrap gap-2">
+          <div className="border-t border-line-soft pt-4">
+            <span className="mb-2 block text-[11px] font-medium uppercase tracking-wider text-fg-mute">
+              Cor
+            </span>
+            <div className="flex flex-wrap gap-2.5">
               {NOTE_COLORS.map((c) => (
                 <button
                   key={c}
@@ -361,26 +367,23 @@ export default function CartoesPage() {
                   aria-label={`Cor ${c}`}
                   aria-pressed={form.cor === c}
                   style={{ background: corDoRotulo(c) }}
+                  /* A marca da escolhida é um anel por fora, da cor do texto:
+                     o `ring-offset-white` de antes desenhava uma moldura
+                     branca no tema escuro. */
                   className={cx(
-                    "h-7 w-7 rounded-full transition-transform hover:scale-110",
-                    form.cor === c &&
-                      "ring-2 ring-fg-dim ring-offset-2 ring-offset-white"
+                    "grid h-9 w-9 place-items-center rounded-full text-white transition-transform hover:scale-110",
+                    form.cor === c && "outline outline-2 outline-offset-[3px] outline-fg"
                   )}
-                />
+                >
+                  {form.cor === c && <Check size={15} strokeWidth={3} />}
+                </button>
               ))}
             </div>
-          </Field>
-
-          {erro && <p className="text-xs text-neg">{erro}</p>}
-
-          <div className="mt-1 flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => setAberto(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={salvar} disabled={salvando}>
-              {salvando ? "Salvando..." : "Salvar"}
-            </Button>
           </div>
+
+          {erro && (
+            <p className="rounded-[14px] bg-neg/12 px-3.5 py-3 text-xs font-medium text-neg">{erro}</p>
+          )}
         </div>
       </Modal>
 
@@ -393,13 +396,80 @@ export default function CartoesPage() {
 const NAO_RODOU_SQL =
   "A tabela de cartões ainda não existe no banco. Rode supabase/CARTOES.sql no Supabase.";
 
-const Dado = ({ rotulo, valor }: { rotulo: string; valor: string }) => (
-  <div className="min-w-0">
-    <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-fg-mute">
-      {rotulo}
-    </p>
-    <p className="truncate text-[13px] font-semibold text-fg-dim tnum">
-      {valor}
-    </p>
-  </div>
-);
+/**
+ * Um cartão de crédito desenhado: a cor escolhida em degradê, o nome e o
+ * banco em cima, fechamento, vencimento e limite embaixo, a bandeira no canto.
+ * Ler a lista como uma carteira de cartões é mais rápido do que ler uma lista
+ * de nomes -- e o painel de edição mostra o mesmo, para a cor ser escolhida
+ * vendo o resultado.
+ */
+function CartaoDesenhado({
+  nome,
+  banco,
+  bandeira,
+  fecha,
+  vence,
+  limite,
+  cor,
+}: {
+  nome: string;
+  banco: string | null;
+  bandeira: string | null;
+  fecha: string;
+  vence: string;
+  limite: number | null;
+  cor: string;
+}) {
+  const tom = corDoRotulo(cor);
+  return (
+    <div
+      className="relative aspect-[1.7/1] w-full overflow-hidden rounded-[20px] p-4 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.25),0_18px_40px_-20px_rgb(0_0_0/0.6)] sm:p-5"
+      style={{
+        background: `linear-gradient(140deg, color-mix(in srgb, ${tom} 92%, #fff), color-mix(in srgb, ${tom} 70%, #000))`,
+      }}
+    >
+      {/* Um brilho largo em diagonal, como o reflexo de um cartão de plástico. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -right-1/4 -top-1/2 h-[140%] w-3/4 rotate-12 rounded-full bg-white/10 blur-2xl"
+      />
+      <div className="relative flex h-full flex-col">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-[17px] font-semibold tracking-[-0.01em]">
+              {nome.trim() || "Novo cartão"}
+            </p>
+            <p className="truncate text-[12px] text-white/75">{banco?.trim() || "Banco"}</p>
+          </div>
+          <CreditCard size={22} className="shrink-0 text-white/80" />
+        </div>
+        {/* O chip do cartão. */}
+        <span
+          aria-hidden
+          className="mt-3 block h-7 w-10 rounded-[6px] bg-gradient-to-br from-white/70 to-white/30"
+        />
+        <div className="mt-auto flex items-end justify-between gap-3">
+          <div className="flex gap-4 text-[11px]">
+            <span>
+              <span className="block text-white/65">Fecha</span>
+              <b className="text-[13px] font-semibold tnum">dia {fecha || "—"}</b>
+            </span>
+            <span>
+              <span className="block text-white/65">Vence</span>
+              <b className="text-[13px] font-semibold tnum">dia {vence || "—"}</b>
+            </span>
+            {limite != null && Number.isFinite(limite) && (
+              <span>
+                <span className="block text-white/65">Limite</span>
+                <b className="text-[13px] font-semibold tnum">{brl(limite)}</b>
+              </span>
+            )}
+          </div>
+          <span className="shrink-0 text-[13px] font-bold italic tracking-wide text-white/90">
+            {bandeira?.trim() || ""}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

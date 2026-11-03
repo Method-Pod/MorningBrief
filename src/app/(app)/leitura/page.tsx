@@ -1146,7 +1146,7 @@ export default function LeituraPage() {
       */}
       {lendo.length > 0 && (
         <div className="space-y-2.5">
-          <h2 className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
+          <h2 className="text-[16px] font-semibold text-fg">
             Continuar lendo
           </h2>
           <div className="grid gap-3 lg:grid-cols-2">
@@ -1155,46 +1155,72 @@ export default function LeituraPage() {
               return (
                 <Card
                   key={l.id}
-                  className="entra flex gap-3.5 p-3.5"
+                  className="entra flex gap-4 p-4"
                   style={{ "--i": i } as React.CSSProperties}
                 >
                   <button
                     type="button"
                     onClick={() => setVerId(l.id)}
-                    className="w-[58px] shrink-0 transition-transform hover:scale-[1.03]"
+                    className="w-[84px] shrink-0 transition-transform hover:-translate-y-0.5"
                   >
                     <Capa url={l.cover_url} titulo={l.title} />
                   </button>
 
-                  <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
-                    <div className="min-w-0">
-                      <button
-                        type="button"
-                        onClick={() => setVerId(l.id)}
-                        className="block w-full text-left"
-                      >
-                        <p className="line-clamp-2 text-[13px] font-semibold leading-snug hover:text-brand-400">
-                          {l.title}
+                  <div className="flex min-w-0 flex-1 flex-col gap-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => setVerId(l.id)}
+                          className="block w-full text-left"
+                        >
+                          <p className="line-clamp-2 text-[15px] font-semibold leading-snug hover:text-brand-400">
+                            {l.title}
+                          </p>
+                        </button>
+                        <p className="mt-0.5 truncate text-[12px] text-fg-mute">
+                          {l.authors ?? "—"}
                         </p>
-                      </button>
-                      <p className="mt-0.5 truncate text-[11px] text-fg-mute">
-                        {l.authors ?? "—"}
-                      </p>
+                      </div>
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-ink-800 px-2.5 py-1 text-[11px] font-semibold text-fg-dim">
+                        <span className="h-2 w-2 rounded-full bg-brand-500" />
+                        Lendo
+                      </span>
                     </div>
 
-                    <div>
-                      {pct !== null ? (
-                        <div className="mb-2">
-                          <div className="flex items-baseline justify-between gap-2">
-                            {/* O numero em tinta de texto: a barra ao lado ja carrega a cor. */}
-                            <span className="text-[11px] font-bold text-fg tnum">
-                              {pct}%
-                            </span>
-                            <span className="text-[10.5px] text-fg-mute tnum">
-                              pág {l.current_page} de {l.total_pages}
-                            </span>
-                          </div>
-                          <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-ink-800">
+                    {/* A caixinha de progresso dos cartões da referência: o anel,
+                        a página e a barra. */}
+                    {pct !== null ? (
+                      <div className="flex items-center gap-3 rounded-[16px] border border-line bg-ink-800 p-3">
+                        <span className="relative shrink-0">
+                          <svg width="54" height="54" viewBox="0 0 54 54" className="-rotate-90">
+                            <circle cx="27" cy="27" r="22" fill="none" stroke="var(--a-line)" strokeWidth="5" />
+                            <circle
+                              cx="27"
+                              cy="27"
+                              r="22"
+                              fill="none"
+                              stroke="var(--a)"
+                              strokeWidth="5"
+                              strokeLinecap="round"
+                              strokeDasharray={(2 * Math.PI * 22).toFixed(1)}
+                              strokeDashoffset={(2 * Math.PI * 22 * (1 - pct / 100)).toFixed(1)}
+                              className="anel-desenha"
+                              style={{ "--anel-c": (2 * Math.PI * 22).toFixed(1) } as React.CSSProperties}
+                            />
+                          </svg>
+                          <span className="absolute inset-0 grid place-items-center text-[11px] font-semibold tnum">
+                            {pct}%
+                          </span>
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[13px] font-semibold tnum">
+                            pág {l.current_page} de {l.total_pages}
+                          </p>
+                          <p className="mt-0.5 text-[12px] text-fg-mute tnum">
+                            faltam {Math.max(0, (l.total_pages ?? 0) - l.current_page)} páginas
+                          </p>
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--a-line)]">
                             {/* scaleX e não width: transform roda no compositor,
                                 então a barra desliza lisa. */}
                             <div
@@ -1203,13 +1229,13 @@ export default function LeituraPage() {
                             />
                           </div>
                         </div>
-                      ) : (
-                        <p className="mb-2 text-[10.5px] text-warn">
-                          Sem total de páginas — abra o livro para informar.
-                        </p>
-                      )}
-                      {campoPagina(l)}
-                    </div>
+                      </div>
+                    ) : (
+                      <p className="rounded-[14px] bg-warn/12 px-3 py-2 text-[12px] font-medium text-warn">
+                        Sem total de páginas — abra o livro para informar.
+                      </p>
+                    )}
+                    {campoPagina(l)}
                   </div>
                 </Card>
               );
@@ -1222,7 +1248,7 @@ export default function LeituraPage() {
       {/* ------------------------------ estante ------------------------------ */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-[10px] font-medium uppercase tracking-wider text-fg-mute">
+          <h2 className="text-[16px] font-semibold text-fg">
             Biblioteca
           </h2>
           {/* Rola de lado no lugar de quebrar: com cinco prateleiras os rótulos
@@ -1313,27 +1339,23 @@ export default function LeituraPage() {
             seletor, lixeira e campo de página no mesmo espaço, e nada era
             legível. Todo o detalhe mudou para o modal.
           */
-          <ul className="grid grid-cols-3 gap-x-3 gap-y-4 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8">
+          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {daPrateleira.map((l, i) => {
               const pct = pctDe(l);
               return (
-                <li
-                  key={l.id}
-                  className="entra"
-                  style={{ "--i": i } as React.CSSProperties}
-                >
+                <li key={l.id}>
                   <button
                     type="button"
                     onClick={() => setVerId(l.id)}
-                    className="group w-full text-left"
+                    className="card group block h-full w-full p-2.5 text-left transition-transform duration-200 hover:-translate-y-1"
                   >
-                    <span className="block transition-transform duration-200 group-hover:-translate-y-1">
+                    <span className="block overflow-hidden rounded-[12px]">
                       <Capa url={l.cover_url} titulo={l.title} />
                     </span>
-                    <span className="mt-1.5 block line-clamp-2 text-[11.5px] font-semibold leading-tight group-hover:text-brand-400">
+                    <span className="mt-2 block line-clamp-2 px-0.5 text-[13px] font-semibold leading-tight group-hover:text-brand-400">
                       {l.title}
                     </span>
-                    <span className="mt-0.5 block truncate text-[10px] text-fg-mute">
+                    <span className="mt-0.5 block truncate px-0.5 text-[11px] text-fg-mute">
                       {l.authors ?? "—"}
                     </span>
                     {l.status === "reading" && pct !== null && (
