@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Plus, Repeat2, Search, Trash2 } from "lucide-react";
+import { ArrowLeft, Layers, Pencil, Plus, Receipt, Repeat2, Search, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
@@ -337,8 +337,10 @@ export default function GerenciarPage() {
         <ErroDeCarga detalhe={erroCarga} onTentar={carregar} className="mt-4" />
       )}
 
-      <Card className="mt-4 overflow-hidden">
-        <div className="flex flex-wrap gap-1.5 px-[18px] pt-[18px]">
+      {/* Filtros soltos e as contas em grade de cartões, como a tela de
+          projetos da referência. Era uma lista dentro de um cartão só. */}
+      <div className="mt-4">
+        <div className="flex flex-wrap gap-1.5">
           {FILTROS.map((f) => (
             <button
               key={f.v}
@@ -356,7 +358,7 @@ export default function GerenciarPage() {
           ))}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 px-[18px] pb-3.5 pt-3">
+        <div className="flex flex-wrap items-center gap-2.5 pb-4 pt-3">
           <div className="relative w-full flex-1 sm:min-w-[180px]">
             <Search
               size={15}
@@ -384,7 +386,7 @@ export default function GerenciarPage() {
         </div>
 
         {carregando ? null : !visiveis.length ? (
-          <p className="border-t border-line-soft px-[18px] py-10 text-center text-[13px] text-fg-mute">
+          <p className="card px-[18px] py-10 text-center text-[13px] text-fg-mute">
             {series.length
               ? "Nenhuma conta com esses filtros."
               : rows.length
@@ -392,7 +394,7 @@ export default function GerenciarPage() {
                 : "Nenhuma conta ainda. Crie a primeira no Financeiro."}
           </p>
         ) : (
-          <ul className="border-t border-line-soft">
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {visiveis.map((s) => (
               <LinhaSerie
                 key={s.chave}
@@ -405,7 +407,7 @@ export default function GerenciarPage() {
             ))}
           </ul>
         )}
-      </Card>
+      </div>
 
       <p className="mt-3 px-1 text-[11.5px] leading-relaxed text-fg-mute">
         Contas recorrentes entram sozinhas todo dia 1º do mês. Nas parceladas,
@@ -461,54 +463,118 @@ function LinhaSerie({
             : "quitada"
           : dataCurta(s.contas[0].due_date);
 
+  /*
+   * O progresso da conta, para o anel da caixinha: parcelas pagas sobre o
+   * total na parcelada, o já abatido na abatida. Fixa e única não têm fim a
+   * medir, e a caixinha mostra a próxima data no lugar.
+   */
+  const pagas = s.contas.filter((b) => b.status === "paid").length;
+  const pct =
+    s.tipo === "parcelada" && s.parcelaTotal
+      ? Math.round((pagas / s.parcelaTotal) * 100)
+      : s.tipo === "abatida"
+        ? (() => {
+            const total = s.contas.reduce((t, b) => t + Number(b.amount), 0);
+            return total > 0 ? Math.round(((total - s.falta) / total) * 100) : 0;
+          })()
+        : null;
+  const proxima = s.emAberto[0];
+  const NOME_TIPO: Record<Tipo, string> = {
+    fixa: "Recorrente",
+    parcelada: "Parcelada",
+    abatida: "Abatida",
+    avulsa: "Única",
+  };
+  const R = 22;
+  const C = 2 * Math.PI * R;
+
   return (
-    <li
-      className={cx(
-        "group grid items-start gap-x-3 gap-y-2.5 border-b border-line-soft px-[18px] py-3.5 last:border-0",
-        // Até 1279px: nome e valor na primeira linha, bolhas e ações na segunda.
-        "grid-cols-[minmax(0,1fr)_auto]",
-        /*
-         * Quatro colunas só a partir de 1280px. Em 1024 a barra lateral come
-         * 224px e sobram 736 para o cartão: a coluna do nome fica em 244px e a
-         * linha de meta quebra em duas, deixando uma linha de 86px entre linhas
-         * de 69px. Empilhado nessa faixa há espaço para tudo em uma linha só.
-         */
-        "xl:grid-cols-[minmax(0,520px)_minmax(212px,1fr)_132px_68px] xl:items-center xl:gap-x-4 xl:gap-y-0"
-      )}
-    >
-      <div className="min-w-0 xl:col-start-1 xl:row-start-1">
-        <p className="truncate text-[13.5px] font-semibold">{s.descricao}</p>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-fg-mute">
-          <span>{cadencia}</span>
-          <span className="opacity-40">·</span>
-          <span>{s.categoria}</span>
-          {s.emAberto.length > 0 && (
-            <>
-              <span className="opacity-40">·</span>
-              <span className="font-bold text-warn tnum">
-                {s.emAberto.length} em aberto
-              </span>
-            </>
+    <li className="card group flex flex-col p-4">
+      <div className="flex items-start gap-3">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brand-500/15 text-brand-400">
+          {s.tipo === "fixa" ? (
+            <Repeat2 size={16} />
+          ) : s.tipo === "parcelada" ? (
+            <Layers size={16} />
+          ) : (
+            <Receipt size={16} />
           )}
-        </p>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[15px] font-semibold">{s.descricao}</p>
+          <p className="mt-0.5 truncate text-[12px] text-fg-mute">{s.categoria}</p>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-ink-800 px-2.5 py-1 text-[11px] font-semibold text-fg-dim">
+          <span
+            className={cx(
+              "h-2 w-2 rounded-full",
+              s.emAberto.length ? "bg-warn" : "bg-pos"
+            )}
+          />
+          {NOME_TIPO[s.tipo]}
+        </span>
       </div>
 
-      <p className="text-right text-[13.5px] font-bold tnum xl:col-start-3 xl:row-start-1">
+      <p className="mt-3 text-[24px] font-semibold leading-none tracking-[-0.03em] tnum">
         {brl(s.valor)}
       </p>
 
+      {/* A caixinha de progresso da referência: anel, a frase e a barra. */}
+      <div className="mt-3 flex items-center gap-3 rounded-[16px] border border-line bg-ink-800 p-3">
+        {pct !== null ? (
+          <span className="relative shrink-0">
+            <svg width="54" height="54" viewBox="0 0 54 54" className="-rotate-90">
+              <circle cx="27" cy="27" r={R} fill="none" stroke="var(--a-line)" strokeWidth="5" />
+              <circle
+                cx="27"
+                cy="27"
+                r={R}
+                fill="none"
+                stroke={pct >= 100 ? "var(--cor-pos)" : "var(--a)"}
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeDasharray={C.toFixed(1)}
+                strokeDashoffset={(C * (1 - Math.min(pct, 100) / 100)).toFixed(1)}
+                className="anel-desenha"
+                style={{ "--anel-c": C.toFixed(1) } as React.CSSProperties}
+              />
+            </svg>
+            <span className="absolute inset-0 grid place-items-center text-[11px] font-semibold tnum">
+              {pct}%
+            </span>
+          </span>
+        ) : (
+          <span className="grid h-[54px] w-[54px] shrink-0 place-items-center rounded-full border border-line text-fg-mute">
+            <Repeat2 size={18} />
+          </span>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-semibold">{cadencia}</p>
+          <p className="mt-0.5 truncate text-[12px] text-fg-mute">
+            {proxima
+              ? `Próxima: ${dataCurta(proxima.due_date)} · ${brl(Number(proxima.amount))}`
+              : "Nada em aberto"}
+          </p>
+          {pct !== null && (
+            <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-[var(--a-line)]">
+              <span
+                className="cresce block h-full rounded-full"
+                style={{
+                  width: `${Math.min(pct, 100)}%`,
+                  background: pct >= 100 ? "var(--cor-pos)" : "var(--a)",
+                }}
+              />
+            </span>
+          )}
+        </div>
+      </div>
+
       {/*
-        Faixa de meses: um botão por lançamento, na ordem do calendário.
-        Mostra a série inteira sem precisar expandir nada, e é por onde se abre
-        um mês específico quando ele foge do padrão dos outros.
+        A faixa de meses: um botão por lançamento, na ordem do calendário, por
+        onde se abre um mês específico. Na fixa, um botão só, "Recorrente": a
+        fila dela só cresce e não diz mais que isso.
       */}
-      <div className="flex flex-wrap items-center gap-1 xl:col-start-2 xl:row-start-1">
-        {/*
-          Recorrente é uma área só, e não um mês por bolha. A fila de bolhas
-          de uma fixa só cresce — ago, set, out, nov... — e não diz nada que
-          "Recorrente" não diga melhor: ela se repete e não tem fim. O mês
-          em aberto mais próximo é o que importa, e é ele que o clique abre.
-        */}
+      <div className="mb-3 mt-3 flex flex-wrap items-center gap-1">
         {s.tipo === "fixa" ? (
           <button
             onClick={onEditarSerie}
@@ -518,41 +584,39 @@ function LinhaSerie({
             <Repeat2 size={12} strokeWidth={2.5} />
             Recorrente
           </button>
-        ) : s.contas.map((b) => {
-          const paga = b.status === "paid";
-          const falta = restanteDe(b);
-          return (
-            <button
-              key={b.id}
-              onClick={() => onEditarConta(b)}
-              title={`${dataCurta(b.due_date)} · ${brl(b.amount)} · ${
-                paga ? "paga" : "em aberto"
-              }`}
-              aria-label={`Editar ${s.descricao} de ${dataCurta(b.due_date)}, ${
-                paga ? "paga" : "em aberto"
-              }`}
-              className={cx(
-                "h-8 rounded-full px-2.5 text-[10.5px] font-bold uppercase tracking-wide transition-colors tnum lg:h-[26px] lg:px-2",
-                paga
-                  ? "bg-pos/14 text-pos hover:bg-pos/24"
-                  : "bg-warn/14 text-warn ring-1 ring-inset ring-warn/25 hover:bg-warn/24"
-              )}
-            >
-              {mesCurto(b.due_date)}
-              {ehAbatida(b) && falta > 0 && (
-                <span className="ml-1 font-semibold opacity-70">
-                  {Math.round((1 - falta / Number(b.amount)) * 100)}%
-                </span>
-              )}
-            </button>
-          );
-        })}
+        ) : (
+          s.contas.map((b) => {
+            const paga = b.status === "paid";
+            const falta = restanteDe(b);
+            return (
+              <button
+                key={b.id}
+                onClick={() => onEditarConta(b)}
+                title={`${dataCurta(b.due_date)} · ${brl(b.amount)} · ${
+                  paga ? "paga" : "em aberto"
+                }`}
+                aria-label={`Editar ${s.descricao} de ${dataCurta(b.due_date)}, ${
+                  paga ? "paga" : "em aberto"
+                }`}
+                className={cx(
+                  "h-8 rounded-full px-2.5 text-[10.5px] font-bold uppercase tracking-wide transition-colors tnum lg:h-[26px] lg:px-2",
+                  paga
+                    ? "bg-pos/14 text-pos hover:bg-pos/24"
+                    : "bg-warn/14 text-warn ring-1 ring-inset ring-warn/25 hover:bg-warn/24"
+                )}
+              >
+                {mesCurto(b.due_date)}
+                {ehAbatida(b) && falta > 0 && (
+                  <span className="ml-1 font-semibold opacity-70">
+                    {Math.round((1 - falta / Number(b.amount)) * 100)}%
+                  </span>
+                )}
+              </button>
+            );
+          })
+        )}
 
-        {/*
-          Vaga tracejada no fim da faixa: as parcelas que existem no total mas
-          não têm lançamento. Fica no mesmo lugar onde elas vão aparecer, então
-          o que falta se lê junto com o que já está lá.
-        */}
+        {/* As parcelas que existem no total mas não têm lançamento. */}
         {s.faltam > 0 && (
           <button
             onClick={onGerarParcelas}
@@ -566,22 +630,27 @@ function LinhaSerie({
         )}
       </div>
 
-      <div className="flex shrink-0 justify-end gap-0.5 transition-opacity xl:col-start-4 xl:row-start-1 lg:opacity-0 lg:group-hover:opacity-100 lg:focus-within:opacity-100">
-        <button
-          onClick={onEditarSerie}
-          aria-label={`Editar ${s.descricao}`}
-          className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
-        >
-          <Pencil size={15} />
-        </button>
-        <button
-          onClick={onExcluir}
-          aria-label={`Excluir os lançamentos futuros de ${s.descricao}`}
-          title="Exclui o que ainda vai vencer. O histórico fica."
-          className="grid h-8 w-8 place-items-center rounded-[10px] text-fg-mute transition-colors hover:bg-neg/15 hover:text-neg"
-        >
-          <Trash2 size={15} />
-        </button>
+      <div className="mt-auto flex items-center justify-between gap-2 border-t border-line-soft pt-3">
+        <span className="text-[12px] font-semibold text-warn tnum">
+          {s.emAberto.length > 0 ? `${s.emAberto.length} em aberto` : ""}
+        </span>
+        <div className="flex shrink-0 gap-1.5">
+          <button
+            onClick={onEditarSerie}
+            aria-label={`Editar ${s.descricao}`}
+            className="grid h-9 w-9 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-fg/[0.08] hover:text-fg"
+          >
+            <Pencil size={15} />
+          </button>
+          <button
+            onClick={onExcluir}
+            aria-label={`Excluir os lançamentos futuros de ${s.descricao}`}
+            title="Exclui o que ainda vai vencer. O histórico fica."
+            className="grid h-9 w-9 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-neg/15 hover:text-neg"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
       </div>
     </li>
   );

@@ -409,43 +409,62 @@ export default function ClientesPage() {
             const abertas = contagem.porCliente.get(c.id) ?? 0;
             return (
               <Card key={c.id}>
-                <div className="flex items-start gap-2.5 px-[18px] pt-[18px]">
-                  {/* Uma cor por cliente virou seis escolhas na hora de
-                      cadastrar, para uma bolinha de 10px que ninguem usa para
-                      achar nada — a ficha e ordenada por nome. Agora ela e a
-                      cor de destaque do app, como o resto. */}
-                  <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-brand-500" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-bold">
+                {/*
+                  O cartão de cliente da referência: avatar com as iniciais, o
+                  nome, e uma caixinha com os números. Os botões viram círculos
+                  com borda, como os de lá.
+                */}
+                <div className="flex items-start gap-3 px-5 pt-5">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-500/18 text-[14px] font-bold text-brand-400">
+                    {c.nome
+                      .split(/\s+/)
+                      .filter(Boolean)
+                      .slice(0, 2)
+                      .map((p) => p[0]?.toUpperCase())
+                      .join("")}
+                  </span>
+                  <span className="min-w-0 flex-1 pt-0.5">
+                    <span className="block truncate text-[15px] font-semibold">
                       {c.nome}
                     </span>
-                    <span className="mt-0.5 block text-[11.5px] text-fg-mute">
-                      {abertas === 0
-                        ? "nada em aberto"
-                        : `${abertas} em aberto`}
-                      {meus.length > 0 &&
-                        ` · ${meus.length} projeto${meus.length > 1 ? "s" : ""}`}
+                    <span className="mt-0.5 block text-[12px] text-fg-mute">
+                      {meus.length === 0
+                        ? "sem projeto"
+                        : `${meus.length} projeto${meus.length > 1 ? "s" : ""}`}
                     </span>
                   </span>
                   <button
                     type="button"
                     onClick={() => editarCliente(c)}
                     aria-label={`Editar ${c.nome}`}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-fg/[0.08] hover:text-fg"
                   >
-                    <Pencil size={13} />
+                    <Pencil size={14} />
                   </button>
                   <button
                     type="button"
                     onClick={() => excluirCliente(c)}
                     aria-label={`Excluir ${c.nome}`}
-                    className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-fg-mute transition-colors hover:bg-neg/12 hover:text-neg"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-neg/12 hover:text-neg"
                   >
-                    <Trash2 size={13} />
+                    <Trash2 size={14} />
                   </button>
                 </div>
 
-                <div className="px-[18px] pb-[18px] pt-2.5">
+                <div className="mx-5 mt-4 grid grid-cols-2 gap-3 rounded-[16px] border border-line bg-ink-800 p-3">
+                  <span>
+                    <span className="block text-[11.5px] text-fg-mute">Em aberto</span>
+                    <b className={cx("mt-0.5 block text-[18px] font-semibold tnum", abertas > 0 && "text-brand-400")}>
+                      {abertas}
+                    </b>
+                  </span>
+                  <span>
+                    <span className="block text-[11.5px] text-fg-mute">Projetos</span>
+                    <b className="mt-0.5 block text-[18px] font-semibold tnum">{meus.length}</b>
+                  </span>
+                </div>
+
+                <div className="px-5 pb-5 pt-3">
                   {meus.length > 0 && (
                     <ListaProjetos
                       projetos={meus}
@@ -466,7 +485,7 @@ export default function ClientesPage() {
                       setEditandoProjeto(null);
                       setNomeProjeto("");
                     }}
-                    className="flex h-8 w-full items-center justify-center gap-1.5 rounded-[10px] border border-dashed border-line text-[12px] font-semibold text-fg-mute transition-colors hover:border-brand-400 hover:text-brand-400"
+                    className="flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-dashed border-line text-[12px] font-semibold text-fg-mute transition-colors hover:border-brand-400 hover:text-brand-400"
                   >
                     <Plus size={13} />
                     projeto

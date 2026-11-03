@@ -13,6 +13,7 @@ import {
   StickyNote,
   Tag,
   Trash2,
+  Clock,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
@@ -449,63 +450,64 @@ export default function AnotacoesPage() {
         : "bg-ink-800 text-fg-mute hover:text-fg-dim"
     );
 
+  /*
+   * A nota como cartão de grade, no desenho dos cartões de projeto da
+   * referência: em cima o ícone na cor da nota e as categorias, no meio o
+   * título em destaque, embaixo quando mudou e se está fixada. Era uma linha
+   * comprida por nota, que enchia a tela de faixas iguais.
+   */
   const linha = (n: NotaDaLista) => (
     <li
       key={n.id}
-      className="card group flex items-center gap-2.5 px-4 transition-colors hover:bg-ink-850 sm:px-5"
+      className="card group relative flex min-h-[156px] flex-col p-4 transition-[transform,background-color] duration-200 hover:-translate-y-0.5"
     >
-      <Link
-        href={`/anotacoes/${n.id}`}
-        className="flex min-w-0 flex-1 items-center gap-2.5 py-2.5"
-      >
+      <div className="flex items-start justify-between gap-2">
         <span
           className={cx(
-            "grid h-8 w-8 shrink-0 place-items-center rounded-[10px]",
+            "grid h-9 w-9 shrink-0 place-items-center rounded-full",
             COR_DO_ICONE[n.color] ?? COR_DO_ICONE.blue
           )}
         >
           <FileText size={15} />
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-semibold">
-            {n.title || "Sem título"}
-          </span>
-          <span className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-fg-mute">
-            {n.pinned && (
-              <>
-                <Pin size={9} />
-                fixada ·
-              </>
-            )}
-            {dateTimeBR(n.updated_at)}
-            {/* As categorias na mesma linha fraca da data: são rótulo, não
-                conteúdo, e uma linha própria para elas faria a altura do
-                índice crescer sem dizer mais. */}
-            {(daNota.get(n.id) ?? []).slice(0, 2).map((cid) => (
-              <span
-                key={cid}
-                className="inline-flex items-center gap-1 rounded-full bg-brand-500/12 px-1.5 py-0.5 text-[9.5px] font-medium text-brand-400"
-              >
-                {nomeDaCat.get(cid)}
-              </span>
-            ))}
-            {(daNota.get(n.id) ?? []).length > 2 && (
-              <span className="tnum">
-                +{(daNota.get(n.id) ?? []).length - 2}
-              </span>
-            )}
-          </span>
+        <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-1">
+          {n.pinned && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-ink-800 px-2 py-0.5 text-[10.5px] font-semibold text-fg-dim">
+              <Pin size={10} />
+              fixada
+            </span>
+          )}
+          {(daNota.get(n.id) ?? []).slice(0, 2).map((cid) => (
+            <span
+              key={cid}
+              className="inline-flex max-w-[140px] items-center truncate rounded-full bg-brand-500/15 px-2 py-0.5 text-[10.5px] font-semibold text-brand-400"
+            >
+              {nomeDaCat.get(cid)}
+            </span>
+          ))}
+          {(daNota.get(n.id) ?? []).length > 2 && (
+            <span className="rounded-full bg-ink-800 px-2 py-0.5 text-[10.5px] font-semibold text-fg-mute tnum">
+              +{(daNota.get(n.id) ?? []).length - 2}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* O cartão inteiro abre a nota: o link cobre tudo por baixo do menu. */}
+      <Link
+        href={`/anotacoes/${n.id}`}
+        className="mt-3 block min-w-0 flex-1 after:absolute after:inset-0 after:rounded-[inherit] after:content-['']"
+      >
+        <span className="line-clamp-2 text-[16px] font-semibold leading-snug tracking-[-0.01em]">
+          {n.title || "Sem título"}
         </span>
       </Link>
 
-      {/*
-        Um ponto de entrada, com o nome de cada ação escrito.
-        
-        Eram três ícones cinzas de tamanho igual, e três ícones iguais não
-        dizem qual é qual até você passar o mouse e ler o balãozinho. No
-        telefone, sem hover, ficavam visíveis sempre e disputavam a largura com
-        o nome da nota.
-      */}
+      <div className="relative mt-3 flex items-center justify-between gap-2 border-t border-line-soft pt-3">
+        <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-fg-mute">
+          <Clock size={12} className="shrink-0" />
+          <span className="truncate">{dateTimeBR(n.updated_at)}</span>
+        </span>
       <MenuSuspenso
         rotulo={`Ações de ${n.title || "anotação"}`}
         itens={[
@@ -527,6 +529,7 @@ export default function AnotacoesPage() {
           },
         ]}
       />
+      </div>
     </li>
   );
 
@@ -663,7 +666,7 @@ export default function AnotacoesPage() {
         /* Cada nota no seu próprio cartão, com um respiro entre elas. Numa
            moldura só, separadas por um fio, elas se liam como uma tabela
            contínua — pedido dele: separar. */
-        <ul className="flex flex-col gap-2">{vista.map(linha)}</ul>
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{vista.map(linha)}</ul>
       )}
 
       {temMais && (
