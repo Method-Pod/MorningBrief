@@ -55,6 +55,7 @@ import {
   MESES_RETENCAO_PAGAS,
 } from "@/lib/limpeza";
 import { evolucaoDosGastos } from "@/lib/evolucao";
+import { imagemReduzida, voltarAoOriginal } from "@/lib/imagem";
 import { EvolucaoMensal } from "@/components/charts";
 import {
   estenderEventosRecorrentes,
@@ -546,7 +547,7 @@ export default function HomePage() {
         </div>
 
         {/* Data e clima na mesma pílula, separados por um traço fino. */}
-        <span className="vidro-flutuante flex items-center gap-2.5 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-semibold text-fg-dim">
+        <span className="vidro-solido flex items-center gap-2.5 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-semibold text-fg-dim">
           {now.toLocaleDateString("pt-BR", {
             weekday: "long",
             day: "2-digit",
@@ -561,7 +562,7 @@ export default function HomePage() {
       )}
 
       {limpas > 0 && (
-        <div className="vidro-flutuante mb-4 flex items-center gap-2.5 rounded-full px-4 py-2.5 text-[12.5px] text-fg-mute">
+        <div className="vidro-solido mb-4 flex items-center gap-2.5 rounded-full px-4 py-2.5 text-[12.5px] text-fg-mute">
           <Trash2 size={15} className="shrink-0" />
           {limpas} demanda{limpas > 1 ? "s" : ""} concluída
           {limpas > 1 ? "s" : ""} de ontem {limpas > 1 ? "foram" : "foi"}{" "}
@@ -1016,9 +1017,13 @@ export default function HomePage() {
                       {r.image_url ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={r.image_url}
+                          /* Na medida da miniatura: a imagem guardada chegava
+                             a 835 KB para aparecer em 181 pixels. */
+                          src={imagemReduzida(r.image_url, 210) ?? undefined}
                           alt=""
                           loading="lazy"
+                          decoding="async"
+                          onError={voltarAoOriginal}
                           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
                         />
                       ) : (

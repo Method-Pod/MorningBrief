@@ -30,7 +30,7 @@ export function Kpi({
           ícone. */}
       <span
         className={cx(
-          "vidro-flutuante grid h-8 w-8 shrink-0 place-items-center rounded-full [&>svg]:h-3.5 [&>svg]:w-3.5 sm:h-11 sm:w-11 sm:[&>svg]:h-[17px] sm:[&>svg]:w-[17px]",
+          "vidro-solido grid h-8 w-8 shrink-0 place-items-center rounded-full [&>svg]:h-3.5 [&>svg]:w-3.5 sm:h-11 sm:w-11 sm:[&>svg]:h-[17px] sm:[&>svg]:w-[17px]",
           tom === "neg" ? "text-neg" : "text-fg-dim"
         )}
       >

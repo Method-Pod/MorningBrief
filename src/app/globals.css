@@ -896,6 +896,16 @@ body::before {
     assenta 2.8s cubic-bezier(0.16, 1, 0.3, 1) both,
     deriva 46s ease-in-out 2.8s infinite alternate;
 }
+/*
+ * No telefone e em tela de toque o fundo assenta e para: a deriva sem fim é
+ * trabalho de placa de vídeo o tempo todo, e no celular isso é bateria. No
+ * computador, onde ela não custa nada que se perceba, continua.
+ */
+@media (hover: none), (max-width: 1023px) {
+  body::before {
+    animation: assenta 2.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
 @keyframes assenta {
   from {
     transform: scale(1.14);
@@ -1057,6 +1067,18 @@ body::before {
   box-shadow: inset 0 1px 0 var(--vidro-brilho), var(--elev-3);
   -webkit-backdrop-filter: blur(24px) saturate(1.5);
   backdrop-filter: blur(24px) saturate(1.5);
+}
+
+/*
+ * O mesmo vidro, sem desfocar o que está atrás -- para peça pequena que não
+ * passa por cima de conteúdo: o círculo dos números do cabeçalho, a pílula
+ * de data. Desfoque custa: o navegador refaz o borrão de cada elemento a cada
+ * quadro em que o fundo se mexe, e num círculo de 44px a diferença não se vê.
+ */
+@utility vidro-solido {
+  background: var(--vidro-forte);
+  border: 1px solid var(--vidro-borda);
+  box-shadow: inset 0 1px 0 var(--vidro-brilho);
 }
 
 /*

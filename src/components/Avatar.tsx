@@ -5,6 +5,8 @@ import { Camera, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { cx } from "./ui";
+import { imagemReduzida, voltarAoOriginal } from "@/lib/imagem";
+import { reduzirImagem } from "@/lib/reduzirImagem";
 
 const BUCKET = "avatars";
 const LIMITE_MB = 2;
@@ -95,13 +97,19 @@ export function Iniciais({
         // onError volta para as iniciais em vez de deixar um quadro vazio.
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={url}
+          /* Na medida do círculo: a foto guardada tinha 1259×1351 para
+             aparecer em 38 pixels. Ver lib/imagem. `key` para a troca de foto
+             recomeçar a tentativa do original do zero. */
+          key={url}
+          src={imagemReduzida(url, tamanho, { altura: tamanho }) ?? undefined}
           alt={`Foto de ${nome}`}
           width={tamanho}
           height={tamanho}
           loading="eager"
           decoding="sync"
-          onError={() => setFalhou(true)}
+          onError={(e) => {
+            if (!voltarAoOriginal(e)) setFalhou(true);
+          }}
           className="h-full w-full object-cover"
           style={{ aspectRatio: "1 / 1" }}
         />
@@ -146,14 +154,17 @@ export function TrocarFoto({
   };
 
   const enviar = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const arquivo = e.target.files?.[0];
+    const escolhido = e.target.files?.[0];
     e.target.value = ""; // permite reenviar o mesmo arquivo
-    if (!arquivo) return;
+    if (!escolhido) return;
     setErro("");
 
-    if (!TIPOS.includes(arquivo.type)) return setErro("Use JPG, PNG ou WebP.");
-    if (arquivo.size > LIMITE_MB * 1024 * 1024)
+    if (!TIPOS.includes(escolhido.type)) return setErro("Use JPG, PNG ou WebP.");
+    if (escolhido.size > LIMITE_MB * 1024 * 1024)
       return setErro(`A imagem precisa ter menos de ${LIMITE_MB} MB.`);
+    /* A foto aparece em no máximo 112 pixels: 512 sobra para a tela de alta
+       densidade, e o arquivo sobe com uma fração do tamanho. */
+    const arquivo = await reduzirImagem(escolhido, 512);
 
     setOcupado(true);
     const uid = await currentUserId(supabase);

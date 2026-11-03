@@ -4,6 +4,8 @@ import * as React from "react";
 import { BookOpen, ImagePlus, Loader2, Star, Trash2 } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cx } from "./ui";
+import { imagemReduzida, voltarAoOriginal } from "@/lib/imagem";
+import { reduzirImagem } from "@/lib/reduzirImagem";
 
 export const BUCKET_CAPAS = "capas";
 
@@ -25,11 +27,13 @@ export async function enviarCapa(
   supabase: SupabaseClient,
   uid: string,
   bookId: string,
-  arquivo: File
+  escolhido: File
 ): Promise<{ url?: string; erro?: string }> {
-  if (!TIPOS.includes(arquivo.type)) return { erro: "Use JPG, PNG ou WebP." };
-  if (arquivo.size > LIMITE_MB * 1024 * 1024)
+  if (!TIPOS.includes(escolhido.type)) return { erro: "Use JPG, PNG ou WebP." };
+  if (escolhido.size > LIMITE_MB * 1024 * 1024)
     return { erro: `A imagem precisa ter menos de ${LIMITE_MB} MB.` };
+  /* Reduzida antes de subir: a capa nunca aparece maior que ~440 pixels. */
+  const arquivo = await reduzirImagem(escolhido, 900);
 
   const caminho = `${uid}/${bookId}.${extDe(arquivo.type)}`;
   const { error } = await supabase.storage
@@ -101,7 +105,9 @@ export function Capa({
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={url}
+      /* A capa aparece em no máximo ~220px de largura. Ver lib/imagem. */
+      key={url}
+      src={imagemReduzida(url, 220) ?? undefined}
       alt=""
       /*
        * `lazy` + `async`: a grade pode ter dezenas de capas, e sem isto todas
@@ -111,7 +117,9 @@ export function Capa({
        */
       loading="lazy"
       decoding="async"
-      onError={() => setQuebrou(true)}
+      onError={(e) => {
+        if (!voltarAoOriginal(e)) setQuebrou(true);
+      }}
       className={cx(
         "aspect-[2/3] w-full rounded-[10px] bg-ink-800 object-cover",
         className

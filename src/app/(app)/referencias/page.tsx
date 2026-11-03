@@ -15,6 +15,8 @@ import {
   Link2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { imagemReduzida, voltarAoOriginal } from "@/lib/imagem";
+import { reduzirImagem } from "@/lib/reduzirImagem";
 import { decodificarEntidades } from "@/lib/format";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
@@ -670,10 +672,13 @@ export default function ReferenciasPage() {
     /* A imagem sobe depois de existir o id, porque o caminho no bucket usa ele
        — um arquivo por referência, então trocar substitui em vez de acumular. */
     if (arquivo) {
-      const caminho = `${uid}/${id}.${extDe(arquivo.type)}`;
+      /* Reduzida antes de subir: print de tela chegava a 800 KB para virar
+         uma miniatura. 1600 de lado ainda serve para abrir grande. */
+      const reduzido = await reduzirImagem(arquivo, 1600);
+      const caminho = `${uid}/${id}.${extDe(reduzido.type)}`;
       const { error: envio } = await supabase.storage
         .from(BUCKET_REFERENCIAS)
-        .upload(caminho, arquivo, { upsert: true, contentType: arquivo.type });
+        .upload(caminho, reduzido, { upsert: true, contentType: reduzido.type });
       if (envio) {
         setSalvando(false);
         return setErro(
@@ -1497,11 +1502,16 @@ function CapaDaReferencia({
       {atual?.tipo === "previa" ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={atual.src}
+          /* A prévia na medida do cartão (até ~340px). Falhando a versão
+             reduzida, tenta o original antes de descer para o logo. */
+          key={atual.src}
+          src={imagemReduzida(atual.src, 340) ?? atual.src}
           alt=""
           loading="lazy"
           decoding="async"
-          onError={aoFalhar}
+          onError={(e) => {
+            if (!voltarAoOriginal(e)) aoFalhar();
+          }}
           className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
       ) : atual ? (
