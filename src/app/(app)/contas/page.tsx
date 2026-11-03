@@ -1702,7 +1702,7 @@ export default function ContasPage() {
         sub="Vencimento, valor e categoria."
         /* Painel à direita, como a referência abre um item, com o resumo da
            conta no topo. Pedido dele. */
-        lateral
+        size="lg"
         topo={
           <ResumoDaConta
             descricao={form.description}

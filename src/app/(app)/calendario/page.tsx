@@ -462,18 +462,18 @@ export default function CalendarioPage() {
               <button
                 onClick={() => shift(-1)}
                 aria-label="Mês anterior"
-                className="rounded-lg border border-line p-1.5 text-fg-dim transition-colors hover:bg-ink-800 hover:text-fg"
+                className="grid h-9 w-9 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-fg/[0.08] hover:text-fg"
               >
                 <ChevronLeft size={15} />
               </button>
               <button
                 onClick={() => shift(1)}
                 aria-label="Próximo mês"
-                className="rounded-lg border border-line p-1.5 text-fg-dim transition-colors hover:bg-ink-800 hover:text-fg"
+                className="grid h-9 w-9 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-dim transition-colors hover:bg-fg/[0.08] hover:text-fg"
               >
                 <ChevronRight size={15} />
               </button>
-              <h2 className="ml-1 text-[15px] font-semibold tracking-tight">
+              <h2 className="ml-1.5 text-[18px] font-semibold tracking-[-0.02em]">
                 {MONTHS[cursor.m]}{" "}
                 <span className="text-fg-mute">{cursor.y}</span>
               </h2>
@@ -483,11 +483,13 @@ export default function CalendarioPage() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-7 border-y border-line-soft">
+          {/* Os dias como blocos de vidro separados, como a agenda da
+              referência: a folga entre eles é o que desenha a grade. */}
+          <div className="grid grid-cols-7 gap-1.5 px-2 sm:px-3">
             {DOW.map((d, i) => (
               <div
                 key={i}
-                className="py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-fg-mute"
+                className="py-2 text-left text-[11px] font-semibold text-fg-mute sm:px-2"
               >
                 <span className="hidden sm:inline">{DOW_FULL[i]}</span>
                 <span className="sm:hidden">{d}</span>
@@ -495,7 +497,7 @@ export default function CalendarioPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-7 gap-1.5 px-2 pb-3 sm:px-3">
             {grid.map((cell) => {
               const data = index.get(cell.iso);
               const isToday = cell.iso === today;
@@ -514,11 +516,12 @@ export default function CalendarioPage() {
                   onClick={() => setSelected(cell.iso)}
                   onDoubleClick={() => startNew(cell.iso)}
                   className={cx(
-                    "relative flex min-h-[62px] flex-col items-start gap-1 border-b border-r border-line-soft/60 p-1.5 text-left transition-colors last:border-r-0 sm:min-h-[84px] sm:p-2",
+                    "relative flex min-h-[62px] flex-col items-start gap-1 rounded-[12px] border p-1.5 text-left transition-[background-color,border-color,transform] duration-200 hover:-translate-y-px sm:min-h-[92px] sm:rounded-[16px] sm:p-2",
                     !cell.inMonth && "opacity-35",
-                    isSel
-                      ? "bg-brand-500/10 ring-1 ring-inset ring-brand-500/40"
-                      : "hover:bg-ink-800/40"
+                    isToday
+                      ? "border-brand-500/50 bg-brand-500/20"
+                      : "border-line bg-ink-800 hover:bg-fg/[0.08]",
+                    isSel && "ring-2 ring-inset ring-brand-500/70"
                   )}
                 >
                   <span
@@ -538,8 +541,7 @@ export default function CalendarioPage() {
                     {evs.slice(0, 2).map((e) => (
                       <div
                         key={e.id}
-                        className="flex items-center gap-1 truncate rounded px-1 py-0.5 text-[9.5px] text-fg-dim"
-                        style={{ background: "rgba(255,255,255,.04)" }}
+                        className="flex items-center gap-1 truncate rounded-full bg-[var(--vidro)] px-1.5 py-0.5 text-[9.5px] font-medium text-fg-dim sm:text-[10.5px]"
                       >
                         <span
                           className={cx(

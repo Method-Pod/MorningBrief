@@ -32,26 +32,28 @@ export function FaixaResumo({
   className?: string;
 }) {
   return (
+    /* Blocos de vidro separados, como os números da referência: cada um é
+       um cartão, e a folga entre eles faz o papel do fio de antes. */
     <div
       className={cx(
-        "grid grid-cols-2 gap-px overflow-hidden rounded-[18px] border border-line bg-line",
+        "grid grid-cols-2 gap-3",
         itens.length >= 4 ? "sm:grid-cols-4" : "sm:grid-cols-3",
         className
       )}
     >
       {itens.map((it) => (
-        <div key={it.rotulo} className="bg-ink-900 px-4 py-3.5">
-          <span className="block text-[11.5px] text-fg-mute">{it.rotulo}</span>
+        <div key={it.rotulo} className="card px-5 py-4">
+          <span className="block text-[12px] font-medium text-fg-mute">{it.rotulo}</span>
           <span
             className={cx(
-              "mt-0.5 block text-[19px] font-bold tracking-[-0.04em] tnum",
+              "mt-1 block text-[26px] font-semibold leading-tight tracking-[-0.03em] tnum",
               it.tom === "pos" ? "text-pos" : "text-fg"
             )}
           >
             {it.valor}
           </span>
           {it.detalhe && (
-            <span className="mt-0.5 block text-[11px] text-fg-mute">
+            <span className="mt-0.5 block text-[12px] text-fg-mute">
               {it.detalhe}
             </span>
           )}

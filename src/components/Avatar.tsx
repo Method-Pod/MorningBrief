@@ -116,10 +116,14 @@ export function TrocarFoto({
   nome,
   url,
   onTrocou,
+  grande = false,
 }: {
   nome: string;
   url: string | null;
   onTrocou: (url: string | null) => void;
+  /* A foto grande e centralizada do cartão de perfil (a Conta, no desenho
+     da referência), com os botões embaixo. */
+  grande?: boolean;
 }) {
   const supabase = React.useMemo(() => createClient(), []);
   const input = React.useRef<HTMLInputElement>(null);
@@ -226,14 +230,17 @@ export function TrocarFoto({
 
   return (
     <div>
-      <div className="flex items-center gap-3.5">
+      <div className={cx("flex items-center gap-3.5", grande && "flex-col text-center")}>
         <div className="relative">
-          <Iniciais nome={nome} url={url} tamanho={56} />
+          <Iniciais nome={nome} url={url} tamanho={grande ? 112 : 56} />
           <button
             onClick={() => input.current?.click()}
             disabled={ocupado}
             aria-label="Trocar foto de perfil"
-            className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full bg-ink-900 text-fg-dim shadow-[var(--elev-1)] transition-colors hover:text-brand-400 disabled:opacity-50"
+            className={cx(
+              "absolute grid place-items-center rounded-full border border-[var(--vidro-borda)] bg-ink-900 text-fg-dim shadow-[var(--elev-1)] transition-colors hover:text-brand-400 disabled:opacity-50",
+              grande ? "bottom-1 right-1 h-9 w-9" : "-bottom-1 -right-1 h-7 w-7"
+            )}
           >
             {ocupado ? (
               <Loader2 size={13} className="girar-lento" />
@@ -248,11 +255,11 @@ export function TrocarFoto({
           <p className="mt-0.5 text-[11.5px] text-fg-mute">
             JPG, PNG ou WebP, até {LIMITE_MB} MB.
           </p>
-          <div className="mt-2 flex gap-2">
+          <div className={cx("mt-2 flex gap-2", grande && "justify-center")}>
             <button
               onClick={() => input.current?.click()}
               disabled={ocupado}
-              className="rounded-[10px] bg-ink-800 px-2.5 py-1.5 text-[11.5px] font-semibold text-fg-dim transition-colors hover:text-fg disabled:opacity-50"
+              className="rounded-full border border-line bg-ink-800 px-3 py-1.5 text-[11.5px] font-semibold text-fg-dim transition-colors hover:text-fg disabled:opacity-50"
             >
               {url ? "Trocar" : "Enviar"}
             </button>
@@ -260,7 +267,7 @@ export function TrocarFoto({
               <button
                 onClick={remover}
                 disabled={ocupado}
-                className="inline-flex items-center gap-1.5 rounded-[10px] bg-neg/10 px-2.5 py-1.5 text-[11.5px] font-semibold text-neg transition-colors hover:bg-neg/20 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-full bg-neg/10 px-3 py-1.5 text-[11.5px] font-semibold text-neg transition-colors hover:bg-neg/20 disabled:opacity-50"
               >
                 <Trash2 size={12} />
                 Remover

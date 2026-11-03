@@ -501,14 +501,14 @@ export default function HomePage() {
         os números que importam ao abrir o dia, cada um com o seu ícone num
         círculo de vidro. Data e clima ficam na pílula da direita.
       */}
-      <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-5">
+      <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-3 sm:gap-y-5">
         <h1 className="titulo-pagina w-full min-w-0 sm:w-auto">
           {greeting()},
           <br />
           <span className="text-fg-dim">{nome ? `${nome}!` : "bem-vindo!"}</span>
         </h1>
 
-        <div className="grid w-full grid-cols-2 gap-x-4 gap-y-4 sm:flex sm:w-auto sm:flex-1 sm:flex-wrap sm:items-center sm:gap-x-7">
+        <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-3 sm:w-auto sm:flex-1 sm:gap-x-7">
           <Kpi
             icone={<CheckCircle2 size={17} />}
             valor={

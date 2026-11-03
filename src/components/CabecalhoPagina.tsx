@@ -24,10 +24,13 @@ export function Kpi({
   tom?: "neg";
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-3">
+    <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+      {/* No telefone tudo encolhe -- círculo, ícone, número e rótulo --, para
+          os três caberem numa linha. Pedido dele: diminuir, sem tirar o
+          ícone. */}
       <span
         className={cx(
-          "vidro-flutuante grid h-11 w-11 shrink-0 place-items-center rounded-full",
+          "vidro-flutuante grid h-8 w-8 shrink-0 place-items-center rounded-full [&>svg]:h-3.5 [&>svg]:w-3.5 sm:h-11 sm:w-11 sm:[&>svg]:h-[17px] sm:[&>svg]:w-[17px]",
           tom === "neg" ? "text-neg" : "text-fg-dim"
         )}
       >
@@ -37,7 +40,7 @@ export function Kpi({
         <span className="flex flex-wrap items-center gap-2">
           <b
             className={cx(
-              "text-[22px] font-semibold leading-none tracking-[-0.03em] tnum",
+              "text-[18px] font-semibold leading-none tracking-[-0.03em] tnum sm:text-[22px]",
               tom === "neg" && "text-neg"
             )}
           >
@@ -45,7 +48,7 @@ export function Kpi({
           </b>
           {selo}
         </span>
-        <span className="mt-1 block truncate text-[12px] font-medium text-fg-mute">
+        <span className="mt-1 block truncate text-[11px] font-medium text-fg-mute sm:text-[12px]">
           {rotulo}
         </span>
       </span>
@@ -57,8 +60,8 @@ export function Kpi({
  * O título da tela e os números dela, lado a lado.
  *
  * No telefone o título ocupa a linha inteira e os números descem para uma
- * grade de duas colunas; do `sm` em diante eles seguem o título na mesma
- * linha, como na referência.
+ * linha só, compacta; do `sm` em diante eles seguem o título na mesma linha,
+ * como na referência.
  */
 export function TituloComNumeros({
   titulo,
@@ -71,10 +74,10 @@ export function TituloComNumeros({
   className?: string;
 }) {
   return (
-    <div className={cx("flex min-w-0 flex-wrap items-center gap-x-8 gap-y-4", className)}>
+    <div className={cx("flex min-w-0 flex-wrap items-center gap-x-8 gap-y-3 sm:gap-y-4", className)}>
       <h1 className="titulo-pagina w-full min-w-0 sm:w-auto">{titulo}</h1>
       {children && (
-        <div className="grid w-full grid-cols-2 gap-4 sm:flex sm:w-auto sm:flex-wrap sm:items-center sm:gap-x-7">
+        <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-3 sm:w-auto sm:gap-x-7">
           {children}
         </div>
       )}

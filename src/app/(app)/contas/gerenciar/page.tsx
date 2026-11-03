@@ -926,7 +926,7 @@ function Editor({
           pagasNaSerie ? ` · ${pagasNaSerie} ${pagasNaSerie === 1 ? "paga" : "pagas"}` : ""
         }`}
         /* Painel à direita, como a referência abre um item. Pedido dele. */
-        lateral
+        size="lg"
         topo={
           <ResumoDaConta
             descricao={descricao}

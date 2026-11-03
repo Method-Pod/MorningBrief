@@ -1692,7 +1692,7 @@ export default function DemandasPage() {
         }
         /* Painel à direita, como a referência abre um item: o quadro fica à
            vista atrás, desfocado. Pedido dele. */
-        lateral
+        size="lg"
         topo={resumoDaDemanda()}
         footer={
           <>

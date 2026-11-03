@@ -26,11 +26,12 @@ const NAV = [
    */
   { href: "/", label: "Início" },
   { href: "/demandas", label: "Demandas" },
+  /* "Financeiro", a pedido dele: o nome da área, e não de uma lista. Logo
+     depois de Demandas, também a pedido dele. */
+  { href: "/contas", label: "Financeiro" },
   /* Hábitos, Aulas e Leitura num item só: as três telas ganham uma barra
      própria no topo (AbasCrescimento) e o item acende em qualquer uma. */
   { href: "/habitos", label: "Crescimento", tambem: ROTAS_CRESCIMENTO },
-  /* "Financeiro", a pedido dele: o nome da área, e não de uma lista. */
-  { href: "/contas", label: "Financeiro" },
   { href: "/referencias", label: "Referências" },
   { href: "/anotacoes", label: "Anotações" },
   { href: "/calendario", label: "Calendário" },

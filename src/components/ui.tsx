@@ -603,7 +603,7 @@ export function Modal({
   children,
   footer,
   size = "md",
-  lateral = false,
+  lateral = true,
   topo,
 }: {
   open: boolean;
@@ -615,7 +615,9 @@ export function Modal({
   /*
    * Painel de vidro à direita, na altura toda, em vez de caixa no meio — o
    * jeito da referência de abrir um item para editar: a tela atrás continua
-   * à vista, desfocada, e o painel entra deslizando da borda.
+   * à vista, desfocada, e o painel entra deslizando da borda. É o padrão de
+   * toda janela de edição, a pedido dele; só a confirmação ("Excluir?")
+   * continua no meio, porque é uma pergunta e não uma tela.
    */
   lateral?: boolean;
   /** Um bloco que vai acima do conteúdo e não rola com ele: o resumo do item. */
@@ -791,7 +793,8 @@ export function Modal({
           "vidro-flutuante relative z-10 flex w-full flex-col shadow-[inset_0_1px_0_var(--vidro-brilho),var(--elev-4)]",
           lateral
             ? cx(
-                "h-full max-w-[560px] rounded-[28px]",
+                "h-full rounded-[28px]",
+                size === "xl" ? "max-w-[860px]" : size === "lg" ? "max-w-[560px]" : "max-w-[480px]",
                 saindo ? "lado-sai" : "lado-entra"
               )
             : cx(
@@ -1022,6 +1025,8 @@ export function useConfirm() {
       open={state.open}
       onClose={close}
       title={state.titulo}
+      /* Pergunta, e não tela de edição: fica no meio. */
+      lateral={false}
       footer={
         <>
           <Button onClick={close}>Cancelar</Button>

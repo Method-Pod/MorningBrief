@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Bell,
+  CalendarDays,
   Check,
+  Clock,
   Download,
   KeyRound,
   LogOut,
@@ -29,6 +31,7 @@ import { sairDaConta } from "@/lib/sair";
 import { TEMAS, useTema } from "@/components/tema";
 import { TrocarFoto, useAvatar } from "@/components/Avatar";
 import { Button, Card, Input, cx } from "@/components/ui";
+import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
 
 type Perfil = {
   email: string;
@@ -51,6 +54,7 @@ export default function ContaPage() {
   const [erro, setErro] = React.useState("");
   const { tema, setTema } = useTema();
   const { url: foto, setUrl: setFoto } = useAvatar();
+  const [aba, setAba] = React.useState<Aba>("perfil");
 
   React.useEffect(() => {
     (async () => {
@@ -140,167 +144,265 @@ export default function ContaPage() {
   // as iniciais do avatar seguem o nome escolhido, não o handle do e-mail
   const nome = perfil.apelido || perfil.email.split("@")[0] || "você";
 
+  const desde = perfil.criadoEm
+    ? new Date(perfil.criadoEm).toLocaleDateString("pt-BR", { month: "short", year: "numeric" })
+    : "—";
+  const temaAtual = TEMAS.find((t) => t.key === tema)?.name ?? "Automático";
+
+  /*
+   * O desenho da tela de configurações da referência: à esquerda o cartão do
+   * perfil (a foto grande, o nome, o e-mail e um cartão de cor), à direita um
+   * cartão com abas que mostra uma parte por vez. Antes eram cinco cartões
+   * empilhados de peso igual, e o que se abre a tela para fazer -- trocar o
+   * nome, o tema -- ficava no meio de uma rolagem longa. As funções são as
+   * mesmas de antes, só mudaram de lugar.
+   */
   return (
-    <div className="rise max-w-[760px]">
-      <div className="mb-5">
-        <h1 className="titulo-pagina">Conta</h1>
-        <p className="mt-1 text-sm text-fg-mute">
-          Seus dados de acesso e a aparência do app.
-        </p>
-      </div>
+    <div className="rise">
+      <TituloComNumeros titulo="Conta" className="mb-6">
+        <Kpi
+          icone={<ShieldCheck size={17} />}
+          valor={perfil.confirmado ? "Confirmado" : "Pendente"}
+          rotulo="e-mail"
+          tom={perfil.confirmado ? undefined : "neg"}
+        />
+        <Kpi icone={<CalendarDays size={17} />} valor={desde} rotulo="conta criada" />
+        <Kpi
+          icone={<Clock size={17} />}
+          valor={perfil.ultimoAcesso ? dateTimeBR(perfil.ultimoAcesso).slice(0, 5) : "—"}
+          rotulo="último acesso"
+        />
+      </TituloComNumeros>
 
-      <div className="flex flex-col gap-4">
+      <div className="grid gap-4 lg:grid-cols-12">
         {/* ------------------------------ perfil ------------------------------ */}
-        <Card>
-          <Cabeca icon={<User size={14} />} titulo="Perfil" />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <TrocarFoto nome={nome} url={foto} onTrocou={setFoto} />
-
-            <div className="mt-4 border-t border-line-soft pt-4">
-              <label className="block">
-                <span className="block text-[13px] font-semibold">
-                  Como quer ser chamado
-                </span>
-                <span className="mt-0.5 block text-[11.5px] text-fg-mute">
-                  É o nome que aparece na saudação do Início. Em branco, usamos
-                  a primeira parte do seu e-mail.
-                </span>
-                <div className="mt-2.5 flex flex-wrap gap-2">
-                  <Input
-                    value={apelido}
-                    maxLength={40}
-                    onChange={(e) => {
-                      setApelido(e.target.value);
-                      setNomeOk("");
-                    }}
-                    placeholder={perfil.email.split("@")[0] || "Seu nome"}
-                    className="min-w-[180px] flex-1"
-                  />
-                  <Button
-                    onClick={salvarNome}
-                    disabled={salvandoNome || apelido.trim() === perfil.apelido}
-                  >
-                    {salvandoNome ? "Salvando..." : "Salvar"}
-                  </Button>
-                </div>
-              </label>
-
-              {nomeOk && (
-                <p className="mt-2.5 rounded-[14px] bg-pos/12 px-3.5 py-2.5 text-xs font-medium text-pos">
-                  {nomeOk}
-                </p>
-              )}
+        <Card className="min-w-0 self-start lg:col-span-4">
+          <div className="px-5 pb-5 pt-7">
+            <TrocarFoto grande nome={nome} url={foto} onTrocou={setFoto} />
+            <p className="mt-4 text-center text-[21px] font-semibold tracking-[-0.02em]">
+              {nome}
+            </p>
+            <div className="mt-2 flex justify-center">
+              <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-line bg-ink-800 px-3 py-1 text-[12px] font-medium text-fg-dim">
+                <Mail size={12} className="shrink-0" />
+                <span className="truncate">{perfil.email}</span>
+              </span>
             </div>
 
-            <dl className="mt-4 flex flex-col gap-0 border-t border-line-soft pt-1">
-              <Linha
-                rotulo="E-mail"
-                valor={perfil.email}
-                icone={<Mail size={13} />}
-              />
-              <Linha
-                rotulo="E-mail confirmado"
-                icone={<ShieldCheck size={13} />}
-                valor={
-                  perfil.confirmado ? (
-                    <span className="inline-flex items-center gap-1 font-semibold text-pos">
-                      <Check size={13} /> sim
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 font-semibold text-warn">
-                      <AlertTriangle size={13} /> pendente
-                    </span>
-                  )
-                }
-              />
-              <Linha rotulo="Conta criada em" valor={dateTimeBR(perfil.criadoEm)} />
-              <Linha
-                rotulo="Último acesso"
-                valor={dateTimeBR(perfil.ultimoAcesso)}
-              />
-            </dl>
+            {/* O cartão de cor da referência, aqui com a aparência do app. */}
+            <button
+              type="button"
+              onClick={() => setAba("aparencia")}
+              className="mt-6 block w-full rounded-[18px] border border-brand-500/35 bg-[linear-gradient(160deg,color-mix(in_srgb,var(--a)_32%,transparent),color-mix(in_srgb,var(--a)_10%,transparent))] p-4 text-left transition-transform duration-200 hover:-translate-y-0.5"
+            >
+              <span className="flex items-center justify-between gap-3">
+                <span className="text-[13px] font-semibold">Aparência</span>
+                <span className="flex items-center gap-1.5 text-[20px] font-semibold tracking-[-0.02em]">
+                  {tema === "claro" ? <Sun size={18} /> : tema === "escuro" ? <Moon size={18} /> : <Monitor size={18} />}
+                  {temaAtual}
+                </span>
+              </span>
+              <span className="mt-1 block text-[12px] text-fg-mute">
+                {tema === "auto" ? "Seguindo o seu aparelho" : "Escolhido por você neste navegador"}
+              </span>
+            </button>
+
+            <div className="mt-4 grid grid-cols-2 divide-x divide-line-soft text-center">
+              <div>
+                <span className="block text-[11.5px] text-fg-mute">Membro desde</span>
+                <b className="mt-1 block text-[16px] font-semibold">{desde}</b>
+              </div>
+              <div>
+                <span className="block text-[11.5px] text-fg-mute">Último acesso</span>
+                <b className="mt-1 block text-[16px] font-semibold tnum">
+                  {perfil.ultimoAcesso ? dateTimeBR(perfil.ultimoAcesso).slice(0, 5) : "—"}
+                </b>
+              </div>
+            </div>
+
+            <Button variant="danger" onClick={sair} className="mt-5 w-full">
+              <LogOut size={15} />
+              Sair da conta
+            </Button>
           </div>
         </Card>
 
-        {/* --------------------------- claro e escuro --------------------------- */}
-        <Card>
-          <Cabeca icon={<Sun size={14} />} titulo="Claro ou escuro" />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <p className="text-[13px] text-fg-mute">
-              No automático, o app segue o que estiver no seu celular ou
-              computador — inclusive quando ele troca sozinho ao anoitecer. A
-              escolha fica salva neste navegador.
-            </p>
-            <div className="mt-3.5 flex flex-wrap gap-2.5">
-              {TEMAS.map((t) => (
+        {/* ------------------------------ abas ------------------------------ */}
+        <Card className="min-w-0 lg:col-span-8">
+          <div className="px-5 pt-5">
+            <div
+              role="tablist"
+              aria-label="Partes da conta"
+              className="sem-barra -mx-1 flex max-w-full gap-1 overflow-x-auto rounded-full border border-line bg-ink-800 p-1 sm:inline-flex"
+            >
+              {ABAS.map(({ chave, rotulo, Icone }) => (
                 <button
-                  key={t.key}
-                  onClick={() => setTema(t.key)}
-                  aria-pressed={tema === t.key}
+                  key={chave}
+                  type="button"
+                  role="tab"
+                  aria-selected={aba === chave}
+                  onClick={() => setAba(chave)}
                   className={cx(
-                    "flex items-center gap-2.5 rounded-[14px] px-3 py-2.5 text-[13px] font-medium transition-colors",
-                    tema === t.key
-                      ? "bg-brand-500/12 text-brand-400"
-                      : "bg-ink-800 text-fg-dim hover:text-fg"
+                    "flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[12.5px] font-semibold transition-colors",
+                    aba === chave
+                      ? "bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand"
+                      : "text-fg-mute hover:text-fg"
                   )}
                 >
-                  {t.key === "claro" ? (
-                    <Sun size={15} />
-                  ) : t.key === "escuro" ? (
-                    <Moon size={15} />
-                  ) : (
-                    <Monitor size={15} />
-                  )}
-                  {t.name}
-                  {tema === t.key && <Check size={14} />}
+                  <Icone size={14} />
+                  {rotulo}
                 </button>
               ))}
             </div>
           </div>
-        </Card>
 
-        {/* ------------------------- notificação da manhã ------------------------- */}
-        <NotificacaoDaManha />
+          <div role="tabpanel" className="px-5 pb-6 pt-5">
+            {aba === "perfil" && (
+              <>
+                <Titulo titulo="Perfil" sub="Como você aparece no app." />
+                <label className="mt-4 block">
+                  <span className="block text-[13px] font-semibold">Como quer ser chamado</span>
+                  <span className="mt-0.5 block text-[12px] text-fg-mute">
+                    É o nome que aparece na saudação do Início. Em branco, usamos
+                    a primeira parte do seu e-mail.
+                  </span>
+                  <div className="mt-2.5 flex flex-wrap gap-2">
+                    <Input
+                      value={apelido}
+                      maxLength={40}
+                      onChange={(e) => {
+                        setApelido(e.target.value);
+                        setNomeOk("");
+                      }}
+                      placeholder={perfil.email.split("@")[0] || "Seu nome"}
+                      className="min-w-[180px] flex-1"
+                    />
+                    <Button
+                      variant="primary"
+                      onClick={salvarNome}
+                      disabled={salvandoNome || apelido.trim() === perfil.apelido}
+                    >
+                      {salvandoNome ? "Salvando..." : "Salvar"}
+                    </Button>
+                  </div>
+                </label>
+                {nomeOk && (
+                  <p className="mt-2.5 rounded-[14px] bg-pos/12 px-3.5 py-2.5 text-xs font-medium text-pos">
+                    {nomeOk}
+                  </p>
+                )}
+                {erro && (
+                  <p className="mt-2.5 rounded-[14px] bg-neg/12 px-3.5 py-2.5 text-xs font-medium text-neg">
+                    {erro}
+                  </p>
+                )}
 
-        {/* ------------------------------ seus dados ------------------------------ */}
-        <ExportarDados />
-
-        {/* ------------------------------ segurança ------------------------------ */}
-        <Card>
-          <Cabeca icon={<KeyRound size={14} />} titulo="Acesso" />
-          <div className="px-[18px] pb-[18px] pt-3">
-            <p className="text-[13px] text-fg-mute">
-              A senha é trocada por link no e-mail — ela não passa por esta
-              tela.
-            </p>
-
-            {aviso && (
-              <p className="mt-3 rounded-[14px] bg-pos/12 px-3.5 py-3 text-xs font-medium text-pos">
-                {aviso}
-              </p>
+                <dl className="mt-5 grid gap-x-6 border-t border-line-soft pt-2 sm:grid-cols-2">
+                  <Linha rotulo="E-mail" valor={perfil.email} icone={<Mail size={13} />} />
+                  <Linha
+                    rotulo="E-mail confirmado"
+                    icone={<ShieldCheck size={13} />}
+                    valor={
+                      perfil.confirmado ? (
+                        <span className="inline-flex items-center gap-1 font-semibold text-pos">
+                          <Check size={13} /> sim
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 font-semibold text-warn">
+                          <AlertTriangle size={13} /> pendente
+                        </span>
+                      )
+                    }
+                  />
+                  <Linha rotulo="Conta criada em" valor={dateTimeBR(perfil.criadoEm)} />
+                  <Linha rotulo="Último acesso" valor={dateTimeBR(perfil.ultimoAcesso)} />
+                </dl>
+              </>
             )}
-            {erro && (
-              <p className="mt-3 rounded-[14px] bg-neg/12 px-3.5 py-3 text-xs font-medium text-neg">
-                {erro}
-              </p>
+
+            {aba === "aparencia" && (
+              <>
+                <Titulo
+                  titulo="Claro ou escuro"
+                  sub="No automático, o app segue o seu celular ou computador — inclusive quando ele troca sozinho ao anoitecer. A escolha fica salva neste navegador."
+                />
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  {TEMAS.map((t) => (
+                    <button
+                      key={t.key}
+                      onClick={() => setTema(t.key)}
+                      aria-pressed={tema === t.key}
+                      className={cx(
+                        "flex items-center gap-3 rounded-[18px] border p-4 text-left text-[14px] font-semibold transition-colors",
+                        tema === t.key
+                          ? "border-brand-500/50 bg-brand-500/15 text-fg"
+                          : "border-line bg-ink-800 text-fg-dim hover:bg-fg/[0.08] hover:text-fg"
+                      )}
+                    >
+                      <span
+                        className={cx(
+                          "grid h-10 w-10 shrink-0 place-items-center rounded-full",
+                          tema === t.key ? "bg-brand-500 text-on-brand" : "bg-ink-800 text-fg-mute"
+                        )}
+                      >
+                        {t.key === "claro" ? <Sun size={17} /> : t.key === "escuro" ? <Moon size={17} /> : <Monitor size={17} />}
+                      </span>
+                      <span className="min-w-0 flex-1">{t.name}</span>
+                      {tema === t.key && <Check size={15} className="text-brand-400" />}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
 
-            <div className="mt-4 flex flex-wrap gap-2.5">
-              <Button onClick={trocarSenha} disabled={enviando}>
-                <KeyRound size={15} />
-                {enviando ? "Enviando..." : "Enviar link de nova senha"}
-              </Button>
-              <Button variant="danger" onClick={sair}>
-                <LogOut size={15} />
-                Sair da conta
-              </Button>
-            </div>
+            {aba === "notificacoes" && <NotificacaoDaManha />}
+
+            {aba === "dados" && <ExportarDados />}
+
+            {aba === "acesso" && (
+              <>
+                <Titulo
+                  titulo="Acesso"
+                  sub="A senha é trocada por link no e-mail — ela não passa por esta tela."
+                />
+                {aviso && (
+                  <p className="mt-3 rounded-[14px] bg-pos/12 px-3.5 py-3 text-xs font-medium text-pos">
+                    {aviso}
+                  </p>
+                )}
+                {erro && (
+                  <p className="mt-3 rounded-[14px] bg-neg/12 px-3.5 py-3 text-xs font-medium text-neg">
+                    {erro}
+                  </p>
+                )}
+                <div className="mt-4 flex flex-wrap gap-2.5">
+                  <Button onClick={trocarSenha} disabled={enviando}>
+                    <KeyRound size={15} />
+                    {enviando ? "Enviando..." : "Enviar link de nova senha"}
+                  </Button>
+                  <Button variant="danger" onClick={sair}>
+                    <LogOut size={15} />
+                    Sair da conta
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
         </Card>
       </div>
     </div>
   );
 }
+
+type Aba = "perfil" | "aparencia" | "notificacoes" | "dados" | "acesso";
+
+const ABAS: { chave: Aba; rotulo: string; Icone: typeof User }[] = [
+  { chave: "perfil", rotulo: "Perfil", Icone: User },
+  { chave: "aparencia", rotulo: "Aparência", Icone: Sun },
+  { chave: "notificacoes", rotulo: "Notificações", Icone: Bell },
+  { chave: "dados", rotulo: "Dados", Icone: Download },
+  { chave: "acesso", rotulo: "Acesso", Icone: KeyRound },
+];
 
 /* ------------------------- notificação da manhã ------------------------- */
 
@@ -394,14 +496,12 @@ function NotificacaoDaManha() {
   };
 
   return (
-    <Card>
-      <Cabeca icon={<Bell size={14} />} titulo="Notificação da manhã" />
-      <div className="px-[18px] pb-[18px] pt-3">
-        <p className="text-[13px] text-fg-mute">
-          Todo dia às 6h chega um &ldquo;Bom dia! Veja o resumo do seu
-          dia&rdquo; no celular. Tocar nele abre o Início, com as demandas, as
-          contas que vencem e a agenda.
-        </p>
+    <div>
+      <Titulo
+        titulo="Notificação da manhã"
+        sub="Todo dia às 6h chega um “Bom dia! Veja o resumo do seu dia” no celular. Tocar nele abre o Início, com as demandas, as contas que vencem e a agenda."
+      />
+      <div>
 
         {situacao === "precisa-instalar" && (
           <div className="mt-3 rounded-[14px] bg-ink-800 px-3.5 py-3 text-[12.5px] leading-relaxed text-fg-dim">
@@ -458,7 +558,7 @@ function NotificacaoDaManha() {
           )}
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -569,13 +669,12 @@ function ExportarDados() {
   };
 
   return (
-    <Card>
-      <Cabeca icon={<Download size={14} />} titulo="Seus dados" />
-      <div className="px-[18px] pb-[18px] pt-3">
-        <p className="text-[13px] text-fg-mute">
-          Baixa uma cópia de tudo — contas, demandas, agenda, notas, livros,
-          aulas — num arquivo .json. Guarde num lugar seguro: é o seu backup.
-        </p>
+    <div>
+      <Titulo
+        titulo="Seus dados"
+        sub="Baixa uma cópia de tudo — contas, demandas, agenda, notas, livros, aulas — num arquivo .json. Guarde num lugar seguro: é o seu backup."
+      />
+      <div>
 
         {resultado?.ok && (
           <p
@@ -602,19 +701,18 @@ function ExportarDados() {
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
 /* ------------------------------ peças ------------------------------ */
 
-function Cabeca({ icon, titulo }: { icon: React.ReactNode; titulo: string }) {
+/** O título da parte aberta, em letra normal, e a explicação embaixo. */
+function Titulo({ titulo, sub }: { titulo: string; sub?: string }) {
   return (
-    <div className="px-[18px] pt-[17px]">
-      <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
-        {icon}
-        {titulo}
-      </span>
+    <div>
+      <h2 className="text-[16px] font-semibold text-fg">{titulo}</h2>
+      {sub && <p className="mt-1 max-w-[62ch] text-[12.5px] leading-relaxed text-fg-mute">{sub}</p>}
     </div>
   );
 }
