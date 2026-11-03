@@ -974,6 +974,26 @@ body::before {
   animation: cresce-y 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.35s backwards;
 }
 
+/*
+ * A selecao de texto na cor do app, e nao no azul do sistema.
+ *
+ * O par e o mesmo do botao (accent com a tinta dele), entao o contraste ja
+ * esta medido nos dois temas. Sobre o que ja e colorido -- a aba ativa, o
+ * botao, o painel do login, o cartao de credito desenhado -- a selecao roxa
+ * sumiria no fundo: ali ela inverte, fundo na tinta e letra no accent.
+ */
+::selection {
+  background: var(--a);
+  color: var(--a-ink);
+}
+[class*="text-on-brand"]::selection,
+[class*="text-on-brand"] ::selection,
+[class*="text-white"]::selection,
+[class*="text-white"] ::selection {
+  background: var(--a-ink);
+  color: var(--a);
+}
+
 /* ---------- scrollbar ---------- */
 ::-webkit-scrollbar {
   width: 9px;
