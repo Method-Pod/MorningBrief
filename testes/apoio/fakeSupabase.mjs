@@ -25,6 +25,7 @@ class Consulta {
     this.payload = payload;
     this.filtros = [];
     this.pedidoSelect = false;
+    this.faixa = null;
   }
 
   _filtro(f) {
@@ -39,6 +40,7 @@ class Consulta {
   }
   order() { return this; }
   limit() { return this; }
+  range(de, ate) { this.faixa = [de, ate]; return this; }
 
   eq(c, v) { return this._filtro((r) => cmp.eq(r[c], v)); }
   neq(c, v) { return this._filtro((r) => cmp.neq(r[c], v)); }
@@ -75,8 +77,11 @@ class Consulta {
          * era o mesmo que o update alterava, e o desfazer da reivindicacao
          * parecia nao funcionar quando funciona.
          */
-        if (this.acao === "select")
-          return { data: this._casam().map((r) => ({ ...r })), error: null };
+        if (this.acao === "select") {
+          const casam = this._casam();
+          const pedaco = this.faixa ? casam.slice(this.faixa[0], this.faixa[1] + 1) : casam;
+          return { data: pedaco.map((r) => ({ ...r })), error: null };
+        }
 
         if (this.acao === "insert") {
           const novas = (Array.isArray(this.payload) ? this.payload : [this.payload])

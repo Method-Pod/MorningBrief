@@ -5,6 +5,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 
 import { lerOpcoes } from "@/lib/opcoes";
+import { registrarErro } from "@/lib/registrarErro";
 
 export const cx = (...v: (string | false | null | undefined)[]) =>
   v.filter(Boolean).join(" ");
@@ -1104,6 +1105,8 @@ export function useNotice() {
     (error: { message: string } | null, quando: string) => {
       if (!error) return false;
       show(`Não foi possível ${quando}: ${error.message}`);
+      /* O aviso some em segundos; o registro fica. Ver lib/registrarErro. */
+      registrarErro(error, quando);
       return true;
     },
     [show]

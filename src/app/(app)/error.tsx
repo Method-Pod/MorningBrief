@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import { registrarErro } from "@/lib/registrarErro";
 
 /*
  * Quando uma tela quebra ao desenhar.
@@ -22,6 +23,7 @@ export default function ErroDaTela({
 }) {
   React.useEffect(() => {
     console.error("[tela] erro ao desenhar", error);
+    registrarErro(error, "tela não abriu");
   }, [error]);
 
   return (

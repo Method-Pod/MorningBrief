@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
 import { chamadaDoCron } from "@/lib/segredoCron";
 import { enviarBrief } from "@/lib/enviarBrief";
+import { fazerCopia } from "@/lib/copiaDeSeguranca";
 import {
   limparAulasAssistidas,
   limparConcluidas,
@@ -125,6 +126,14 @@ export async function GET(req: Request) {
     const opcoes = { userId: u.id, hoje };
 
     /*
+     * A cópia de segurança primeiro, e sozinha: ela é o retrato de antes de
+     * qualquer rotina abaixo criar ou apagar alguma coisa. Uma falha aqui não
+     * segura a manutenção -- ela já rodava sem cópia nenhuma --, mas entra no
+     * relatório como falha, para a execução não sair verde sem ter guardado.
+     */
+    const copia = await fazerCopia(supabase, opcoes);
+
+    /*
      * Em paralelo por usuário: as cinco rotinas mexem em tabelas diferentes ou
      * em linhas diferentes da mesma tabela, e nenhuma depende do resultado da
      * outra.
@@ -150,6 +159,7 @@ export async function GET(req: Request) {
 
     const linha = {
       usuario: u.email ?? u.id,
+      copiaDeSeguranca: copia ? copia.linhas : null,
       demandasRecorrentesCriadas: demandas,
       contasFixasLancadas: fixas,
       ocorrenciasDeEventoCriadas: eventos,

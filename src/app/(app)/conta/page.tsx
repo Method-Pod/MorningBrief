@@ -19,6 +19,7 @@ import {
   User,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { TABELAS_DO_APP } from "@/lib/tabelasDoApp";
 import { currentUserId } from "@/lib/session";
 import {
   desligarPush,
@@ -30,6 +31,7 @@ import { dateTimeBR } from "@/lib/format";
 import { sairDaConta } from "@/lib/sair";
 import { TEMAS, useTema } from "@/components/tema";
 import { TrocarFoto, useAvatar } from "@/components/Avatar";
+import { SaudeDoSistema } from "@/components/SaudeDoSistema";
 import { Button, Card, Input, cx } from "@/components/ui";
 import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
 
@@ -357,7 +359,12 @@ export default function ContaPage() {
 
             {aba === "notificacoes" && <NotificacaoDaManha />}
 
-            {aba === "dados" && <ExportarDados />}
+            {aba === "dados" && (
+              <>
+                <ExportarDados />
+                <SaudeDoSistema />
+              </>
+            )}
 
             {aba === "acesso" && (
               <>
@@ -564,37 +571,6 @@ function NotificacaoDaManha() {
 
 /* ------------------------------ exportar ------------------------------ */
 
-/*
- * Todas as tabelas do app. Uma tabela que ainda não exista no banco (SQL não
- * rodado) entra no arquivo como erro, sem impedir as outras.
- */
-const TABELAS = [
-  "bills",
-  "cartoes",
-  "bill_categories",
-  "tasks",
-  "task_items",
-  "clientes",
-  "projetos",
-  "recurring_tasks",
-  "events",
-  "habits",
-  "habit_logs",
-  "notes",
-  "note_categories",
-  "note_in_category",
-  "referencias",
-  "colecoes",
-  "referencia_colecao",
-  "books",
-  "reading_sessions",
-  "reading_goals",
-  "lessons",
-  "courses",
-  "subjects",
-  "lesson_goals",
-  "channels",
-] as const;
 
 /*
  * Cópia de tudo num arquivo .json, baixado no aparelho.
@@ -618,7 +594,7 @@ function ExportarDados() {
       const tabelas: Record<string, unknown[] | { erro: string }> = {};
       const falhas: string[] = [];
       let linhas = 0;
-      for (const t of TABELAS) {
+      for (const t of TABELAS_DO_APP) {
         const todas: unknown[] = [];
         let erro = "";
         for (let de = 0; ; de += 1000) {

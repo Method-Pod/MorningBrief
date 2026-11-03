@@ -15,6 +15,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { criarFilaPorChave } from "@/lib/filaPorChave";
 import { temCache, useEstadoCacheado } from "@/lib/cachePagina";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
@@ -91,13 +92,38 @@ export default function HabitosPage() {
   );
   const marcado = (id: string, dia: string) => feitos.has(`${id}|${dia}`);
 
-  const alternar = async (h: Habit, dia: string) => {
-    const jaTinha = marcado(h.id, dia);
+  /* Um pedido por vez para cada bolinha, e vale o último toque: dois toques
+     rápidos chegavam ao banco na ordem trocada. Ver lib/filaPorChave. */
+  const [fila] = React.useState(criarFilaPorChave);
+
+  /** Grava ou apaga a marca. `false` quando falhou (aí a tela recarrega). */
+  const gravar = async (h: Habit, dia: string, marcar: boolean) => {
+    if (!marcar) {
+      const { error } = await supabase
+        .from("habit_logs")
+        .delete()
+        .eq("habit_id", h.id)
+        .eq("day", dia);
+      return !notice.check(error, "desmarcar o hábito");
+    }
+    const uid = await currentUserId(supabase);
+    if (!uid) {
+      notice.show(SESSION_EXPIRED);
+      return false;
+    }
+    const { error } = await supabase
+      .from("habit_logs")
+      .insert({ user_id: uid, habit_id: h.id, day: dia });
+    // 23505 = unique(habit_id, day): já estava marcado, não é falha
+    return !(error && error.code !== "23505" && notice.check(error, "marcar o hábito"));
+  };
+
+  const alternar = (h: Habit, dia: string) => {
+    const quer = !marcado(h.id, dia);
 
     setLogs((v) =>
-      jaTinha
-        ? v.filter((l) => !(l.habit_id === h.id && l.day.slice(0, 10) === dia))
-        : [
+      quer
+        ? [
             ...v,
             {
               id: `tmp-${h.id}-${dia}`,
@@ -107,28 +133,14 @@ export default function HabitosPage() {
               created_at: new Date().toISOString(),
             },
           ]
+        : v.filter((l) => !(l.habit_id === h.id && l.day.slice(0, 10) === dia))
     );
 
-    if (jaTinha) {
-      const { error } = await supabase
-        .from("habit_logs")
-        .delete()
-        .eq("habit_id", h.id)
-        .eq("day", dia);
-      if (notice.check(error, "desmarcar o hábito")) load();
-    } else {
-      const uid = await currentUserId(supabase);
-      if (!uid) {
-        notice.show(SESSION_EXPIRED);
-        return load();
-      }
-      const { error } = await supabase
-        .from("habit_logs")
-        .insert({ user_id: uid, habit_id: h.id, day: dia });
-      // 23505 = unique(habit_id, day): já estava marcado, não é falha
-      if (error && error.code !== "23505" && notice.check(error, "marcar o hábito"))
-        load();
-    }
+    void fila
+      .pedir(`${h.id}|${dia}`, quer, (marcar) => gravar(h, dia, marcar))
+      .then((ok) => {
+        if (!ok) load();
+      });
   };
 
   const novo = () => {
