@@ -975,6 +975,47 @@ body::before {
 }
 
 /*
+ * A evolucao dos gastos se desenha da esquerda para a direita.
+ *
+ * Uma cortina (o retangulo do recorte) abre sobre a linha e a area juntas;
+ * a area ainda acende por baixo, e o ponto do mes atual salta quando a
+ * cortina chega nele -- o atraso dele vem do componente, pela posicao do mes.
+ * Antes de o grafico entrar na tela fica tudo fechado; `evo-visto` e que
+ * solta. Sem animacao (reduzir movimento), `evo-visto` mostra pronto.
+ */
+@keyframes evo-revela {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes evo-ponto {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+.evo-revela {
+  transform: scaleX(0);
+}
+.evo-ponto {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.evo-visto .evo-revela {
+  transform: none;
+  animation: evo-revela 1.4s cubic-bezier(0.45, 0, 0.2, 1) 0.25s backwards;
+}
+.evo-visto .evo-area {
+  animation: fade 1.1s ease-out 0.5s backwards;
+}
+.evo-visto .evo-ponto {
+  opacity: 1;
+  animation: evo-ponto 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) var(--evo-atraso, 1.4s)
+    backwards;
+}
+
+/*
  * A selecao de texto na cor do app, e nao no azul do sistema.
  *
  * O par e o mesmo do botao (accent com a tinta dele), entao o contraste ja
@@ -1527,7 +1568,9 @@ textarea::placeholder {
   .card[data-surgiu],
   .anel-desenha,
   .cresce,
-  .cresce-y {
+  .cresce-y,
+  .evo-visto .evo-revela,
+  .evo-visto .evo-ponto {
     animation: none;
   }
   /* As entradas viram esmaecimento puro -- mesma duracao, sem o deslize. */

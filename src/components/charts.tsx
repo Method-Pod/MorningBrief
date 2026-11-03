@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { brl } from "@/lib/format";
+import { cx } from "./ui";
 
 /**
  * Paleta estável por categoria: a mesma categoria mantém a cor entre telas.
@@ -216,10 +217,27 @@ function caminhoMonotono(pts: readonly (readonly [number, number])[]) {
   return caminho;
 }
 
-export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
+export function EvolucaoMensal({
+  dados,
+  preencher = false,
+}: {
+  dados: PontoMes[];
+  /**
+   * Ocupa a altura que o cartão tiver, em vez dos 200px fixos. Para quando o
+   * cartão do lado é mais alto e sobrava um vão embaixo do gráfico. O pai
+   * precisa ser coluna flex: aqui o gráfico vira `flex-1`.
+   */
+  preencher?: boolean;
+}) {
   const [ativo, setAtivo] = React.useState<number | null>(null);
   const box = React.useRef<HTMLDivElement>(null);
   const [L, setL] = React.useState(0);
+  const [H, setH] = React.useState(0);
+  /* A curva se desenha quando entra na tela, e não no carregamento: no
+     celular o gráfico do Início fica lá embaixo, e a animação acabaria antes
+     de alguém ver. */
+  const [visto, setVisto] = React.useState(false);
+  const recorte = "mb-evo-" + React.useId().replace(/[^a-zA-Z0-9_-]/g, "");
 
   /*
    * Mede a largura real e desenha em pixels, 1 unidade = 1px.
@@ -231,15 +249,38 @@ export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
   React.useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setL(e.contentRect.width));
+    const ro = new ResizeObserver(([e]) => {
+      setL(e.contentRect.width);
+      setH(e.contentRect.height);
+    });
     ro.observe(el);
-    setL(el.getBoundingClientRect().width);
-    return () => ro.disconnect();
+    const r = el.getBoundingClientRect();
+    setL(r.width);
+    setH(r.height);
+    if (typeof IntersectionObserver !== "function") {
+      setVisto(true);
+      return () => ro.disconnect();
+    }
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (!e.isIntersecting) return;
+        setVisto(true);
+        io.disconnect();
+      },
+      { threshold: 0.35 }
+    );
+    io.observe(el);
+    return () => {
+      ro.disconnect();
+      io.disconnect();
+    };
   }, []);
 
   const vazio = !dados.length || dados.every((d) => d.valor === 0);
 
-  const A = 200;
+  /* A altura medida só vale no modo de preencher; o SVG ali é absoluto, então
+     a medida é a do espaço livre, e não a dele mesmo. */
+  const A = preencher ? Math.max(200, Math.round(H)) : 200;
   const pt = 14;
   const pb = 26;
   const pl = 44;
@@ -293,21 +334,30 @@ export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
     } Z`;
   }
 
+  const atual = dados.findIndex((d) => d.mesAtual);
+
   return (
-    <div ref={box} className="relative w-full">
+    <div
+      ref={box}
+      className={cx("relative w-full", preencher && "min-h-[200px] flex-1")}
+    >
       {vazio ? (
         <p className="py-10 text-center text-[12.5px] text-fg-mute">
           Sem lançamentos para comparar.
         </p>
       ) : L === 0 ? (
-        <div style={{ height: A }} />
+        !preencher && <div style={{ height: A }} />
       ) : (
         <>
           <svg
             width={L}
             height={A}
             viewBox={`0 0 ${L} ${A}`}
-            className="block"
+            className={cx(
+              "block",
+              preencher && "absolute inset-x-0 top-0",
+              visto && "evo-visto"
+            )}
             onMouseMove={mover}
             onMouseLeave={() => setAtivo(null)}
             role="img"
@@ -320,6 +370,13 @@ export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
                 <stop offset="0%" stopColor="var(--a)" stopOpacity="0.26" />
                 <stop offset="100%" stopColor="var(--a)" stopOpacity="0" />
               </linearGradient>
+              {/* A cortina que abre da esquerda para a direita: revela linha
+                  e área juntas, no mesmo passo -- desenhar a linha pelo
+                  comprimento dela andaria mais devagar justo nas subidas, e a
+                  área passaria na frente. */}
+              <clipPath id={recorte}>
+                <rect className="evo-revela" x="0" y="0" width={L} height={A} />
+              </clipPath>
             </defs>
 
             {[0, 0.5, 1].map((f) => {
@@ -347,18 +404,45 @@ export function EvolucaoMensal({ dados }: { dados: PontoMes[] }) {
               );
             })}
 
-            <path d={area} fill="url(#mb-evo)" />
-            <path
-              d={linha}
-              fill="none"
-              stroke="var(--a)"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
+            <g clipPath={`url(#${recorte})`}>
+              <path className="evo-area" d={area} fill="url(#mb-evo)" />
+              <path
+                d={linha}
+                fill="none"
+                stroke="var(--a)"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </g>
+
+            {/* O mês atual marcado na curva, quando a cortina chega nele. */}
+            {atual >= 0 && (
+              <circle
+                className="evo-ponto"
+                cx={X(atual)}
+                cy={Y(dados[atual].valor)}
+                r="4"
+                fill="var(--a)"
+                stroke="var(--sup-cartao)"
+                strokeWidth="2"
+                style={
+                  {
+                    "--evo-atraso": `${
+                      0.25 + 1.4 * (dados.length > 1 ? atual / (dados.length - 1) : 1)
+                    }s`,
+                  } as React.CSSProperties
+                }
+              />
+            )}
 
             {dados.map((d, i) => {
               const ultimo = i === dados.length - 1;
               if (!ultimo && i % passo !== 0) return null;
+              /* O último encosta na borda direita (âncora no fim) e ocupa a
+                 largura dele inteira para a esquerda: o rótulo do passo que
+                 cair perto demais dele sai, em vez de os dois se encavalarem
+                 ("set/2nov/26" no celular). */
+              if (!ultimo && X(dados.length - 1) - X(i) < 62) return null;
               return (
                 <text
                   key={d.rotulo + i}

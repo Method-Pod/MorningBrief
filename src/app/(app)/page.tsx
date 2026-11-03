@@ -750,7 +750,7 @@ export default function HomePage() {
         <Fechamento contas={bills} hoje={today} />
 
         {/* --------------------------- resumo do mês --------------------------- */}
-        <Card className="lg:col-span-8">
+        <Card className="flex flex-col lg:col-span-8">
           <Head
             title={`Resumo de ${nomeMes}`}
             href="/contas"
@@ -827,9 +827,9 @@ export default function HomePage() {
             a pedido dele. É o mesmo gráfico e o mesmo cálculo do Financeiro,
             para os dois dizerem o mesmo valor para o mesmo mês.
           */}
-          <div className="px-3 pb-4">
+          <div className="flex flex-1 flex-col px-3 pb-4">
             <p className="px-2 text-[12px] font-semibold text-fg-mute">Evolução dos gastos</p>
-            <EvolucaoMensal dados={evolucao} />
+            <EvolucaoMensal dados={evolucao} preencher />
           </div>
         </Card>
 

@@ -1315,7 +1315,7 @@ export default function ContasPage() {
         forma, para a proporção se ler antes do valor.
       */}
       <div className="grid gap-4 lg:grid-cols-12">
-        <Card className="lg:col-span-8">
+        <Card className="flex flex-col lg:col-span-8">
           <Cabeca
             titulo="Evolução dos gastos"
             sub={
@@ -1341,8 +1341,8 @@ export default function ContasPage() {
               pago
             </span>
           </p>
-          <div className="px-2 pb-4 pt-2">
-            <EvolucaoMensal dados={evolucao} />
+          <div className="flex flex-1 flex-col px-2 pb-4 pt-2">
+            <EvolucaoMensal dados={evolucao} preencher />
           </div>
         </Card>
 
