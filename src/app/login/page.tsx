@@ -206,7 +206,7 @@ function Formulario() {
                 antes do primeiro café.
               </h2>
               <p className="mt-3.5 max-w-[320px] text-[13.5px] leading-relaxed text-white/70">
-                Demandas, contas a pagar, hábitos, anotações e agenda numa só
+                Demandas, financeiro, hábitos, anotações e agenda numa só
                 tela.
               </p>
             </div>

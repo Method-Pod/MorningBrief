@@ -603,6 +603,8 @@ export function Modal({
   children,
   footer,
   size = "md",
+  lateral = false,
+  topo,
 }: {
   open: boolean;
   onClose: () => void;
@@ -610,6 +612,14 @@ export function Modal({
   sub?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /*
+   * Painel de vidro à direita, na altura toda, em vez de caixa no meio — o
+   * jeito da referência de abrir um item para editar: a tela atrás continua
+   * à vista, desfocada, e o painel entra deslizando da borda.
+   */
+  lateral?: boolean;
+  /** Um bloco que vai acima do conteúdo e não rola com ele: o resumo do item. */
+  topo?: React.ReactNode;
   /* md serve para um formulário curto; lg para um com muitos campos, onde a
      coluna única de 512px empilha tudo e aperta; xl para conteúdo que é a
      própria tela, como o editor de anotação. */
@@ -643,9 +653,9 @@ export function Modal({
    * começa. Sem guardar, a saída animava uma caixa branca vazia, que é pior
    * que não animar nada.
    */
-  const ultimo = React.useRef({ title, sub, children, footer });
-  if (open) ultimo.current = { title, sub, children, footer };
-  const mostrado = open ? { title, sub, children, footer } : ultimo.current;
+  const ultimo = React.useRef({ title, sub, children, footer, topo });
+  if (open) ultimo.current = { title, sub, children, footer, topo };
+  const mostrado = open ? { title, sub, children, footer, topo } : ultimo.current;
 
   React.useEffect(() => {
     if (eraAberto.current && !open) {
@@ -744,7 +754,10 @@ export function Modal({
   return createPortal(
     <div
       className={cx(
-        "fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:p-6",
+        "fixed inset-0 z-50 flex",
+        lateral
+          ? "justify-end p-2 sm:p-3"
+          : "items-start justify-center overflow-y-auto p-3 sm:p-6",
         /* Durante a saída o diálogo não recebe mais clique: o conteúdo ainda
            está na tela por 130ms, e um clique aí agiria sobre algo que a pessoa
            já mandou fechar. */
@@ -752,7 +765,11 @@ export function Modal({
       )}
     >
       <div
-        className={cx("fixed inset-0 bg-[var(--veu)]", saindo ? "fade-sai" : "fade")}
+        className={cx(
+          "fixed inset-0 bg-[var(--veu)]",
+          lateral && "backdrop-blur-[6px]",
+          saindo ? "fade-sai" : "fade"
+        )}
         onClick={onClose}
       />
       <div
@@ -771,9 +788,17 @@ export function Modal({
            * e tinha que rolar procurando o Salvar. Assim cabeçalho e rodapé
            * ficam sempre à vista e só o miolo rola.
            */
-          "vidro-flutuante relative z-10 my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-[24px] shadow-[inset_0_1px_0_var(--vidro-brilho),var(--elev-4)] sm:max-h-[calc(100dvh-3rem)]",
-          saindo ? "pop-sai" : "pop",
-          size === "xl" ? "max-w-3xl" : size === "lg" ? "max-w-2xl" : "max-w-lg"
+          "vidro-flutuante relative z-10 flex w-full flex-col shadow-[inset_0_1px_0_var(--vidro-brilho),var(--elev-4)]",
+          lateral
+            ? cx(
+                "h-full max-w-[560px] rounded-[28px]",
+                saindo ? "lado-sai" : "lado-entra"
+              )
+            : cx(
+                "my-auto max-h-[calc(100dvh-2rem)] rounded-[24px] sm:max-h-[calc(100dvh-3rem)]",
+                saindo ? "pop-sai" : "pop",
+                size === "xl" ? "max-w-3xl" : size === "lg" ? "max-w-2xl" : "max-w-lg"
+              )
         )}
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line-soft px-5 py-4 sm:px-6 sm:py-5">
@@ -794,6 +819,7 @@ export function Modal({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-6">
+          {mostrado.topo && <div className="mb-5">{mostrado.topo}</div>}
           {mostrado.children}
         </div>
         {mostrado.footer && (

@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, GraduationCap, Repeat2 } from "lucide-react";
+import { PilulaDeAbas } from "./PilulaDeAbas";
 import { cx } from "./ui";
 
 /*
@@ -15,52 +14,29 @@ import { cx } from "./ui";
  * já existe muda de lugar por dentro.
  */
 const ABAS = [
-  { href: "/habitos", label: "Hábitos", icon: Repeat2 },
-  { href: "/aulas", label: "Aulas", icon: GraduationCap },
-  { href: "/leitura", label: "Leitura", icon: BookOpen },
+  { href: "/habitos", label: "Hábitos" },
+  { href: "/aulas", label: "Aulas" },
+  { href: "/leitura", label: "Leitura" },
 ];
 
 export const ROTAS_CRESCIMENTO = ABAS.map((a) => a.href);
 
 /**
- * A barra, no mesmo desenho do `Segmented`: trilho cinza e a escolhida em
- * roxo cheio.
- *
- * Era a última lasca branca levantada do app — o mesmo estilo que já tinha
- * saído de todos os outros seletores, porque no claro a escolhida e as
- * outras só se diferenciavam por uma sombra.
+ * As três abas, no mesmo desenho das abas do topo do app: a pílula de vidro
+ * e o destaque roxo que desliza. Pedido dele: os dois menus iguais.
  */
 export function AbasCrescimento({ className }: { className?: string }) {
   const path = usePathname();
   return (
-    <nav
-      aria-label="Crescimento"
-      className={cx(
-        "inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-[14px] bg-ink-800 p-1",
-        className
-      )}
-    >
-      {ABAS.map(({ href, label, icon: Icon }) => {
-        const ativa = path === href || path.startsWith(href + "/");
-        return (
-          <Link
-            key={href}
-            href={href}
-            prefetch={false}
-            aria-current={ativa ? "page" : undefined}
-            className={cx(
-              "flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3.5 text-[12.5px] font-semibold transition-colors",
-              ativa
-                ? "bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand"
-                : "text-fg-mute hover:text-fg-dim"
-            )}
-          >
-            <Icon size={14} />
-            {label}
-          </Link>
-        );
-      })}
-    </nav>
+    <PilulaDeAbas
+      rotulo="Crescimento"
+      className={cx("inline-flex", className)}
+      abas={ABAS.map(({ href, label }) => ({
+        href,
+        label,
+        ativa: path === href || path.startsWith(href + "/"),
+      }))}
+    />
   );
 }
 
@@ -75,7 +51,7 @@ export function AbasCrescimento({ className }: { className?: string }) {
 export function CabecalhoCrescimento({ acoes }: { acoes?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div className="min-w-0">
+      <div className="min-w-0 max-w-full">
         <h1 className="titulo-pagina">Crescimento</h1>
         <AbasCrescimento className="mt-3" />
       </div>

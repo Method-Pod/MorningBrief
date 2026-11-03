@@ -118,7 +118,7 @@
 
   /* O titulo grande e compacto da referencia: Urbanist 600, entrelinha
      curta para duas linhas de titulo lerem como um bloco so. */
-  --titulo-tam: 34px;
+  --titulo-tam: 40px;
   --titulo-peso: 600;
   --titulo-tracking: -0.025em;
   --titulo-leading: 1.05;
@@ -953,6 +953,17 @@ body::before {
   animation: cresce 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s backwards;
 }
 
+/* A mesma barra, crescendo de baixo para cima. */
+@keyframes cresce-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+.cresce-y {
+  transform-origin: center bottom;
+  animation: cresce-y 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.35s backwards;
+}
+
 /* ---------- scrollbar ---------- */
 ::-webkit-scrollbar {
   width: 9px;
@@ -1057,7 +1068,10 @@ body::before {
  * cresce, e a hierarquia se inverte justamente para quem precisa dela.
  */
 @utility titulo-pagina {
-  font-size: calc(var(--titulo-tam) / 16 * 1rem);
+  /* Cresce com a tela ate o tamanho cheio, como o titulo da referencia. */
+  /* Em rem direto: `calc(40px / 16 * 1rem)` multiplica duas medidas, o
+     navegador descarta a regra e o titulo caia para 16px. */
+  font-size: clamp(1.875rem, 4.2vw, 2.5rem);
   font-weight: var(--titulo-peso);
   letter-spacing: var(--titulo-tracking);
   line-height: var(--titulo-leading);
@@ -1353,6 +1367,28 @@ textarea::placeholder {
 .pop-sai {
   animation: pop-sai 0.13s cubic-bezier(0.4, 0, 1, 1) both;
 }
+
+/* O painel lateral entra deslizando da borda direita e sai do mesmo jeito.
+   Os menus e o calendario de dentro dele abrem em portal no body, entao o
+   transform daqui nao os desloca. */
+@keyframes lado-entra {
+  from {
+    opacity: 0;
+    transform: translate3d(56px, 0, 0);
+  }
+}
+.lado-entra {
+  animation: lado-entra 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes lado-sai {
+  to {
+    opacity: 0;
+    transform: translate3d(40px, 0, 0);
+  }
+}
+.lado-sai {
+  animation: lado-sai 0.13s cubic-bezier(0.4, 0, 1, 1) both;
+}
 @keyframes fade-sai {
   to {
     opacity: 0;
@@ -1448,7 +1484,8 @@ textarea::placeholder {
   body::before,
   .card[data-surgiu],
   .anel-desenha,
-  .cresce {
+  .cresce,
+  .cresce-y {
     animation: none;
   }
   /* As entradas viram esmaecimento puro -- mesma duracao, sem o deslize. */
@@ -1456,10 +1493,12 @@ textarea::placeholder {
   .entra,
   .pop,
   .brota,
-  .desliza-esq {
+  .desliza-esq,
+  .lado-entra {
     animation-name: fade;
   }
-  .pop-sai {
+  .pop-sai,
+  .lado-sai {
     animation-name: fade-sai;
   }
 

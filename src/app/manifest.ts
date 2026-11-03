@@ -26,7 +26,7 @@ import type { MetadataRoute } from "next";
  */
 
 const DESC =
-  "Seu painel do dia: demandas, recorrências, hábitos, anotações, agenda e contas a pagar em um só lugar.";
+  "Seu painel do dia: demandas, recorrências, hábitos, anotações, agenda e financeiro em um só lugar.";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -81,7 +81,7 @@ export default function manifest(): MetadataRoute.Manifest {
     shortcuts: [
       { name: "Demandas", url: "/demandas" },
       { name: "Anotações", url: "/anotacoes" },
-      { name: "Contas a pagar", url: "/contas" },
+      { name: "Financeiro", url: "/contas" },
     ],
   };
 }

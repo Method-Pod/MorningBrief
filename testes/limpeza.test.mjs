@@ -44,6 +44,19 @@ test("concluida cinco minutos antes da virada sai; cinco depois, fica", async ()
   assert.deepEqual(sb.banco.tabelas.tasks.map((t) => t.id), ["depois"]);
 });
 
+test("demanda arquivada nunca e apagada, mesmo concluida ha dias", async () => {
+  /* Pedido dele: arquivada fica anotada ate desarquivar ou excluir. */
+  const agora = new Date("2026-03-10T12:00:00Z");
+  const sb = fakeSupabase({
+    tasks: [
+      { id: "arq", user_id: "u1", status: "done", completed_at: "2026-03-01T10:00:00Z", arquivada_em: "2026-03-02T10:00:00Z" },
+      { id: "sai", user_id: "u1", status: "done", completed_at: "2026-03-01T10:00:00Z", arquivada_em: null },
+    ],
+  });
+  assert.equal(await limparConcluidas(sb, { userId: "u1", agora }), 1);
+  assert.deepEqual(sb.banco.tabelas.tasks.map((t) => t.id), ["arq"]);
+});
+
 test("demanda concluida sem completed_at nunca e apagada", async () => {
   /* Salvaguarda: linha anterior a esta rotina nao tem a data, e apagar pela
      data de criacao seria destruir dado com base em suposicao. */

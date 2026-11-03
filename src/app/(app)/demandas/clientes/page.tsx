@@ -15,7 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import { NADA_GRAVADO } from "@/lib/erros";
 import { useEstadoCacheado, temCache } from "@/lib/cachePagina";
-import { type Cliente, type Projeto, type Task } from "@/lib/types";
+import { type Cliente, type Projeto, type Task, estaArquivada } from "@/lib/types";
 import {
   Button,
   Card,
@@ -84,8 +84,18 @@ export default function ClientesPage() {
       supabase.from("clientes").select("*").order("nome"),
       supabase.from("projetos").select("*").order("nome"),
       /* Só o que conta: o cadastro mostra quantas demandas cada um tem, e
-         para isso bastam três colunas — não o corpo de todas as demandas. */
-      supabase.from("tasks").select("id,status,cliente_id,projeto_id"),
+         para isso bastam poucas colunas — não o corpo de todas as demandas.
+         `arquivada_em` entra para a arquivada não contar como em aberto; sem
+         DEMANDAS-ARQUIVADAS.sql a coluna não existe, e a consulta refaz sem
+         ela em vez de deixar a tela sem números. */
+      supabase
+        .from("tasks")
+        .select("id,status,cliente_id,projeto_id,arquivada_em")
+        .then((r) =>
+          r.error && /arquivada_em/.test(r.error.message)
+            ? supabase.from("tasks").select("id,status,cliente_id,projeto_id")
+            : r
+        ),
     ]);
     if (c.error) {
       setSemTabela(true);
@@ -107,7 +117,7 @@ export default function ClientesPage() {
     const porCliente = new Map<string, number>();
     const porProjeto = new Map<string, number>();
     for (const t of demandas) {
-      if (t.status === "done") continue;
+      if (t.status === "done" || estaArquivada(t)) continue;
       if (t.cliente_id)
         porCliente.set(t.cliente_id, (porCliente.get(t.cliente_id) ?? 0) + 1);
       if (t.projeto_id)

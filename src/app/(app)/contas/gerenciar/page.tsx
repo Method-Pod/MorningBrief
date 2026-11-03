@@ -26,6 +26,7 @@ import {
   ErroDeCarga,
 } from "@/components/ui";
 import { SeletorDeData } from "@/components/SeletorDeData";
+import { ResumoDaConta } from "@/components/ResumoDaConta";
 import { EditorParcelas } from "@/components/Parcelamento";
 import { editarGrade, type Ajuste } from "@/lib/ajusteDeParcelas";
 import {
@@ -317,7 +318,7 @@ export default function GerenciarPage() {
       <div className="flex items-start gap-3">
         <Link
           href="/contas"
-          aria-label="Voltar para contas a pagar"
+          aria-label="Voltar para o Financeiro"
           className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-[12px] text-fg-dim transition-colors hover:bg-ink-800 hover:text-fg"
         >
           <ArrowLeft size={18} />
@@ -388,7 +389,7 @@ export default function GerenciarPage() {
               ? "Nenhuma conta com esses filtros."
               : rows.length
                 ? "Nada em andamento: as contas que restam já foram pagas."
-                : "Nenhuma conta ainda. Crie a primeira em Contas a pagar."}
+                : "Nenhuma conta ainda. Crie a primeira no Financeiro."}
           </p>
         ) : (
           <ul className="border-t border-line-soft">
@@ -412,7 +413,7 @@ export default function GerenciarPage() {
         <span className="font-semibold text-warn">em aberto</span> ou{" "}
         <span className="font-semibold text-pos">paga</span> — clique para abrir
         aquele mês. Contas já quitadas saem desta lista e continuam no histórico
-        de Contas a pagar.
+        do Financeiro.
       </p>
 
       <Editor
@@ -595,6 +596,14 @@ const emLista = (itens: string[]) =>
   itens.length < 2 ? itens.join("") : `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
 const paraNumero = (s: string) =>
   valorDigitado(s);
+
+/* O nome do tipo no resumo do topo do painel. */
+const NOME_DO_TIPO: Record<Tipo, string> = {
+  avulsa: "Única",
+  fixa: "Fixa",
+  parcelada: "Parcelada",
+  abatida: "Abatida",
+};
 
 /* O tipo daqui no vocabulário do seletor da Nova conta. */
 const NO_SELETOR: Record<Tipo, "unica" | "fixa" | "parcelada" | "abatida"> = {
@@ -916,6 +925,19 @@ function Editor({
         sub={`${emAberto} em aberto${
           pagasNaSerie ? ` · ${pagasNaSerie} ${pagasNaSerie === 1 ? "paga" : "pagas"}` : ""
         }`}
+        /* Painel à direita, como a referência abre um item. Pedido dele. */
+        lateral
+        topo={
+          <ResumoDaConta
+            descricao={descricao}
+            valor={paraNumero(valor)}
+            vencimento={vencimento}
+            pago={status === "paid"}
+            tipo={NOME_DO_TIPO[serie.tipo]}
+            categoria={categoria}
+            parcela={parcelada && totalRotulo ? `${totalRotulo} parcelas` : null}
+          />
+        }
         footer={
           <>
             <Button onClick={onFechar}>Cancelar</Button>

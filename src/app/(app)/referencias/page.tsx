@@ -12,6 +12,7 @@ import {
   Plus,
   RotateCw,
   Trash2,
+  Link2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { decodificarEntidades } from "@/lib/format";
@@ -41,6 +42,8 @@ import {
   useNotice,
   EsqueletoPagina,
 } from "@/components/ui";
+import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
+import { Contador } from "@/components/Contador";
 
 /**
  * Referências: os links que valem voltar a olhar.
@@ -789,19 +792,19 @@ export default function ReferenciasPage() {
 
   return (
     <div className="space-y-5 rise">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="titulo-pagina">Referências</h1>
-          <p className="mt-1 text-sm text-fg-mute">
-            {rows.length === 0
-              ? "Sites para garimpar e exemplos para comparar"
-              : `${rows.length} link${rows.length === 1 ? "" : "s"}${
-                  colecoes.length
-                    ? ` · ${colecoes.length} coleç${colecoes.length === 1 ? "ão" : "ões"}`
-                    : ""
-                }`}
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <TituloComNumeros titulo="Referências">
+          <Kpi
+            icone={<Link2 size={17} />}
+            valor={<Contador valor={rows.length} />}
+            rotulo={rows.length === 1 ? "link" : "links"}
+          />
+          <Kpi
+            icone={<FolderOpen size={17} />}
+            valor={<Contador valor={colecoes.length} />}
+            rotulo={colecoes.length === 1 ? "coleção" : "coleções"}
+          />
+        </TituloComNumeros>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <Button
             onClick={() => setGerindo(true)}

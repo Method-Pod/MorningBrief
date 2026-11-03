@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Clima } from "@/components/Clima";
 import { Contador } from "@/components/Contador";
+import { Kpi } from "@/components/CabecalhoPagina";
 import { Explicacao, Ressalva } from "@/components/Explicacao";
 import { createClient } from "@/lib/supabase/client";
 import { nenhumaLinha } from "@/lib/erros";
@@ -26,6 +27,7 @@ import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
   corDoRotulo,
   dataDoFechamento,
+  estaArquivada,
   jaFechou,
   semValorAinda,
 } from "@/lib/types";
@@ -50,7 +52,10 @@ import { ultimaVirada } from "@/lib/viradaDoDia";
 import {
   limparAulasAssistidas,
   limparConcluidas,
+  MESES_RETENCAO_PAGAS,
 } from "@/lib/limpeza";
+import { evolucaoDosGastos } from "@/lib/evolucao";
+import { EvolucaoMensal } from "@/components/charts";
 import {
   estenderEventosRecorrentes,
   lancarProximoMesDasFixas,
@@ -357,9 +362,19 @@ export default function HomePage() {
     [bills, today]
   );
 
+  /* Os mesmos meses do gráfico do Financeiro: os que a retenção guarda para
+     trás, e o resto à frente. */
+  const evolucao = React.useMemo(
+    () =>
+      evolucaoDosGastos(bills, today, MESES_RETENCAO_PAGAS - 1, 12 - MESES_RETENCAO_PAGAS),
+    [bills, today]
+  );
+
   const m = React.useMemo(() => {
-    const hoje = tasks.filter((t) => t.due_date?.slice(0, 10) === today);
-    const open = tasks.filter((t) => t.status !== "done");
+    /* Arquivada fica fora do dia: está guardada, não é trabalho de hoje. */
+    const ativas = tasks.filter((t) => !estaArquivada(t));
+    const hoje = ativas.filter((t) => t.due_date?.slice(0, 10) === today);
+    const open = ativas.filter((t) => t.status !== "done");
     const pend = bills.filter((b) => b.status === "pending");
 
     /*
@@ -487,7 +502,7 @@ export default function HomePage() {
         círculo de vidro. Data e clima ficam na pílula da direita.
       */}
       <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-5">
-        <h1 className="titulo-pagina w-full min-w-0 text-[clamp(30px,4.2vw,40px)] sm:w-auto">
+        <h1 className="titulo-pagina w-full min-w-0 sm:w-auto">
           {greeting()},
           <br />
           <span className="text-fg-dim">{nome ? `${nome}!` : "bem-vindo!"}</span>
@@ -806,6 +821,15 @@ export default function HomePage() {
               </div>
             </div>
           )}
+          {/*
+            A evolução dos gastos no espaço que sobrava embaixo dos números,
+            a pedido dele. É o mesmo gráfico e o mesmo cálculo do Financeiro,
+            para os dois dizerem o mesmo valor para o mesmo mês.
+          */}
+          <div className="px-3 pb-4">
+            <p className="px-2 text-[12px] font-semibold text-fg-mute">Evolução dos gastos</p>
+            <EvolucaoMensal dados={evolucao} />
+          </div>
         </Card>
 
         {/* ----------------------- próximos vencimentos ----------------------- */}
@@ -1223,32 +1247,6 @@ const Mini = ({
       <Contador valor={value} />
     </b>
     <small className="mt-1 block text-[11px] font-medium text-fg-mute">{label}</small>
-  </div>
-);
-
-/** Um número do cabeçalho: ícone num círculo de vidro, valor e rótulo. */
-const Kpi = ({
-  icone,
-  valor,
-  rotulo,
-  selo,
-}: {
-  icone: React.ReactNode;
-  valor: React.ReactNode;
-  rotulo: string;
-  selo?: React.ReactNode;
-}) => (
-  <div className="flex min-w-0 items-center gap-3">
-    <span className="vidro-flutuante grid h-11 w-11 shrink-0 place-items-center rounded-full text-fg-dim">
-      {icone}
-    </span>
-    <span className="min-w-0">
-      <span className="flex flex-wrap items-center gap-2">
-        <b className="text-[22px] font-semibold leading-none tracking-[-0.03em]">{valor}</b>
-        {selo}
-      </span>
-      <span className="mt-1 block truncate text-[12px] font-medium text-fg-mute">{rotulo}</span>
-    </span>
   </div>
 );
 

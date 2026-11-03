@@ -155,7 +155,17 @@ export type Task = {
   origin_id: string | null;
   created_at: string;
   completed_at: string | null;
+  /*
+   * Quando foi arquivada; nulo = não arquivada. A arquivada sai do quadro, do
+   * Início e das contagens e fica na visão "Arquivadas" até desarquivar. Não
+   * existe em base sem DEMANDAS-ARQUIVADAS.sql — aí vem `undefined`, que conta
+   * como não arquivada.
+   */
+  arquivada_em?: string | null;
 };
+
+/** A demanda está arquivada? */
+export const estaArquivada = (t: { arquivada_em?: string | null }) => !!t.arquivada_em;
 
 export type RecurringTask = {
   id: string;

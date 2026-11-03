@@ -198,7 +198,7 @@ export default function CartoesPage() {
       <div className="flex items-start gap-3">
         <Link
           href="/contas"
-          aria-label="Voltar para contas a pagar"
+          aria-label="Voltar para o Financeiro"
           className="mt-1 grid h-8 w-8 shrink-0 place-items-center rounded-[12px] text-fg-dim transition-colors hover:bg-ink-800 hover:text-fg"
         >
           <ArrowLeft size={18} />

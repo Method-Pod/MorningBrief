@@ -62,15 +62,29 @@ export async function limparConcluidas(
    * valer: sem o filtro explícito, este delete alcançaria as linhas de todos os
    * usuários. No navegador o parâmetro é dispensável, porque lá o RLS restringe.
    */
-  let consulta = supabase
-    .from("tasks")
-    .delete()
-    .eq("status", "done")
-    .not("completed_at", "is", null)
-    .lt("completed_at", limite);
-  if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
+  const montar = (soAtivas: boolean) => {
+    let consulta = supabase
+      .from("tasks")
+      .delete()
+      .eq("status", "done")
+      .not("completed_at", "is", null)
+      .lt("completed_at", limite);
+    /*
+     * Arquivada nunca sai sozinha. Pedido dele: ela fica anotada até ele
+     * desarquivar ou excluir, mesmo que tenha sido arquivada já concluída.
+     */
+    if (soAtivas) consulta = consulta.is("arquivada_em", null);
+    if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
+    return consulta.select("id");
+  };
 
-  const { data, error } = await consulta.select("id");
+  let { data, error } = await montar(true);
+  /*
+   * Banco sem DEMANDAS-ARQUIVADAS.sql não tem a coluna, e o filtro falha. Aí
+   * não existe arquivada para proteger, então vale a limpeza de sempre — em
+   * vez de a limpeza parar de rodar até a migração.
+   */
+  if (error && /arquivada_em/.test(error.message)) ({ data, error } = await montar(false));
 
   if (error) return null;
   return data?.length ?? 0;

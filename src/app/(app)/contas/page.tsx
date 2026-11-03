@@ -45,6 +45,8 @@ import {
 } from "@/components/Categorias";
 import { AbaterModal, ProgressoAbatida } from "@/components/ContasLote";
 import { QuadroCartoes } from "@/components/QuadroCartoes";
+import { ResumoDaConta } from "@/components/ResumoDaConta";
+import { evolucaoDosGastos } from "@/lib/evolucao";
 import {
   brl,
   dataCurta,
@@ -85,6 +87,8 @@ import {
   ErroDeCarga,
   Segmented,
 } from "@/components/ui";
+import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
+import { Contador } from "@/components/Contador";
 import { SeletorDeData } from "@/components/SeletorDeData";
 import {
   editarGrade,
@@ -151,6 +155,13 @@ const vazio = () => ({
 });
 
 type TipoDaConta = "unica" | "fixa" | "parcelada" | "abatida";
+
+const NOME_DO_TIPO: Record<TipoDaConta, string> = {
+  unica: "Única",
+  fixa: "Fixa",
+  parcelada: "Parcelada",
+  abatida: "Abatida",
+};
 
 /**
  * O tipo que o formulario mostra, lido das marcas que o banco guarda.
@@ -1190,24 +1201,11 @@ export default function ContasPage() {
    * Se a retenção diminuir algum dia, o espaço que sobra vai para a frente, onde
    * há dado real: parcelas e contas fixas já lançadas.
    */
-  const evolucao = React.useMemo<PontoMes[]>(() => {
-    const hoje = new Date(todayISO() + "T00:00:00");
-    const atras = MESES_RETENCAO_PAGAS - 1;
-    const aFrente = 12 - MESES_RETENCAO_PAGAS;
-    const pontos: PontoMes[] = [];
-    for (let i = atras; i >= -aFrente; i--) {
-      const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
-      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      pontos.push({
-        rotulo: rotuloMes(ym),
-        valor: rows
-          .filter((b) => b.due_date.startsWith(ym))
-          .reduce((s, b) => s + b.amount, 0),
-        mesAtual: i === 0,
-      });
-    }
-    return pontos;
-  }, [rows]);
+  const evolucao = React.useMemo<PontoMes[]>(
+    () =>
+      evolucaoDosGastos(rows, todayISO(), MESES_RETENCAO_PAGAS - 1, 12 - MESES_RETENCAO_PAGAS),
+    [rows]
+  );
 
   /*
    * Dois rótulos do mesmo mês.
@@ -1238,22 +1236,20 @@ export default function ContasPage() {
 
   return (
     <div className="rise">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3.5">
-        <div>
-          <h1 className="titulo-pagina">
-            Contas a pagar
-          </h1>
-          <p className="mt-1 text-sm text-fg-mute">
-            {contagens.pendentes} em aberto
-            {contagens.atrasadas > 0 && (
-              <span className="text-neg">
-                {" "}
-                · {contagens.atrasadas} vencida
-                {contagens.atrasadas > 1 ? "s" : ""}
-              </span>
-            )}
-          </p>
-        </div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3.5">
+        <TituloComNumeros titulo="Financeiro">
+          <Kpi
+            icone={<Wallet size={17} />}
+            valor={<Contador valor={contagens.pendentes} />}
+            rotulo="em aberto"
+          />
+          <Kpi
+            icone={<AlertCircle size={17} />}
+            valor={<Contador valor={contagens.atrasadas} />}
+            rotulo={contagens.atrasadas === 1 ? "vencida" : "vencidas"}
+            tom={contagens.atrasadas > 0 ? "neg" : undefined}
+          />
+        </TituloComNumeros>
         {/*
           Uma ação do dia a dia, e o resto recolhido.
 
@@ -1311,35 +1307,104 @@ export default function ContasPage() {
         <ErroDeCarga detalhe={erroCarga} onTentar={load} className="mb-4" />
       )}
 
-      {/* ------------------------------ resumo do mês ------------------------------ */}
-      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
-        Resumo de {nomeMes}
-      </p>
       {/*
-        Duas colunas já no telefone. Empilhados, os quatro números ocupavam a
-        primeira tela inteira (~700px) e a lista de contas — o que se abre a
-        tela para ver — só aparecia rolando.
+        O topo da tela Finance da referência: à esquerda, largo, o total do mês
+        em número grande sobre a evolução dos gastos (o "Cash flow" de lá); à
+        direita, a situação do mês em barras (o "Aging"). São os mesmos números
+        do resumo de antes -- total, pagas, pendentes e vencidas --, agora com
+        forma, para a proporção se ler antes do valor.
       */}
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
-        <Numero rotulo="Total" valor={resumoMes.total} qtd={resumoMes.qtdTotal} />
-        <Numero
-          rotulo="Pagas"
-          valor={resumoMes.pagas}
-          qtd={resumoMes.qtdPagas}
-          tom="text-pos"
-        />
-        <Numero
-          rotulo="Pendentes"
-          valor={resumoMes.pendentes}
-          qtd={resumoMes.qtdPendentes}
-          tom="text-warn"
-        />
-        <Numero
-          rotulo="Vencidas"
-          valor={resumoMes.vencidas}
-          qtd={resumoMes.qtdVencidas}
-          tom="text-neg"
-        />
+      <div className="grid gap-4 lg:grid-cols-12">
+        <Card className="lg:col-span-8">
+          <Cabeca
+            titulo="Evolução dos gastos"
+            sub={
+              12 - MESES_RETENCAO_PAGAS > 0
+                ? `${MESES_RETENCAO_PAGAS} meses para trás e ${
+                    12 - MESES_RETENCAO_PAGAS
+                  } à frente, todas as contas`
+                : "Últimos 12 meses, todas as contas"
+            }
+          />
+          <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 pt-3">
+            <span className="text-[34px] font-semibold leading-none tracking-[-0.04em]">
+              <Contador valor={resumoMes.total} formatar={brl} />
+            </span>
+            <span className="text-[13px] font-medium text-fg-mute">
+              em {nomeMes} ·{" "}
+              <b className="text-fg-dim tnum">
+                {resumoMes.total > 0
+                  ? Math.round((resumoMes.pagas / resumoMes.total) * 100)
+                  : 0}
+                %
+              </b>{" "}
+              pago
+            </span>
+          </p>
+          <div className="px-2 pb-4 pt-2">
+            <EvolucaoMensal dados={evolucao} />
+          </div>
+        </Card>
+
+        <Card className="lg:col-span-4">
+          <Cabeca titulo={`Situação de ${nomeMes}`} sub="O que já foi e o que falta do mês" />
+          <div className="px-5 pb-5 pt-4">
+            {(() => {
+              const barras = [
+                { rotulo: "Pagas", valor: resumoMes.pagas, qtd: resumoMes.qtdPagas, cor: "var(--cor-pos)" },
+                { rotulo: "Pendentes", valor: resumoMes.pendentes, qtd: resumoMes.qtdPendentes, cor: "var(--cor-warn)" },
+                { rotulo: "Vencidas", valor: resumoMes.vencidas, qtd: resumoMes.qtdVencidas, cor: "var(--cor-neg)" },
+              ];
+              const teto = Math.max(...barras.map((b) => b.valor), 1);
+              return (
+                <>
+                  <div className="grid h-[150px] grid-cols-3 gap-3" aria-hidden>
+                    {barras.map((b) => (
+                      <div
+                        key={b.rotulo}
+                        className="flex h-full flex-col justify-end rounded-[16px] border border-line bg-ink-800 p-1.5"
+                      >
+                        <div
+                          className="cresce-y rounded-[11px]"
+                          style={{
+                            height: `${b.valor > 0 ? Math.max(6, (b.valor / teto) * 100) : 0}%`,
+                            background: b.cor,
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-3 text-center text-[11.5px] font-medium text-fg-mute">
+                    {barras.map((b) => (
+                      <span key={b.rotulo}>{b.rotulo}</span>
+                    ))}
+                  </div>
+                  <ul className="mt-4 flex flex-col">
+                    {barras.map((b) => (
+                      <li
+                        key={b.rotulo}
+                        className="flex items-center gap-2.5 border-b border-line-soft py-2.5 text-[13px] last:border-0"
+                      >
+                        <span className="h-2.5 w-2.5 shrink-0 rounded-[3px]" style={{ background: b.cor }} />
+                        <span className="min-w-0 flex-1 font-semibold">{b.rotulo}</span>
+                        <span className="text-[12px] text-fg-mute tnum">
+                          {b.qtd} conta{b.qtd === 1 ? "" : "s"}
+                        </span>
+                        <span className="w-[92px] text-right font-semibold tnum">{brl(b.valor)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 flex items-center justify-between border-t border-line pt-3 text-[13px]">
+                    <span className="font-semibold text-fg-mute">
+                      Total · {resumoMes.qtdTotal} conta{resumoMes.qtdTotal === 1 ? "" : "s"}
+                    </span>
+                    <b className="tnum">{brl(resumoMes.total)}</b>
+                  </p>
+                </>
+              );
+            })()}
+          </div>
+        </Card>
       </div>
 
       {/* ------------------------------ lista ------------------------------ */}
@@ -1628,21 +1693,6 @@ export default function ContasPage() {
         </div>
       </div>
 
-      <Card className="mt-4">
-        <Cabeca
-          titulo="Evolução dos gastos"
-          sub={
-            12 - MESES_RETENCAO_PAGAS > 0
-              ? `${MESES_RETENCAO_PAGAS} meses para trás e ${
-                  12 - MESES_RETENCAO_PAGAS
-                } à frente, todas as contas`
-              : "Últimos 12 meses, todas as contas"
-          }
-        />
-        <div className="px-2 pb-4 pt-3">
-          <EvolucaoMensal dados={evolucao} />
-        </div>
-      </Card>
 
       {/* ------------------------------ modal ------------------------------ */}
       <Modal
@@ -1650,6 +1700,22 @@ export default function ContasPage() {
         onClose={() => setOpen(false)}
         title={editing ? "Editar conta" : "Nova conta"}
         sub="Vencimento, valor e categoria."
+        /* Painel à direita, como a referência abre um item, com o resumo da
+           conta no topo. Pedido dele. */
+        lateral
+        topo={
+          <ResumoDaConta
+            descricao={form.description}
+            valor={valorDigitado(form.amount)}
+            vencimento={form.due_date}
+            pago={form.status === "paid"}
+            tipo={NOME_DO_TIPO[tipoDaConta(form)]}
+            categoria={form.category}
+            parcela={
+              form.parcelado ? `${form.installment_no}/${form.installment_total}` : null
+            }
+          />
+        }
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
@@ -2103,44 +2169,12 @@ export default function ContasPage() {
 
 /* ------------------------------ peças ------------------------------ */
 
-function Numero({
-  rotulo,
-  valor,
-  qtd,
-  tom,
-}: {
-  rotulo: string;
-  valor: number;
-  qtd: number;
-  tom?: string;
-}) {
-  return (
-    <Card className="p-3.5 sm:p-[18px]">
-      <p
-        className={cx(
-          "text-[10.5px] font-bold uppercase tracking-[0.1em]",
-          tom ?? "text-fg-mute"
-        )}
-      >
-        {rotulo}
-      </p>
-      <p className="mt-1.5 text-[17px] font-bold tracking-[-0.03em] tnum sm:mt-2.5 sm:text-[20px]">
-        {brl(valor)}
-      </p>
-      <p className="mt-1 text-[11.5px] text-fg-mute">
-        {qtd} conta{qtd === 1 ? "" : "s"}
-      </p>
-    </Card>
-  );
-}
-
+/** O cabeçalho de cartão da referência: título em letra normal e o subtítulo. */
 function Cabeca({ titulo, sub }: { titulo: string; sub?: string }) {
   return (
-    <div className="px-[18px] pt-[17px]">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
-        {titulo}
-      </h2>
-      {sub && <p className="mt-0.5 text-[11.5px] text-fg-mute">{sub}</p>}
+    <div className="px-5 pt-5">
+      <h2 className="text-[15px] font-semibold text-fg">{titulo}</h2>
+      {sub && <p className="mt-0.5 text-[12px] text-fg-mute">{sub}</p>}
     </div>
   );
 }

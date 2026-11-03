@@ -9,6 +9,7 @@ import {
   Pencil,
   Repeat2,
   Trash2,
+  Archive,
 } from "lucide-react";
 
 import { Badge, cx } from "@/components/ui";
@@ -90,6 +91,7 @@ export function CartaoDeDemanda({
   onPointerDown,
   onEdit,
   onDelete,
+  onArchive,
   onAdvance,
   onClient,
   indice,
@@ -101,6 +103,8 @@ export function CartaoDeDemanda({
   onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Guarda a demanda na visão Arquivadas. */
+  onArchive: () => void;
   onAdvance: () => void;
   onClient: (c: string) => void;
   /** Posição na coluna, para a entrada em cascata. */
@@ -120,7 +124,10 @@ export function CartaoDeDemanda({
          por um deslocamento de 2px, que o compositor resolve e que não empurra
          o conteúdo como mudar espessura de borda fazia. */
       style={{ "--i": indice } as React.CSSProperties}
-      className="group entra levanta cursor-grab rounded-[14px] border border-line bg-ink-850 p-3.5 active:cursor-grabbing"
+      /* Tingido pela cor da coluna (`--tom`, escrito nela), como os cartões
+         do quadro da referência: a cor diz em que etapa ele está antes de
+         ler o nome da coluna. Fora do quadro, sem `--tom`, é vidro puro. */
+      className="group entra levanta cursor-grab rounded-[18px] border border-[color-mix(in_srgb,var(--tom,transparent)_38%,var(--vidro-borda))] bg-[color-mix(in_srgb,var(--tom,transparent)_20%,var(--vidro))] p-4 shadow-[inset_0_1px_0_var(--vidro-brilho)] active:cursor-grabbing"
     >
       <div className="flex items-start justify-between gap-1.5">
         <p
@@ -163,6 +170,11 @@ export function CartaoDeDemanda({
                 rotulo: "Editar",
                 icone: <Pencil size={14} />,
                 aoEscolher: onEdit,
+              },
+              {
+                rotulo: "Arquivar",
+                icone: <Archive size={14} />,
+                aoEscolher: onArchive,
               },
               {
                 rotulo: "Excluir",

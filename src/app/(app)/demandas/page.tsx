@@ -16,6 +16,9 @@ import {
   Search,
   Trash2,
   Users,
+  Eye,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
@@ -26,6 +29,7 @@ import {
   STATUS_LABEL,
   WEEKDAYS,
   WEEKDAYS_SIGLA,
+  estaArquivada,
   type Frequency,
   type Priority,
   type Task,
@@ -37,7 +41,7 @@ import {
   type RecurringTask,
   nomeDoCliente,
 } from "@/lib/types";
-import { dateBR, daysUntil, horaCurta, todayISO } from "@/lib/format";
+import { dataCurta, dateBR, daysUntil, horaCurta, todayISO } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import {
   Badge,
@@ -56,6 +60,8 @@ import {
   EsqueletoLista,
   ErroDeCarga,
 } from "@/components/ui";
+import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
+import { Contador } from "@/components/Contador";
 import { SeletorDeData } from "@/components/SeletorDeData";
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
 import { useArrastarCartao } from "@/components/arrastarCartao";
@@ -66,6 +72,13 @@ import {
   semColuna,
   type ColunaOpcional,
 } from "@/lib/colunaOpcional";
+
+/* A coluna de DEMANDAS-ARQUIVADAS.sql, para reconhecer o erro de quando ela falta. */
+const COLUNA_ARQUIVADA: ColunaOpcional = {
+  coluna: "arquivada_em",
+  arquivo: "DEMANDAS-ARQUIVADAS.sql",
+  rotulo: "o arquivo",
+};
 import {
   CartaoDeDemanda,
   COLUNAS_DO_QUADRO,
@@ -88,6 +101,14 @@ import {
 /* A ordem das colunas mora com o cartão, que é quem precisa saber qual é
    a próxima. */
 const COLUMNS = COLUNAS_DO_QUADRO;
+
+/* A cor de cada etapa do quadro, que tinge a coluna e os cartões dela. */
+const TOM_DA_COLUNA: Record<TaskStatus, string> = {
+  todo: "var(--rot-blue)",
+  doing: "var(--a)",
+  review: "var(--cor-warn)",
+  done: "var(--cor-pos)",
+};
 
 /*
  * Chave do grupo de quem não tem cliente.
@@ -163,7 +184,9 @@ export default function DemandasPage() {
   const [loading, setLoading] = React.useState(
     () => !temCache("tasks", "task_items")
   );
-  const [view, setView] = React.useState<"board" | "list" | "cliente">("board");
+  const [view, setView] = React.useState<"board" | "list" | "cliente" | "arquivadas">(
+    "board"
+  );
   /*
    * `useSearchParams`, e não `window.location.search`.
    *
@@ -803,6 +826,91 @@ export default function DemandasPage() {
       setItens(({ [t.id]: _, ...resto }) => resto);
     });
 
+  /**
+   * Arquiva ou desarquiva. O status não muda: desarquivada, a demanda volta
+   * para a coluna em que estava.
+   *
+   * Atualiza a tela antes da resposta, como marcar um item, e desfaz se a
+   * gravação falhar. Sem DEMANDAS-ARQUIVADAS.sql a coluna não existe: o aviso
+   * diz o arquivo a rodar, em vez do erro cru do banco.
+   */
+  const arquivar = async (t: Task, guardar: boolean) => {
+    const arquivada_em = guardar ? new Date().toISOString() : null;
+    const antes = t.arquivada_em ?? null;
+    setRows((r) => r.map((x) => (x.id === t.id ? { ...x, arquivada_em } : x)));
+    const { data: gravadas, error } = await supabase
+      .from("tasks")
+      .update({ arquivada_em })
+      .eq("id", t.id)
+      .select("id");
+    if (error || !gravadas?.length) {
+      setRows((r) => r.map((x) => (x.id === t.id ? { ...x, arquivada_em: antes } : x)));
+      if (error && colunaQueFaltou(error.message, [COLUNA_ARQUIVADA]))
+        return notice.show(
+          "Arquivar precisa de supabase/DEMANDAS-ARQUIVADAS.sql no banco. Rode o arquivo e tente de novo."
+        );
+      notice.check(error ?? nenhumaLinha(gravadas), guardar ? "arquivar a demanda" : "desarquivar a demanda");
+      return;
+    }
+    notice.show(
+      guardar
+        ? `"${t.title}" foi para Arquivadas.`
+        : `"${t.title}" voltou para ${STATUS_LABEL[t.status]}.`,
+      "info"
+    );
+  };
+
+  /*
+   * O resumo da demanda no topo do painel, como o cartão colorido da
+   * referência: prazo e etapa em cima, o título grande, o cliente e a
+   * prioridade. Acompanha o que se digita, então mostra a demanda como ela
+   * vai ficar. Tingido pela cor da etapa, a mesma das colunas do quadro.
+   */
+  const resumoDaDemanda = () => {
+    const tom = form.recurring ? "var(--cor-violeta)" : TOM_DA_COLUNA[form.status];
+    const cli = cadastro.find((c) => c.id === form.cliente_id)?.nome;
+    const proj = projetos.find((p) => p.id === form.projeto_id)?.nome;
+    const feitos = checklist.filter((i) => i.done).length;
+    return (
+      <div
+        style={{ "--tom": tom } as React.CSSProperties}
+        className="rounded-[22px] border border-[color-mix(in_srgb,var(--tom)_40%,var(--vidro-borda))] bg-[color-mix(in_srgb,var(--tom)_24%,var(--vidro))] p-4 shadow-[inset_0_1px_0_var(--vidro-brilho)]"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[12px] font-medium text-fg-dim">
+            {form.recurring
+              ? "Volta sozinha em cada data"
+              : form.due_date
+                ? `Vence em ${dataCurta(form.due_date)}${form.due_time ? ` · ${form.due_time}` : ""}`
+                : "Sem prazo"}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-ink-800 px-2.5 py-1 text-[11.5px] font-semibold">
+            <span className="h-2 w-2 rounded-full" style={{ background: "var(--tom)" }} />
+            {form.recurring ? "Recorrente" : STATUS_LABEL[form.status]}
+          </span>
+        </div>
+        <p className="mt-2 line-clamp-2 text-[22px] font-semibold leading-tight tracking-[-0.02em]">
+          {form.title.trim() || (editing ? "Sem título" : "Nova demanda")}
+        </p>
+        {(cli || proj) && (
+          <p className="mt-1 truncate text-[13px] text-fg-mute">
+            {[cli, proj].filter(Boolean).join(" · ")}
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Badge tone={tomDaPrioridade({ status: form.status, priority: form.priority })}>
+            {PRIORITY_LABEL[form.priority]}
+          </Badge>
+          {checklist.length > 0 && (
+            <span className="text-[12px] font-medium text-fg-mute tnum">
+              {feitos}/{checklist.length} itens
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   /* ------------------------------ derivados ------------------------------ */
 
   /*
@@ -841,9 +949,17 @@ export default function DemandasPage() {
     [projetos, form.cliente_id]
   );
 
+  /*
+   * Arquivada fica fora de tudo — quadro, lista, por cliente, contagens —
+   * menos da visão Arquivadas, onde só ela aparece. Os filtros de cima
+   * (prioridade, cliente, busca) valem nas duas.
+   */
+  const ativas = React.useMemo(() => rows.filter((t) => !estaArquivada(t)), [rows]);
+  const arquivadas = React.useMemo(() => rows.filter(estaArquivada), [rows]);
+
   const filtered = React.useMemo(() => {
     const term = q.trim().toLowerCase();
-    return rows
+    return (view === "arquivadas" ? arquivadas : ativas)
       .filter((t) => prio === "all" || t.priority === prio)
       .filter(
         (t) => cliente === "all" || (nomeDe(t) || SEM_CLIENTE) === cliente
@@ -867,7 +983,7 @@ export default function DemandasPage() {
           horaCurta(b.due_time) || "99:99"
         );
       });
-  }, [rows, q, prio, cliente, nomeDe]);
+  }, [ativas, arquivadas, view, q, prio, cliente, nomeDe]);
 
   const byStatus = (s: TaskStatus) => filtered.filter((t) => t.status === s);
 
@@ -880,7 +996,7 @@ export default function DemandasPage() {
    */
   const clientes = React.useMemo(() => {
     const m = new Map<string, { nome: string; abertas: number; atrasadas: number }>();
-    rows.forEach((t) => {
+    ativas.forEach((t) => {
       const chave = nomeDe(t) || SEM_CLIENTE;
       const g =
         m.get(chave) ??
@@ -916,29 +1032,34 @@ export default function DemandasPage() {
   );
   /* Alguma coluna tem cartão? Decide se as vazias podem sumir no celular. */
   const algumaCheia = COLUMNS.some((c) => byStatus(c).length > 0);
-  const openCount = rows.filter((t) => t.status !== "done").length;
-  const lateCount = rows.filter(
+  const openCount = ativas.filter((t) => t.status !== "done").length;
+  const lateCount = ativas.filter(
     (t) => t.status !== "done" && t.due_date && daysUntil(t.due_date) < 0
   ).length;
 
   return (
     <div className="space-y-5 rise">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="titulo-pagina">Demandas</h1>
-          <p className="mt-1 text-sm text-fg-mute">
-            {/* Enquanto carrega, não diz "0 abertas": era um número falso
-                piscando antes do verdadeiro. */}
-            {loading ? (
-              "carregando…"
-            ) : (
-              <>
-                {openCount} aberta{openCount === 1 ? "" : "s"}
-                {lateCount > 0 && <span className="text-neg"> · {lateCount} atrasada{lateCount === 1 ? "" : "s"}</span>}
-              </>
-            )}
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <TituloComNumeros titulo="Demandas">
+          {/* Enquanto carrega, não diz "0 abertas": era um número falso piscando
+              antes do verdadeiro. */}
+          <Kpi
+            icone={<ListChecks size={17} />}
+            valor={loading ? "…" : <Contador valor={openCount} />}
+            rotulo={openCount === 1 ? "aberta" : "abertas"}
+          />
+          <Kpi
+            icone={<Eye size={17} />}
+            valor={loading ? "…" : <Contador valor={byStatus("review").length} />}
+            rotulo="em revisão"
+          />
+          <Kpi
+            icone={<AlertCircle size={17} />}
+            valor={loading ? "…" : <Contador valor={lateCount} />}
+            rotulo={lateCount === 1 ? "atrasada" : "atrasadas"}
+            tom={lateCount > 0 ? "neg" : undefined}
+          />
+        </TituloComNumeros>
         {/*
           No celular os dois botões dividem a linha em vez de empilhar.
 
@@ -991,7 +1112,9 @@ export default function DemandasPage() {
       <p className="mb-3 flex items-center gap-1.5 text-[11px] text-fg-mute sm:mb-4 sm:gap-2 sm:text-[12px]">
         <Info size={12} className="shrink-0" />
         {/* "Apagadas", e não "saem": elas não vão para lugar nenhum. */}
-        Concluídas são apagadas às 6h da manhã seguinte.
+        {view === "arquivadas"
+          ? "Arquivadas ficam guardadas até você desarquivar: a limpeza das 6h não as apaga."
+          : "Concluídas são apagadas às 6h da manhã seguinte."}
       </p>
 
       {erroCarga && <ErroDeCarga detalhe={erroCarga} onTentar={load} />}
@@ -1007,6 +1130,15 @@ export default function DemandasPage() {
               { value: "board", label: "Quadro" },
               { value: "list", label: "Lista" },
               { value: "cliente", label: "Por cliente" },
+              ...(arquivadas.length > 0 || view === "arquivadas"
+                ? [
+                    {
+                      value: "arquivadas" as const,
+                      label: "Arquivadas",
+                      count: arquivadas.length,
+                    },
+                  ]
+                : []),
             ]}
           />
         </div>
@@ -1107,6 +1239,59 @@ export default function DemandasPage() {
             }
           />
         </Card>
+      ) : view === "arquivadas" ? (
+        /* ---------------------------- arquivadas ---------------------------- */
+        filtered.length === 0 ? (
+          <Card>
+            <Empty
+              icon={<Archive size={18} />}
+              title={arquivadas.length ? "Nada com esse filtro" : "Nenhuma demanda arquivada"}
+              sub={
+                arquivadas.length
+                  ? "Ajuste a busca, a prioridade ou o cliente."
+                  : "Arquive pelo menu ⋯ de uma demanda: ela sai do quadro e fica guardada aqui até você desarquivar."
+              }
+            />
+          </Card>
+        ) : (
+          <Card className="overflow-hidden">
+            <ul className="divide-y divide-line-soft">
+              {filtered.map((t) => (
+                <li key={t.id} className="group flex flex-wrap items-center gap-3 px-5 py-3.5 sm:flex-nowrap">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-semibold">{t.title}</span>
+                    <span className="mt-0.5 block truncate text-[12px] text-fg-mute">
+                      {nomeDe(t) || "Sem cliente"} · {STATUS_LABEL[t.status]}
+                      {t.arquivada_em &&
+                        ` · arquivada em ${dateBR(t.arquivada_em.slice(0, 10)).slice(0, 5)}`}
+                    </span>
+                  </span>
+                  <Badge tone={tomDaPrioridade(t)}>{PRIORITY_LABEL[t.priority]}</Badge>
+                  <Button size="sm" onClick={() => arquivar(t, false)}>
+                    <ArchiveRestore size={14} />
+                    Desarquivar
+                  </Button>
+                  <MenuSuspenso
+                    rotulo={`Ações de ${t.title}`}
+                    itens={[
+                      {
+                        rotulo: "Editar",
+                        icone: <Pencil size={14} />,
+                        aoEscolher: () => startEdit(t),
+                      },
+                      {
+                        rotulo: "Excluir",
+                        icone: <Trash2 size={14} />,
+                        aoEscolher: () => remove(t),
+                        perigo: true,
+                      },
+                    ]}
+                  />
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )
       ) : view === "board" ? (
         /* ------------------------------ quadro ------------------------------ */
         <div className="grid gap-4 lg:grid-cols-4">
@@ -1129,33 +1314,29 @@ export default function DemandasPage() {
                    `elementFromPoint` no ponto onde o cartão foi solto e sobe até
                    o ancestral que carrega este atributo. */
                 data-coluna={col}
+                style={{ "--tom": TOM_DA_COLUNA[col] } as React.CSSProperties}
                 className={cx(
-                  "coluna flex min-h-[220px] flex-col rounded-2xl border border-line bg-ink-900/40 p-2.5",
+                  "coluna card flex min-h-[220px] flex-col rounded-[24px] p-2.5",
                   esconderNoCelular && "hidden lg:flex"
                 )}
               >
                 <div className="flex items-center justify-between px-2 py-2">
                   <div className="flex items-center gap-2">
                     <span
-                      className={cx(
-                        "h-2 w-2 rounded-full",
-                        col === "todo" && "bg-ink-600",
-                        col === "doing" && "bg-brand-400",
-                        col === "review" && "bg-warn",
-                        col === "done" && "bg-pos"
-                      )}
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: "var(--tom)" }}
                     />
-                    <span className="text-[13px] font-medium">
+                    <span className="text-[14px] font-semibold">
                       {STATUS_LABEL[col]}
                     </span>
-                    <span className="text-[11px] text-fg-mute tnum">
+                    <span className="rounded-full bg-ink-800 px-2 py-0.5 text-[11px] font-semibold text-fg-mute tnum">
                       {items.length}
                     </span>
                   </div>
                   <button
                     onClick={() => startNew(col)}
                     aria-label={`Nova demanda em ${STATUS_LABEL[col]}`}
-                    className="rounded-lg p-1 text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
+                    className="grid h-8 w-8 place-items-center rounded-full border border-[var(--vidro-borda)] text-fg-mute transition-colors hover:bg-fg/[0.08] hover:text-fg"
                   >
                     <Plus size={14} />
                   </button>
@@ -1183,6 +1364,7 @@ export default function DemandasPage() {
                         onPointerDown={(e) => iniciarArrasto(e, t)}
                         onEdit={() => startEdit(t)}
                         onDelete={() => remove(t)}
+                        onArchive={() => arquivar(t, true)}
                         onAdvance={() => {
                           const i = COLUMNS.indexOf(t.status);
                           if (i < COLUMNS.length - 1) move(t, COLUMNS[i + 1]);
@@ -1347,6 +1529,11 @@ export default function DemandasPage() {
                                 aoEscolher: () => startEdit(t),
                               },
                               {
+                                rotulo: "Arquivar",
+                                icone: <Archive size={14} />,
+                                aoEscolher: () => arquivar(t, true),
+                              },
+                              {
                                 rotulo: "Excluir",
                                 icone: <Trash2 size={14} />,
                                 aoEscolher: () => remove(t),
@@ -1469,6 +1656,11 @@ export default function DemandasPage() {
                               aoEscolher: () => startEdit(t),
                             },
                             {
+                              rotulo: "Arquivar",
+                              icone: <Archive size={14} />,
+                              aoEscolher: () => arquivar(t, true),
+                            },
+                            {
                               rotulo: "Excluir",
                               icone: <Trash2 size={14} />,
                               aoEscolher: () => remove(t),
@@ -1491,13 +1683,17 @@ export default function DemandasPage() {
         open={open}
         onClose={() => setOpen(false)}
         title={editing ? "Editar demanda" : "Nova demanda"}
-        /*
-         * Largo, porque este formulário tem campo demais para uma coluna de
-         * 512px: título, descrição, links, checklist, cliente, prioridade,
-         * prazo, status e ainda o bloco de recorrência. Empilhado nessa
-         * largura, tudo fica estreito e a descrição cortava.
-         */
-        size="lg"
+        sub={
+          editing
+            ? [nomeDoCliente(editing, porId, projetoPorId), STATUS_LABEL[editing.status]]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
+        }
+        /* Painel à direita, como a referência abre um item: o quadro fica à
+           vista atrás, desfocado. Pedido dele. */
+        lateral
+        topo={resumoDaDemanda()}
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
@@ -1661,7 +1857,8 @@ export default function DemandasPage() {
             {/* A linha fica no MESMO lugar nos dois tipos, para o
                 formulario nao saltar ao trocar de avulsa para recorrente. */}
             {!form.recurring ? (
-              <div className="grid gap-4 sm:grid-cols-3">
+              <>
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Prazo">
                   <SeletorDeData
                     value={form.due_date}
@@ -1689,21 +1886,53 @@ export default function DemandasPage() {
                     onChange={(e) => setForm({ ...form, due_time: e.target.value })}
                   />
                 </Field>
-                <Field label="Status">
-                  <Select
-                    value={form.status}
-                    onChange={(e) =>
-                      setForm({ ...form, status: e.target.value as TaskStatus })
-                    }
-                  >
-                    {COLUMNS.map((s) => (
-                      <option key={s} value={s}>
-                        {STATUS_LABEL[s]}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
               </div>
+              {/*
+                O status como as etapas da referência: as quatro em fila, em
+                forma de seta, e pintadas até a atual. Mesma escolha do seletor
+                de antes -- um clique numa etapa --, com a ordem à vista.
+              */}
+              <div>
+                <span className="mb-1.5 block text-[11px] font-medium uppercase tracking-wider text-fg-mute">
+                  Status
+                </span>
+                <div role="radiogroup" aria-label="Status" className="flex">
+                  {COLUMNS.map((st, i) => {
+                    const atual = COLUMNS.indexOf(form.status);
+                    const escolhida = st === form.status;
+                    return (
+                      <button
+                        key={st}
+                        type="button"
+                        role="radio"
+                        aria-checked={escolhida}
+                        onClick={() => setForm({ ...form, status: st })}
+                        style={{
+                          clipPath:
+                            i === 0
+                              ? "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%)"
+                              : i === COLUMNS.length - 1
+                                ? "polygon(0 0, 100% 0, 100% 100%, 0 100%, 12px 50%)"
+                                : "polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%)",
+                        }}
+                        className={cx(
+                          "h-10 min-w-0 flex-1 truncate px-4 text-[12px] font-semibold transition-colors",
+                          i > 0 && "-ml-2",
+                          i === 0 && "rounded-l-[12px]",
+                          i === COLUMNS.length - 1 && "rounded-r-[12px]",
+                          i <= atual
+                            ? "bg-brand-500 text-on-brand"
+                            : "bg-ink-800 text-fg-mute hover:bg-fg/[0.09] hover:text-fg",
+                          i < atual && "opacity-70"
+                        )}
+                      >
+                        {STATUS_LABEL[st]}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              </>
             ) : (
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Frequência">

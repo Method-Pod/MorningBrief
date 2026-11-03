@@ -43,6 +43,8 @@ import {
   cx,
   EsqueletoPagina,
 } from "@/components/ui";
+import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
+import { Contador } from "@/components/Contador";
 
 /**
  * A lista de anotações: nomes, e nada mais.
@@ -530,17 +532,19 @@ export default function AnotacoesPage() {
 
   return (
     <div className="space-y-5 rise">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="titulo-pagina">Anotações</h1>
-          <p className="mt-1 text-sm text-fg-mute">
-            {rows.length === 0
-              ? "Nenhuma anotação ainda"
-              : `${rows.length} nota${rows.length === 1 ? "" : "s"}${
-                  fixadas ? ` · ${fixadas} fixada${fixadas === 1 ? "" : "s"}` : ""
-                }`}
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <TituloComNumeros titulo="Anotações">
+          <Kpi
+            icone={<StickyNote size={17} />}
+            valor={<Contador valor={rows.length} />}
+            rotulo={rows.length === 1 ? "nota" : "notas"}
+          />
+          <Kpi
+            icone={<Pin size={17} />}
+            valor={<Contador valor={fixadas} />}
+            rotulo={fixadas === 1 ? "fixada" : "fixadas"}
+          />
+        </TituloComNumeros>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <Button
             onClick={() => setGerindo(true)}

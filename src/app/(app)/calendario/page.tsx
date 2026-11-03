@@ -30,6 +30,7 @@ import {
   COR_PADRAO,
   EVENT_RECURRENCE_LABEL,
   PRIORITY_LABEL,
+  estaArquivada,
   type Bill,
   type CalendarEvent,
   type EventRecurrence,
@@ -51,6 +52,8 @@ import {
   cx,
   EsqueletoPagina,
 } from "@/components/ui";
+import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
+import { Contador } from "@/components/Contador";
 import { MenuSuspenso } from "@/components/MenuSuspenso";
 import { SeletorDeData } from "@/components/SeletorDeData";
 
@@ -176,7 +179,8 @@ export default function CalendarioPage() {
     events.forEach((e) => put(localDay(e.start_at)).events.push(e));
     bills.forEach((b) => put(b.due_date.slice(0, 10)).bills.push(b));
     tasks.forEach((t) => {
-      if (t.due_date) put(t.due_date.slice(0, 10)).tasks.push(t);
+      /* Arquivada não tem prazo correndo: fica fora da grade. */
+      if (t.due_date && !estaArquivada(t)) put(t.due_date.slice(0, 10)).tasks.push(t);
     });
     return map;
   }, [events, bills, tasks]);
@@ -211,7 +215,7 @@ export default function CalendarioPage() {
     return {
       events: events.filter((e) => localDay(e.start_at).startsWith(prefix)).length,
       bills: bills.filter((b) => b.due_date.startsWith(prefix)),
-      tasks: tasks.filter((t) => t.due_date?.startsWith(prefix)).length,
+      tasks: tasks.filter((t) => !estaArquivada(t) && t.due_date?.startsWith(prefix)).length,
     };
   }, [cursor, events, bills, tasks]);
 
@@ -415,16 +419,24 @@ export default function CalendarioPage() {
 
   return (
     <div className="space-y-5 rise">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="titulo-pagina">Calendário</h1>
-          <p className="mt-1 text-sm text-fg-mute">
-            {monthStats.events} evento{monthStats.events === 1 ? "" : "s"} ·{" "}
-            {monthStats.bills.length} vencimento
-            {monthStats.bills.length === 1 ? "" : "s"} · {monthStats.tasks} prazo
-            {monthStats.tasks === 1 ? "" : "s"} neste mês
-          </p>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <TituloComNumeros titulo="Calendário">
+          <Kpi
+            icone={<CalendarDays size={17} />}
+            valor={<Contador valor={monthStats.events} />}
+            rotulo={`${monthStats.events === 1 ? "evento" : "eventos"} no mês`}
+          />
+          <Kpi
+            icone={<Wallet size={17} />}
+            valor={<Contador valor={monthStats.bills.length} />}
+            rotulo={monthStats.bills.length === 1 ? "vencimento" : "vencimentos"}
+          />
+          <Kpi
+            icone={<ListChecks size={17} />}
+            valor={<Contador valor={monthStats.tasks} />}
+            rotulo={monthStats.tasks === 1 ? "prazo" : "prazos"}
+          />
+        </TituloComNumeros>
         <div className="flex items-center gap-2">
           {/* O calendário mostra ocorrências; para ver o que SE REPETE é
               preciso sair da grade. Daí o atalho morar no cabeçalho, ao lado

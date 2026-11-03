@@ -18,7 +18,7 @@ const urbanist = Urbanist({
 
 const SITE = "https://morningbrief-app.vercel.app";
 const DESC =
-  "Seu painel do dia: demandas, recorrências, hábitos, anotações, agenda e contas a pagar em um só lugar.";
+  "Seu painel do dia: demandas, recorrências, hábitos, anotações, agenda e financeiro em um só lugar.";
 
 /*
  * Tudo aqui vive no <head> e não desenha nada na página.

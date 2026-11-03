@@ -10,6 +10,7 @@ import { Iniciais, useAvatar } from "./Avatar";
 import { naRota } from "@/lib/rota";
 import { IdentityProvider } from "./identity";
 import { useTema, useTemaEfetivo } from "./tema";
+import { PilulaDeAbas } from "./PilulaDeAbas";
 import { cx } from "./ui";
 
 /*
@@ -28,7 +29,8 @@ const NAV = [
   /* Hábitos, Aulas e Leitura num item só: as três telas ganham uma barra
      própria no topo (AbasCrescimento) e o item acende em qualquer uma. */
   { href: "/habitos", label: "Crescimento", tambem: ROTAS_CRESCIMENTO },
-  { href: "/contas", label: "Contas a pagar" },
+  /* "Financeiro", a pedido dele: o nome da área, e não de uma lista. */
+  { href: "/contas", label: "Financeiro" },
   { href: "/referencias", label: "Referências" },
   { href: "/anotacoes", label: "Anotações" },
   { href: "/calendario", label: "Calendário" },
@@ -134,32 +136,6 @@ export function Shell({
 
   useSurgir(path);
 
-  /*
-   * A pílula que desliza até a aba ativa, como na referência.
-   *
-   * Uma peça só, posicionada por medida, em vez de cada aba acender o próprio
-   * fundo: trocar de tela faz a pílula correr de uma aba à outra, que é o que
-   * diz "você saiu dali e chegou aqui". Remede ao mudar de tela, ao mudar o
-   * tamanho da janela e quando a fonte termina de carregar (a largura das
-   * abas muda com ela).
-   */
-  const faixa = React.useRef<HTMLElement>(null);
-  const [pilula, setPilula] = React.useState<{ x: number; w: number } | null>(null);
-  React.useLayoutEffect(() => {
-    const medir = () => {
-      const ativa = faixa.current?.querySelector<HTMLElement>('[aria-current="page"]');
-      setPilula(ativa ? { x: ativa.offsetLeft, w: ativa.offsetWidth } : null);
-    };
-    medir();
-    /* A aba ativa rola para a vista na faixa do telefone, onde nem todas cabem. */
-    faixa.current
-      ?.querySelector<HTMLElement>('[aria-current="page"]')
-      ?.scrollIntoView({ block: "nearest", inline: "center" });
-    window.addEventListener("resize", medir);
-    document.fonts?.ready.then(medir);
-    return () => window.removeEventListener("resize", medir);
-  }, [path]);
-
   const nomeVisivel = nome || email.split("@")[0] || "você";
 
   /*
@@ -197,9 +173,9 @@ export function Shell({
         O topo: a marca, as abas e a conta.
 
         As abas ficam numa pílula de vidro no meio. Abaixo de 1280px elas não
-        cabem na mesma linha da marca e da foto — são sete, e "Contas a pagar"
-        é longa —, então descem para uma faixa própria, que rola para o lado no
-        telefone em vez de quebrar em duas linhas.
+        cabem na mesma linha da marca e da foto — são sete —, então descem
+        para uma faixa própria, que rola para o lado no telefone em vez de
+        quebrar em duas linhas.
       */}
       <header className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 pt-4 sm:px-6 lg:pl-[104px] lg:pr-8 lg:pt-5">
         <Link
@@ -220,40 +196,17 @@ export function Shell({
           </span>
         </Link>
 
-        <nav
-          ref={faixa}
-          aria-label="Seções"
-          className="vidro-flutuante sem-barra relative order-last -mx-1 flex w-[calc(100%+0.5rem)] gap-1 overflow-x-auto rounded-full p-1.5 xl:order-none xl:mx-auto xl:w-auto"
-        >
-          {pilula && (
-            <span
-              aria-hidden
-              className="absolute bottom-1.5 top-1.5 left-0 rounded-full bg-brand-500 bg-[image:var(--a-degrade)] shadow-[inset_0_1px_0_rgb(255_255_255/0.25)] transition-[transform,width] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-              style={{ transform: `translateX(${pilula.x}px)`, width: pilula.w }}
-            />
-          )}
-          {NAV.map(({ href, label, tambem }) => {
-            const active = aqui(href) || !!tambem?.some(aqui);
-            return (
-              <Link
-                key={href}
-                href={href}
-                prefetch={false}
-                onMouseEnter={adiantar(href)}
-                onTouchStart={adiantar(href)}
-                aria-current={active ? "page" : undefined}
-                className={cx(
-                  "relative shrink-0 whitespace-nowrap rounded-full px-4 py-2 text-[13.5px] font-semibold transition-colors duration-300",
-                  active
-                    ? cx("text-on-brand", !pilula && "bg-brand-500")
-                    : "text-fg-dim hover:bg-fg/[0.07] hover:text-fg"
-                )}
-              >
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
+        {/* A mesma peça das abas de Crescimento: os dois menus são iguais. */}
+        <PilulaDeAbas
+          rotulo="Seções"
+          className="order-last -mx-1 w-[calc(100%+0.5rem)] xl:order-none xl:mx-auto xl:w-auto"
+          abas={NAV.map(({ href, label, tambem }) => ({
+            href,
+            label,
+            ativa: aqui(href) || !!tambem?.some(aqui),
+            adiantar: adiantar(href),
+          }))}
+        />
 
         <Link
           href="/conta"
