@@ -38,10 +38,12 @@
   --a-2: #661fbd;
   --a-text: #7b26e4;
   --a-soft: #f1e9fb;
-  --a-bg: #f3f2f5;
-  --a-sink: #f9f8f9;
-  --a-line: #e8e6eb;
-  --a-line-soft: #f1f0f2;
+  /* Lavanda clara atras do vidro, e os preenchimentos como VEU, nao como
+     cinza: um cinza solido dentro de um cartao translucido vira remendo. */
+  --a-bg: #e2deeb;
+  --a-sink: rgb(46 22 92 / 0.05);
+  --a-line: rgb(46 22 92 / 0.1);
+  --a-line-soft: rgb(46 22 92 / 0.06);
 
   /* Os mesmos papéis no escuro. Ver o bloco do tema escuro, abaixo. */
   --a-2-esc: #9046ea;
@@ -114,10 +116,12 @@
    */
   --apertar: 0.97;
 
-  --titulo-tam: 26px;
-  --titulo-peso: 700;
-  --titulo-tracking: -0.03em;
-  --titulo-leading: 1.15;
+  /* O titulo grande e compacto da referencia: Urbanist 600, entrelinha
+     curta para duas linhas de titulo lerem como um bloco so. */
+  --titulo-tam: 34px;
+  --titulo-peso: 600;
+  --titulo-tracking: -0.025em;
+  --titulo-leading: 1.05;
 }
 
 /* ============================================================
@@ -138,7 +142,7 @@
    ============================================================ */
 :root {
   /* superfícies, do fundo da página para cima */
-  --sup-cartao: #ffffff;
+  --sup-cartao: rgb(255 255 255 / 0.94);
   --sup-alta: #ffffff;
   --borda-forte: #c8cfd2;
 
@@ -278,8 +282,35 @@
 
   --cartao-borda: transparent;
 
-  --barra: #d5dbd7;
-  --barra-hover: #c0c8c3;
+  /*
+   * O vidro, no lugar do cartao branco chapado.
+   *
+   * O app passou ao desenho que ele pediu (referencia: Solvik): fundo de cor
+   * desfocada e superficies translucidas por cima, com uma borda clara fina e
+   * um fio de luz no topo. Tres niveis: `--vidro` e o cartao comum, que deixa
+   * a cor de tras aparecer; `--vidro-forte` e o que flutua por cima de tudo
+   * (modal, menu, a barra de navegacao), que precisa ser lido sobre qualquer
+   * coisa e por isso e quase opaco e desfoca o que esta atras.
+   */
+  --vidro: rgb(255 255 255 / 0.5);
+  --vidro-forte: rgb(255 255 255 / 0.78);
+  --vidro-borda: rgb(255 255 255 / 0.78);
+  --vidro-brilho: rgb(255 255 255 / 0.9);
+  --vidro-sombra: 0 30px 60px -32px rgb(46 22 92 / 0.3), 0 1px 2px rgb(46 22 92 / 0.05);
+
+  /* O fundo: tres manchas de cor e um veu por cima, que juntos fazem o papel
+     da foto desfocada da referencia -- em CSS, sem imagem para baixar. */
+  --fundo-1: rgb(138 78 238 / 0.62);
+  --fundo-2: rgb(232 132 206 / 0.5);
+  --fundo-3: rgb(104 138 236 / 0.46);
+  --fundo-veu: linear-gradient(
+    rgb(226 222 235 / 0.2),
+    rgb(226 222 235 / 0.04) 45%,
+    rgb(226 222 235 / 0.3)
+  );
+
+  --barra: rgb(46 22 92 / 0.16);
+  --barra-hover: rgb(46 22 92 / 0.26);
 
   /*
    * O roxo das etiquetas de demanda.
@@ -460,16 +491,16 @@
  */
 @media (prefers-color-scheme: dark) {
   :root:not([data-tema="claro"]) {
-    --a-bg: #151515;
-    --a-sink: #2b2b2a;
+    --a-bg: #0e0c13;
+    --a-sink: rgb(255 255 255 / 0.06);
     --a-line: rgb(255 255 255 / 0.1);
     --a-line-soft: rgb(255 255 255 / 0.06);
     --a-2: var(--a-2-esc);
     --a-text: var(--a-text-esc);
     --a-soft: var(--a-soft-esc);
 
-    --sup-cartao: #20201f;
-    --sup-alta: #30302f;
+    --sup-cartao: rgb(27 23 37 / 0.94);
+    --sup-alta: rgb(44 38 58 / 0.97);
     --borda-forte: rgb(255 255 255 / 0.2);
 
     --txt: #f0efec;
@@ -536,8 +567,23 @@
     --rot-slate: #808a91;
     --cartao-borda: var(--a-line);
 
-    --barra: #353534;
-    --barra-hover: #474745;
+    --vidro: rgb(22 18 32 / 0.5);
+    --vidro-forte: rgb(26 22 37 / 0.82);
+    --vidro-borda: rgb(255 255 255 / 0.13);
+    --vidro-brilho: rgb(255 255 255 / 0.1);
+    --vidro-sombra: 0 30px 60px -30px rgb(0 0 0 / 0.65);
+
+    --fundo-1: rgb(126 40 231 / 0.42);
+    --fundo-2: rgb(177 65 255 / 0.2);
+    --fundo-3: rgb(64 32 160 / 0.42);
+    --fundo-veu: linear-gradient(
+      rgb(8 6 12 / 0.45),
+      rgb(8 6 12 / 0.28) 45%,
+      rgb(8 6 12 / 0.55)
+    );
+
+    --barra: rgb(255 255 255 / 0.14);
+    --barra-hover: rgb(255 255 255 / 0.24);
 
     --bloco-1: #353534;
     --bloco-2: #282827;
@@ -598,16 +644,16 @@
 }
 
 :root[data-tema="escuro"] {
-  --a-bg: #151515;
-  --a-sink: #2b2b2a;
+  --a-bg: #0e0c13;
+  --a-sink: rgb(255 255 255 / 0.06);
   --a-line: rgb(255 255 255 / 0.1);
   --a-line-soft: rgb(255 255 255 / 0.06);
   --a-2: var(--a-2-esc);
   --a-text: var(--a-text-esc);
   --a-soft: var(--a-soft-esc);
 
-  --sup-cartao: #20201f;
-  --sup-alta: #30302f;
+  --sup-cartao: rgb(27 23 37 / 0.94);
+  --sup-alta: rgb(44 38 58 / 0.97);
   --borda-forte: rgb(255 255 255 / 0.2);
 
   --txt: #f0efec;
@@ -674,8 +720,23 @@
   --rot-slate: #808a91;
   --cartao-borda: var(--a-line);
 
-  --barra: #353534;
-  --barra-hover: #474745;
+  --vidro: rgb(22 18 32 / 0.5);
+  --vidro-forte: rgb(26 22 37 / 0.82);
+  --vidro-borda: rgb(255 255 255 / 0.13);
+  --vidro-brilho: rgb(255 255 255 / 0.1);
+  --vidro-sombra: 0 30px 60px -30px rgb(0 0 0 / 0.65);
+
+  --fundo-1: rgb(126 40 231 / 0.42);
+  --fundo-2: rgb(177 65 255 / 0.2);
+  --fundo-3: rgb(64 32 160 / 0.42);
+  --fundo-veu: linear-gradient(
+    rgb(8 6 12 / 0.45),
+    rgb(8 6 12 / 0.28) 45%,
+    rgb(8 6 12 / 0.55)
+  );
+
+  --barra: rgb(255 255 255 / 0.14);
+  --barra-hover: rgb(255 255 255 / 0.24);
 
   --bloco-1: #353534;
   --bloco-2: #282827;
@@ -757,7 +818,7 @@
   --color-violeta: var(--cor-violeta);
   --color-sobre-cor: var(--tinta-cor);
 
-  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system,
+  --font-sans: var(--font-urbanist), ui-sans-serif, system-ui, -apple-system,
     "Segoe UI", Roboto, sans-serif;
 
   /*
@@ -802,6 +863,94 @@ body {
    */
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+}
+
+/*
+ * O fundo de cor desfocada, atras de tudo.
+ *
+ * Num pseudo-elemento fixo, e nao no `background` do body, por dois motivos:
+ * ele fica parado enquanto a pagina rola (o vidro passa por cima dele, que e
+ * o efeito), e pode se mexer devagar sem repintar a pagina -- so `transform`,
+ * que a placa de video compoe sozinha. As bordas passam 10% da tela para a
+ * deriva nunca mostrar o canto.
+ *
+ * A camada de cima e o veu: escurece (ou clareia) por igual, para as manchas
+ * darem cor sem tirar o contraste do texto dos cartoes.
+ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    var(--fundo-veu),
+    radial-gradient(40% 36% at 16% 18%, var(--fundo-1), transparent 72%),
+    radial-gradient(36% 32% at 84% 14%, var(--fundo-2), transparent 72%),
+    radial-gradient(50% 44% at 64% 90%, var(--fundo-3), transparent 74%),
+    var(--a-bg);
+  will-change: transform;
+  /* Entra com zoom e assenta, como a foto da referencia; depois deriva
+     devagar para o fundo nunca ficar parado. */
+  animation:
+    assenta 2.8s cubic-bezier(0.16, 1, 0.3, 1) both,
+    deriva 46s ease-in-out 2.8s infinite alternate;
+}
+@keyframes assenta {
+  from {
+    transform: scale(1.14);
+    opacity: 0.4;
+  }
+}
+@keyframes deriva {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-2.5%, 2%, 0) scale(1.07);
+  }
+}
+
+
+/*
+ * A entrada dos cartoes, medida na referencia: cada um sobe 34px, cresce de
+ * 98,5% para 100% e acende, em ~0,9s de saida longa, um depois do outro com
+ * ~90ms entre eles. A ordem (`--surge-i`) e escrita pelo Shell no instante
+ * em que o cartao aparece -- ver `useSurgir`.
+ *
+ * `backwards`, e nao `both`: terminada a entrada o cartao volta a nao ter
+ * transform nenhum, e o hover que levanta o cartao continua funcionando.
+ */
+@keyframes surge {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 34px, 0) scale(0.985);
+  }
+}
+.card[data-surgiu] {
+  animation: surge 0.9s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  animation-delay: calc(var(--surge-i, 0) * 90ms);
+}
+
+/* O anel que se desenha do zero ate a fatia. `--anel-c` e o perimetro. */
+@keyframes anel {
+  from {
+    stroke-dashoffset: var(--anel-c);
+  }
+}
+.anel-desenha {
+  animation: anel 1.6s cubic-bezier(0.16, 1, 0.3, 1) 0.35s backwards;
+}
+
+/* Barra que cresce da esquerda. */
+@keyframes cresce {
+  from {
+    transform: scaleX(0);
+  }
+}
+.cresce {
+  transform-origin: left center;
+  animation: cresce 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s backwards;
 }
 
 /* ---------- scrollbar ---------- */
@@ -872,11 +1021,31 @@ body {
   margin-block: -2px;
 }
 
+/*
+ * O cartao de vidro: translucido, borda clara fina, um fio de luz no topo
+ * (o `inset`) e uma sombra longa e macia, que o descola do fundo sem
+ * desenhar contorno. Sem `backdrop-filter`: o fundo ja e desfocado por
+ * natureza, e desfocar de novo em cada um dos cartoes da tela custaria
+ * rolagem sem mudar o que se ve.
+ */
 @utility card {
-  background: var(--sup-cartao);
-  border: 1px solid var(--cartao-borda);
+  background: var(--vidro);
+  border: 1px solid var(--vidro-borda);
   border-radius: 1.375rem;
-  box-shadow: var(--elev-1);
+  box-shadow: inset 0 1px 0 var(--vidro-brilho), var(--vidro-sombra);
+}
+
+/*
+ * O vidro que flutua sobre a pagina: modal, menu, lista de opcoes, a barra
+ * de navegacao. Esse sim desfoca o que passa atras, porque o que passa atras
+ * e conteudo -- texto embaixo de texto nao se le.
+ */
+@utility vidro-flutuante {
+  background: var(--vidro-forte);
+  border: 1px solid var(--vidro-borda);
+  box-shadow: inset 0 1px 0 var(--vidro-brilho), var(--elev-3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  backdrop-filter: blur(24px) saturate(1.5);
 }
 
 /*
@@ -1276,6 +1445,12 @@ textarea::placeholder {
  * ou de opacidade fica. Mesma informacao, sem o balanco.
  */
 @media (prefers-reduced-motion: reduce) {
+  body::before,
+  .card[data-surgiu],
+  .anel-desenha,
+  .cresce {
+    animation: none;
+  }
   /* As entradas viram esmaecimento puro -- mesma duracao, sem o deslize. */
   .rise,
   .entra,

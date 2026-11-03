@@ -237,7 +237,7 @@ export function SeletorDeData({
             autoFocus
             onKeyDown={naTecla}
             style={lugar}
-            className="brota fixed z-[90] rounded-[18px] border border-line bg-ink-900 p-3 shadow-[var(--elev-3)] outline-none"
+            className="brota vidro-flutuante fixed z-[90] rounded-[20px] p-3 outline-none"
           >
             <div className="flex items-center justify-between gap-1">
               <button

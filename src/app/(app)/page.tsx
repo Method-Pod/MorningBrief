@@ -4,13 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import {
   AlertCircle,
+  ArrowUpRight,
   Library,
   CalendarDays,
   CheckCircle2,
   CreditCard,
-  ListChecks,
   Pin,
-  PieChart,
   Plus,
   Repeat2,
   Trash2,
@@ -18,6 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Clima } from "@/components/Clima";
+import { Contador } from "@/components/Contador";
 import { Explicacao, Ressalva } from "@/components/Explicacao";
 import { createClient } from "@/lib/supabase/client";
 import { nenhumaLinha } from "@/lib/erros";
@@ -473,7 +473,7 @@ export default function HomePage() {
 
   /* Raio e circunferência do anel do card escuro: o `strokeDashoffset` precisa
      do perímetro para desenhar a fatia. */
-  const R = 34;
+  const R = 70;
   const C = 2 * Math.PI * R;
 
   const now = new Date();
@@ -481,32 +481,63 @@ export default function HomePage() {
 
   return (
     <div className="rise">
-      {/* ------------------------------ saudação ------------------------------ */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3.5">
-        <div className="min-w-0">
-          <h1 className="text-[clamp(24px,4vw,32px)] font-bold tracking-[-0.035em]">
-            {nome ? `${greeting()}, ${nome}!` : `${greeting()}!`}
-          </h1>
-          {/*
-            Sem subtítulo.
-            
-            Era "Vamos dar uma olhada no seu dia", que gastava a segunda linha
-            sem informar. Troquei por um resumo com números e caí no problema
-            que tinha acabado de consertar: "atrasada" aparecia no subtítulo,
-            na faixa e em "O que vem". Os números do dia moram na faixa
-            abaixo, e num lugar só — o que sobra aqui é o nome de quem entrou.
-          */}
+      {/*
+        O cabeçalho da referência: o título grande em duas linhas e, ao lado,
+        os números que importam ao abrir o dia, cada um com o seu ícone num
+        círculo de vidro. Data e clima ficam na pílula da direita.
+      */}
+      <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-5">
+        <h1 className="titulo-pagina w-full min-w-0 text-[clamp(30px,4.2vw,40px)] sm:w-auto">
+          {greeting()},
+          <br />
+          <span className="text-fg-dim">{nome ? `${nome}!` : "bem-vindo!"}</span>
+        </h1>
+
+        <div className="grid w-full grid-cols-2 gap-x-4 gap-y-4 sm:flex sm:w-auto sm:flex-1 sm:flex-wrap sm:items-center sm:gap-x-7">
+          <Kpi
+            icone={<CheckCircle2 size={17} />}
+            valor={
+              <>
+                <Contador valor={m.feitas} />
+                <span className="text-fg-mute">/{m.doDia.length}</span>
+              </>
+            }
+            rotulo="tarefas de hoje"
+            selo={
+              m.lateT.length > 0 ? (
+                <span className="rounded-full bg-neg/15 px-2 py-0.5 text-[11px] font-bold text-neg">
+                  {m.lateT.length} atrasada{m.lateT.length > 1 ? "s" : ""}
+                </span>
+              ) : null
+            }
+          />
+          <Kpi
+            icone={<Wallet size={17} />}
+            valor={<Contador valor={m.abertoMes} formatar={brl} />}
+            rotulo={`em aberto em ${nomeMes}`}
+          />
+          <Kpi
+            icone={<CalendarDays size={17} />}
+            valor={<Contador valor={m.soon.length} />}
+            rotulo="vencem em 7 dias"
+            selo={
+              m.late.length > 0 ? (
+                <span className="rounded-full bg-neg/15 px-2 py-0.5 text-[11px] font-bold text-neg">
+                  {m.late.length} em atraso
+                </span>
+              ) : null
+            }
+          />
         </div>
-        {/* Data e clima na mesma pílula, separados por um traço fino.
-            Duas pílulas soltas competiriam entre si; aqui a data continua sendo
-            o assunto e a temperatura entra como complemento. */}
-        <span className="flex items-center gap-2.5 whitespace-nowrap rounded-full bg-ink-900 px-4 py-2.5 text-[13px] font-semibold text-fg-dim shadow-[var(--elev-1)]">
+
+        {/* Data e clima na mesma pílula, separados por um traço fino. */}
+        <span className="vidro-flutuante flex items-center gap-2.5 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-semibold text-fg-dim">
           {now.toLocaleDateString("pt-BR", {
             weekday: "long",
             day: "2-digit",
             month: "long",
           })}
-          <Clima className="flex items-center gap-1.5 border-l border-line-soft pl-2.5" />
+          <Clima className="flex items-center gap-1.5 border-l border-line pl-2.5" />
         </span>
       </div>
 
@@ -515,7 +546,7 @@ export default function HomePage() {
       )}
 
       {limpas > 0 && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-[14px] bg-ink-800 px-4 py-3 text-[12.5px] text-fg-mute">
+        <div className="vidro-flutuante mb-4 flex items-center gap-2.5 rounded-full px-4 py-2.5 text-[12.5px] text-fg-mute">
           <Trash2 size={15} className="shrink-0" />
           {limpas} demanda{limpas > 1 ? "s" : ""} concluída
           {limpas > 1 ? "s" : ""} de ontem {limpas > 1 ? "foram" : "foi"}{" "}
@@ -524,7 +555,7 @@ export default function HomePage() {
       )}
 
       {generated > 0 && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-[14px] bg-brand-500/12 px-4 py-3 text-[12.5px] font-medium text-brand-400">
+        <div className="mb-4 flex items-center gap-2.5 rounded-full border border-brand-500/30 bg-brand-500/15 px-4 py-2.5 text-[12.5px] font-medium text-brand-400">
           <Repeat2 size={15} className="shrink-0" />
           {generated} demanda{generated > 1 ? "s" : ""} criada
           {generated > 1 ? "s" : ""} pelas recorrências de hoje.
@@ -535,17 +566,8 @@ export default function HomePage() {
       )}
 
       {/*
-        Fatura fechou e ninguém disse quanto foi.
-
-        Em cima de tudo, e com o campo aqui mesmo: a conta já existe e já está
-        na lista de Contas a pagar, mas com valor zero ela não puxa a atenção
-        de ninguém — some no meio das outras e só aparece como problema quando
-        o total do mês não fecha. Perguntar no lugar em que se abre o dia é o
-        que faz a pergunta ser respondida.
-
-        Só a partir do dia do fechamento: as contas fixas são geradas um mês
-        antes, e sem esse corte o aviso cobraria em setembro o valor de uma
-        fatura de outubro. Ver `jaFechou` em lib/types.
+        Fatura fechou e ninguém disse quanto foi: pergunta no lugar em que se
+        abre o dia. Ver `jaFechou` em lib/types.
       */}
       {aCobrar.map((b) => (
         <ValorDaFatura
@@ -565,403 +587,289 @@ export default function HomePage() {
         />
       ))}
 
-      {/* ------------------------ seu dia + hoje ------------------------ */}
       {/*
-        "Seu dia" e "Hoje" viraram UM cartao.
-
-        Eram dois, lado a lado, mostrando o mesmo conjunto: o anel conta
-        exatamente as linhas que a lista ao lado lista. Separados, o numero e
-        a lista competiam pela atencao e a tela abria com dois herois; juntos,
-        o numero vira o cabecalho da propria lista, que e o que ele sempre
-        foi. O painel passa a ter UM ponto de entrada em vez de uma grade de
-        cartoes de peso igual.
+        A grade da referência: a coluna larga com a lista do dia e, ao lado, o
+        cartão de cor com o anel -- o "Team quota" de lá, que aqui é o dia.
       */}
-      <Card className="overflow-hidden">
-        <div className="flex items-center gap-5 bg-gradient-to-br from-[var(--bloco-1)] to-[var(--bloco-2)] p-[22px] text-white">
-          <div className="flex flex-1 items-start justify-between gap-4">
-            <div>
-              <p className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-white/60">
-                Seu dia
-                {/* Sobre bloco escuro a tinta do botao e a do bloco, nao a da
-                    pagina — senao ele some no claro, onde este bloco continua
-                    escuro. */}
-                <Explicacao className="text-white/50 hover:bg-white/10 hover:text-white">
-                  <p>
-                    Conta as demandas da lista abaixo: as que vencem{" "}
-                    <b>hoje</b> e as <b>atrasadas</b>. Quantas estão concluídas,
-                    sobre o total.
-                  </p>
-                  <Ressalva>
-                    Demanda sem data não entra. Por isso dá para ter 0 de 0 num
-                    dia cheio de trabalho — o dia está vazio de{" "}
-                    <i>vencimentos</i>, não de tarefa.
-                  </Ressalva>
-                </Explicacao>
-              </p>
-              <p className="mt-2 text-[40px] font-bold leading-none tracking-[-0.04em]">
-                {m.feitas}
-                <span className="text-[0.5em] font-semibold opacity-60">
-                  /{m.doDia.length}
-                </span>
-              </p>
-              <p className="mt-1.5 text-[13px] text-white/70">
-                {m.doDia.length === 1 ? "tarefa concluída" : "tarefas concluídas"}
-              </p>
-            </div>
-            <div className="relative shrink-0">
-              <svg width="88" height="88" viewBox="0 0 88 88" className="-rotate-90">
-                <circle
-                  cx="44"
-                  cy="44"
-                  r={R}
-                  fill="none"
-                  stroke="rgb(255 255 255 / 0.18)"
-                  strokeWidth="7"
-                />
-                <circle
-                  cx="44"
-                  cy="44"
-                  r={R}
-                  fill="none"
-                  stroke="var(--a)"
-                  strokeWidth="7"
-                  strokeLinecap="round"
-                  strokeDasharray={C.toFixed(1)}
-                  strokeDashoffset={(C * (1 - m.pct / 100)).toFixed(1)}
-                />
-              </svg>
-              <span className="absolute inset-0 grid place-items-center text-[15px] font-bold">
-                {m.pct}%
-              </span>
-            </div>
-          </div>
-
-        {/* Os tres contadores sobem para a direita do anel: em coluna eles
-            ocupavam a altura toda do bloco antigo, e aqui o bloco e uma faixa
-            de cabecalho. */}
-        <div className="hidden shrink-0 grid-cols-3 gap-2 sm:grid sm:w-[300px]">
-          <Mini icon={<CheckCircle2 size={15} />} value={m.feitas} label="feitas" />
-          <Mini icon={<Repeat2 size={15} />} value={m.actRec.length} label="recorrentes" />
-          <Mini icon={<CalendarDays size={15} />} value={m.evToday.length} label="na agenda" />
-        </div>
-      </div>
-
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between gap-3.5 px-[18px] pt-3.5">
-          <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
-            <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-brand-500/12 text-brand-400">
-              <ListChecks size={14} />
-            </span>
-            Hoje
-          </span>
-          <Link
+      <div className="grid gap-4 lg:grid-cols-12">
+        {/* ------------------------------ hoje ------------------------------ */}
+        <Card className="lg:col-span-8">
+          <Head
+            title="Hoje"
+            sub="o que vence hoje e o que ficou para trás"
             href="/demandas"
-            prefetch={false}
-            className="text-xs font-medium text-fg-mute transition-colors hover:text-brand-400"
-          >
-            ver todas
-          </Link>
-        </div>
-          <div className="flex flex-1 flex-col px-[18px] pb-[18px] pt-3">
-            {/* O número e a barra saíram: são os mesmos da faixa acima. Este
-                cartão passa a ser só a lista e o campo de adicionar. */}
+            link="ver todas"
+          />
+          <div className="flex flex-col px-5 pb-5 pt-4">
             <form onSubmit={quickAdd} className="flex gap-2.5">
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 placeholder="Adicionar tarefa de hoje..."
                 aria-label="Adicionar tarefa de hoje"
-                className="h-[38px] flex-1 rounded-[14px] border border-transparent bg-ink-800 px-3.5 text-sm outline-none transition-colors focus:border-brand-500 focus:bg-ink-900"
+                className="h-11 flex-1 rounded-full border border-line bg-ink-800 px-4 text-sm outline-none transition-colors focus:border-brand-500 focus:bg-ink-900"
               />
               <button
                 type="submit"
                 disabled={adding || !draft.trim()}
                 aria-label="Adicionar"
-                className="grid h-[38px] w-[38px] shrink-0 place-items-center rounded-[14px] bg-brand-500 bg-[image:var(--a-degrade)] shadow-[var(--brilho)] hover:shadow-[var(--brilho-forte)] text-on-brand transition-[filter] hover:brightness-95 disabled:opacity-40"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand shadow-[var(--brilho)] transition-[filter,box-shadow] hover:shadow-[var(--brilho-forte)] hover:brightness-95 disabled:opacity-40"
               >
                 <Plus size={18} />
               </button>
             </form>
 
-            <div className="mt-1.5 flex flex-col">
+            <div className="mt-2 flex flex-col">
               {m.doDia.length === 0 ? (
                 <Ghost>Nada pra hoje. Adicione acima.</Ghost>
               ) : (
-                m.doDia
-                  .map((t) => (
-                    <Row key={t.id}>
-                      <button
-                        onClick={() => toggleTask(t)}
-                        aria-label={t.status === "done" ? "Reabrir" : "Concluir"}
+                m.doDia.map((t) => (
+                  <Row key={t.id}>
+                    <button
+                      onClick={() => toggleTask(t)}
+                      aria-label={t.status === "done" ? "Reabrir" : "Concluir"}
+                      className={cx(
+                        "grid h-[22px] w-[22px] shrink-0 place-items-center rounded-full border-[1.8px] transition-colors",
+                        t.status === "done"
+                          ? "border-brand-500 bg-brand-500 text-on-brand"
+                          : "border-ink-600 text-transparent hover:border-brand-500"
+                      )}
+                    >
+                      <CheckCircle2 size={13} />
+                    </button>
+                    <span className="min-w-0 flex-1 text-[14px] font-semibold">
+                      <span
                         className={cx(
-                          "grid h-5 w-5 shrink-0 place-items-center rounded-full border-[1.8px] transition-colors",
-                          t.status === "done"
-                            ? "border-brand-500 bg-brand-500 text-on-brand"
-                            : "border-ink-600 text-transparent hover:border-brand-500"
+                          "block truncate",
+                          t.status === "done" && "text-fg-mute line-through"
                         )}
                       >
-                        <CheckCircle2 size={12} />
-                      </button>
-                      <span className="min-w-0 flex-1 text-sm font-medium">
-                        <span
-                          className={cx(
-                            "block truncate",
-                            t.status === "done" && "text-fg-mute line-through"
-                          )}
-                        >
-                          {t.title}
-                        </span>
-                        <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] font-normal text-fg-mute">
-                          {/*
-                            Diz qual é a atrasada.
-                            
-                            Elas passaram a entrar nesta lista para ficarem à
-                            vista, e sem marca ficavam idênticas às de hoje —
-                            "1 atrasada" na faixa acima sem dizer qual. O
-                            prazo entra junto: saber que passou não é saber de
-                            quanto.
-                          */}
-                          {t.due_date && daysUntil(t.due_date) < 0 && (
-                            <span className="inline-flex items-center gap-1 font-semibold text-neg">
-                              <AlertCircle size={11} />
-                              atrasada · {dateBR(t.due_date).slice(0, 5)}
-                            </span>
-                          )}
-                          {t.client && <span className="truncate">{t.client}</span>}
-                        </span>
+                        {t.title}
                       </span>
-                      <span
-                        className={cx("h-[7px] w-[7px] shrink-0 rounded-full", PRIO_DOT[t.priority])}
-                      />
-                    </Row>
-                  ))
+                      <span className="mt-0.5 flex items-center gap-1.5 text-[12px] font-medium text-fg-mute">
+                        {/* Diz qual é a atrasada, e de quando. */}
+                        {t.due_date && daysUntil(t.due_date) < 0 && (
+                          <span className="inline-flex items-center gap-1 font-semibold text-neg">
+                            <AlertCircle size={11} />
+                            atrasada · {dateBR(t.due_date).slice(0, 5)}
+                          </span>
+                        )}
+                        {t.client && <span className="truncate">{t.client}</span>}
+                      </span>
+                    </span>
+                    <span
+                      className={cx("h-2 w-2 shrink-0 rounded-full", PRIO_DOT[t.priority])}
+                    />
+                  </Row>
+                ))
               )}
             </div>
-          </div>
-      </div>
-      </Card>
-
-
-      {/* ------------------------ fechamento do mês ------------------------ */}
-      <Fechamento contas={bills} hoje={today} />
-
-      {/* --------------------------- resumo do mês --------------------------- */}
-      {/*
-        Faixa, e não cartão.
-
-        Quatro números curtos não precisam da moldura que um cartão com lista
-        dentro precisa: com cartão eles pediam a mesma altura e o mesmo peso
-        visual de "Contas a pagar", que tem conteúdo de verdade. Em faixa eles
-        se leem de uma vez, logo abaixo do herói, e devolvem a largura para
-        quem tem o que mostrar.
-
-        Sem a barra colorida que ficava em cima: com nada pago ela aparecia
-        inteira em azul, e azul cheio lê como "tudo certo" quando era o
-        contrário. Os quatro números já dizem a proporção.
-      */}
-      <section className="mt-4">
-        <div className="mb-2 flex items-center justify-between gap-3.5 px-1">
-          <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
-            <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-brand-500/12 text-brand-400">
-              <PieChart size={14} />
-            </span>
-            Resumo de {nomeMes}
-            <Explicacao>
-              <p>
-                Soma as contas com <b>vencimento dentro de {nomeMes}</b>. Pago
-                e o que esta marcado como pago; vencido e o que continua em
-                aberto com a data ja passada; a vencer e o resto do que esta em
-                aberto. As tres fecham o total.
-              </p>
-              <Ressalva>
-                O recorte e a data de VENCIMENTO, nao a de pagamento. Uma conta
-                de setembro que voce pagou em outubro conta em setembro.
-              </Ressalva>
-            </Explicacao>
-          </span>
-          <Link
-            href="/contas"
-            prefetch={false}
-            className="text-xs font-medium text-fg-mute transition-colors hover:text-brand-400"
-          >
-            abrir contas
-          </Link>
-        </div>
-
-        {m.totalMes === 0 ? (
-          <Card>
-            <div className="px-[18px] py-[18px]">
-              <Ghost>Nenhuma conta lançada neste mês.</Ghost>
-            </div>
-          </Card>
-        ) : (
-          <>
-            {/*
-              As divisórias são o fundo aparecendo por uma folga de 1px entre
-              as células — `gap-px` sobre `bg-line`. Uma borda por célula
-              desenharia linha dupla no encontro de duas.
-
-              Cada valor é uma PORTA: ler "Vencido R$ 320" levanta a pergunta
-              "quais?", e a resposta estava a três passos. O número abre
-              /contas já filtrado.
-
-              O NÚMERO vai em tinta de texto, nunca na cor da série: quem diz
-              "isto é o vencido" é a bolinha ao lado, e vermelho sobre papel ou
-              sobre quase-preto são os dois piores contrastes desta tela.
-            */}
-            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[18px] border border-line bg-line sm:grid-cols-4">
-              {([
-                ["Total do mês", m.totalMes, null, "todas"],
-                ["Pago", m.pagoMes, "bg-pos", "pagas"],
-                ["Vencido", m.vencidoMes, "bg-neg", "atrasadas"],
-                [
-                  "A vencer",
-                  Math.max(0, m.abertoMes - m.vencidoMes),
-                  "bg-[var(--cor-barra)]",
-                  "pendentes",
-                ],
-              ] as [string, number, string | null, string][]).map(
-                ([rotulo, valor, ponto, filtro]) => (
-                  <Link
-                    key={rotulo}
-                    href={`/contas?filtro=${filtro}`}
-                    prefetch={false}
-                    className="group bg-ink-900 px-4 py-3.5 transition-colors hover:bg-ink-800"
-                  >
-                    <span className="flex items-center gap-1.5 text-[11.5px] text-fg-mute">
-                      {ponto && (
-                        <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", ponto)} />
-                      )}
-                      {rotulo}
-                    </span>
-                    <span className="mt-0.5 block text-[19px] font-bold tracking-[-0.04em] text-fg tnum group-hover:text-brand-400">
-                      {brl(valor)}
-                    </span>
-                  </Link>
-                )
-              )}
-            </div>
-          </>
-        )}
-      </section>
-
-      {/* ------------------------ demandas + notas ------------------------ */}
-      {/*
-        Anotações sozinha na faixa, largura cheia.
-        
-        Ela dividia esta linha com "O que vem", que saiu. Deixá-la na grade de
-        duas colunas faria o cartão ocupar 60% da linha e o resto ficar vazio.
-      */}
-      <div className="mt-4">
-        <Card>
-          <Head icon={<StickyIcon />} title="Anotações" href="/anotacoes" link="escrever" />
-          <div className="px-[18px] pb-[18px] pt-3">
-            {m.pinned.length === 0 ? (
-              <Ghost>Nada fixado ainda.</Ghost>
-            ) : (
-              m.pinned.map((n) => {
-                const previa = textoDaNota(n.content);
-                return (
-                <div key={n.id} className="border-b border-line-soft py-2.5 last:border-0">
-                  <div className="flex items-center gap-1.5">
-                    <Pin size={12} style={{ color: corDoRotulo(n.color) }} />
-                    <p className="truncate text-[13px] font-semibold">
-                      {n.title || "Sem título"}
-                    </p>
-                  </div>
-                  {/*
-                    O texto por trás das tags.
-                    
-                    `content` guarda HTML desde que a anotação virou editor de
-                    blocos, e este cartão mostrava a marcação crua na tela —
-                    "<ul><li><p><strong>|&nbsp;TDAH..." em vez do texto.
-                    `textoDaNota` é a mesma função que a busca usa.
-                  */}
-                  {previa && (
-                    <p className="mt-1 line-clamp-2 text-[11.5px] leading-relaxed text-fg-mute">
-                      {previa}
-                    </p>
-                  )}
-                </div>
-                );
-              })
-            )}
           </div>
         </Card>
-      </div>
 
-      {/* --------------- contas · agenda · recorrentes --------------- */}
-      {/* Três cartões: vencimentos, agenda e recorrentes. Hábitos saiu do
-          Início e continua na tela dele. */}
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <Card>
-          {/*
-            "Próximos vencimentos", e não o total do mês outra vez.
+        {/* ---------------------------- seu dia ---------------------------- */}
+        <Card className="relative overflow-hidden border-brand-500/35 bg-[linear-gradient(160deg,color-mix(in_srgb,var(--a)_30%,transparent),color-mix(in_srgb,var(--a)_8%,transparent)_60%)] lg:col-span-4">
+          <div className="flex items-center justify-between gap-3 px-5 pt-5">
+            <span className="flex items-center gap-1.5 text-[15px] font-semibold text-fg">
+              Seu dia
+              <Explicacao>
+                <p>
+                  Conta as demandas da lista ao lado: as que vencem <b>hoje</b> e
+                  as <b>atrasadas</b>. Quantas estão concluídas, sobre o total.
+                </p>
+                <Ressalva>
+                  Demanda sem data não entra. Por isso dá para ter 0 de 0 num
+                  dia cheio de trabalho — o dia está vazio de{" "}
+                  <i>vencimentos</i>, não de tarefa.
+                </Ressalva>
+              </Explicacao>
+            </span>
+          </div>
 
-            Este cartão repetia o R$ do mês que a faixa do resumo, logo acima,
-            já mostra — dois números iguais um embaixo do outro. O que ele tem
-            de próprio é a fila: o que vence primeiro.
-          */}
-          <Head icon={<Wallet size={14} />} title="Próximos vencimentos" href="/contas" link="ver todas" />
-          <div className="px-[18px] pb-[18px] pt-1.5">
-            <div className="mt-2 flex flex-wrap gap-1.5">
+          <div className="grid place-items-center px-5 pb-2 pt-4">
+            <div className="relative">
+              <svg width="168" height="168" viewBox="0 0 168 168" className="-rotate-90">
+                <circle
+                  cx="84"
+                  cy="84"
+                  r={R}
+                  fill="none"
+                  stroke="var(--a-line)"
+                  strokeWidth="12"
+                />
+                <circle
+                  cx="84"
+                  cy="84"
+                  r={R}
+                  fill="none"
+                  stroke="var(--a)"
+                  strokeWidth="12"
+                  strokeLinecap="round"
+                  strokeDasharray={C.toFixed(1)}
+                  strokeDashoffset={(C * (1 - m.pct / 100)).toFixed(1)}
+                  className="anel-desenha"
+                  style={{ "--anel-c": C.toFixed(1) } as React.CSSProperties}
+                />
+              </svg>
+              <span className="absolute inset-0 grid place-content-center text-center">
+                <span className="text-[38px] font-semibold leading-none tracking-[-0.04em]">
+                  <Contador valor={m.pct} />%
+                </span>
+                <span className="mt-1.5 text-[12px] font-medium text-fg-mute">
+                  {m.feitas} de {m.doDia.length}{" "}
+                  {m.doDia.length === 1 ? "tarefa" : "tarefas"}
+                </span>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 px-5 pb-5 pt-2">
+            <Mini icon={<CheckCircle2 size={15} />} value={m.feitas} label="feitas" />
+            <Mini icon={<Repeat2 size={15} />} value={m.actRec.length} label="recorrentes" />
+            <Mini icon={<CalendarDays size={15} />} value={m.evToday.length} label="na agenda" />
+          </div>
+        </Card>
+
+        {/* ------------------------ fechamento do mês ------------------------ */}
+        <Fechamento contas={bills} hoje={today} />
+
+        {/* --------------------------- resumo do mês --------------------------- */}
+        <Card className="lg:col-span-8">
+          <Head
+            title={`Resumo de ${nomeMes}`}
+            href="/contas"
+            link="abrir contas"
+            explicacao={
+              <Explicacao>
+                <p>
+                  Soma as contas com <b>vencimento dentro de {nomeMes}</b>. Pago
+                  e o que esta marcado como pago; vencido e o que continua em
+                  aberto com a data ja passada; a vencer e o resto do que esta em
+                  aberto. As tres fecham o total.
+                </p>
+                <Ressalva>
+                  O recorte e a data de VENCIMENTO, nao a de pagamento. Uma conta
+                  de setembro que voce pagou em outubro conta em setembro.
+                </Ressalva>
+              </Explicacao>
+            }
+          />
+          {m.totalMes === 0 ? (
+            <div className="px-5 pb-5">
+              <Ghost>Nenhuma conta lançada neste mês.</Ghost>
+            </div>
+          ) : (
+            <div className="px-5 pb-5 pt-3">
+              <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="text-[36px] font-semibold leading-none tracking-[-0.04em]">
+                  <Contador valor={m.totalMes} formatar={brl} />
+                </span>
+                <span className="text-[13px] font-medium text-fg-mute">
+                  no mês · <b className="text-fg-dim tnum">{brl(m.pagoMes)}</b> pago
+                </span>
+              </p>
+              {/*
+                Cada valor é uma PORTA para /contas já filtrado. O número vai em
+                tinta de texto; quem diz "isto é o vencido" é a bolinha.
+              */}
+              <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                {([
+                  ["Total do mês", m.totalMes, null, "todas"],
+                  ["Pago", m.pagoMes, "bg-pos", "pagas"],
+                  ["Vencido", m.vencidoMes, "bg-neg", "atrasadas"],
+                  [
+                    "A vencer",
+                    Math.max(0, m.abertoMes - m.vencidoMes),
+                    "bg-[var(--cor-barra)]",
+                    "pendentes",
+                  ],
+                ] as [string, number, string | null, string][]).map(
+                  ([rotulo, valor, ponto, filtro]) => (
+                    <Link
+                      key={rotulo}
+                      href={`/contas?filtro=${filtro}`}
+                      prefetch={false}
+                      className="group rounded-[18px] border border-line bg-ink-800 px-4 py-3.5 transition-[background-color,transform] duration-200 hover:-translate-y-0.5 hover:bg-fg/[0.08]"
+                    >
+                      <span className="flex items-center gap-1.5 text-[12px] font-medium text-fg-mute">
+                        {ponto && (
+                          <span className={cx("h-2 w-2 shrink-0 rounded-full", ponto)} />
+                        )}
+                        {rotulo}
+                      </span>
+                      <span className="mt-1 block text-[19px] font-semibold tracking-[-0.03em] text-fg tnum group-hover:text-brand-400">
+                        {brl(valor)}
+                      </span>
+                    </Link>
+                  )
+                )}
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* ----------------------- próximos vencimentos ----------------------- */}
+        <Card className="lg:col-span-4">
+          {/* A fila do que vence primeiro; o total do mês está no resumo. */}
+          <Head title="Próximos vencimentos" href="/contas" link="ver todas" />
+          <div className="px-5 pb-5 pt-3">
+            <div className="flex flex-wrap gap-1.5">
               {m.late.length > 0 ? (
-                <span className="rounded-full bg-neg/12 px-2 py-0.5 text-[11px] font-semibold text-neg">
+                <span className="rounded-full bg-neg/15 px-2.5 py-1 text-[11.5px] font-semibold text-neg">
                   {m.late.length} em atraso
                 </span>
               ) : (
-                <span className="rounded-full bg-pos/12 px-2 py-0.5 text-[11px] font-semibold text-pos">
+                <span className="rounded-full bg-pos/15 px-2.5 py-1 text-[11.5px] font-semibold text-pos">
                   nada em atraso
                 </span>
               )}
               {m.soon.length > 0 && (
-                <span className="rounded-full bg-warn/12 px-2 py-0.5 text-[11px] font-semibold text-warn">
+                <span className="rounded-full bg-warn/15 px-2.5 py-1 text-[11.5px] font-semibold text-warn">
                   {m.soon.length} {m.soon.length === 1 ? "vence" : "vencem"} em 7 dias
                 </span>
               )}
             </div>
-            <div className="mt-3 flex flex-col">
+            <div className="mt-2 flex flex-col">
               {m.pend.length === 0 ? (
                 <Ghost>Tudo pago.</Ghost>
               ) : (
-                /* Cinco, e não três: o selo dizia "4 vencem em 7 dias" e a
-                   lista mostrava três, sem dizer qual faltava. */
+                /* Cinco: o selo dizia "4 vencem em 7 dias" e a lista mostrava
+                   três, sem dizer qual faltava. */
                 [...m.pend]
                   .sort((a, b) => a.due_date.localeCompare(b.due_date))
                   .slice(0, 5)
                   .map((b) => {
                     const d = daysUntil(b.due_date);
                     return (
-                      <div
-                        key={b.id}
-                        className="flex items-center gap-2.5 border-b border-line-soft py-2.5 text-[13px] last:border-0"
-                      >
+                      <Row key={b.id}>
                         <span
                           className={cx(
-                            "h-[7px] w-[7px] shrink-0 rounded-full",
+                            "h-2 w-2 shrink-0 rounded-full",
                             d < 0 ? "bg-neg" : d <= 7 ? "bg-warn" : "bg-ink-600"
                           )}
                         />
-                        <span className="min-w-0 flex-1 truncate font-medium">
-                          {b.description}
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13.5px] font-semibold">
+                            {b.description}
+                          </span>
+                          <span
+                            className={cx(
+                              "block text-[12px] tnum",
+                              d < 0 ? "font-semibold text-neg" : "text-fg-mute"
+                            )}
+                          >
+                            {d < 0 ? `${-d}d atraso` : d === 0 ? "hoje" : dataCurta(b.due_date)}
+                          </span>
                         </span>
                         <span
                           className={cx(
-                            "shrink-0 text-[11.5px] tnum",
-                            d < 0 ? "font-semibold text-neg" : "text-fg-mute"
-                          )}
-                        >
-                          {d < 0 ? `${-d}d atraso` : d === 0 ? "hoje" : dataCurta(b.due_date)}
-                        </span>
-                        <span
-                          className={cx(
-                            "shrink-0 font-semibold tnum",
+                            "shrink-0 text-[14px] font-semibold tnum",
                             d < 0 && "text-neg"
                           )}
                         >
                           {brl(Number(b.amount))}
                         </span>
-                      </div>
+                      </Row>
                     );
                   })
               )}
@@ -969,9 +877,10 @@ export default function HomePage() {
           </div>
         </Card>
 
-        <Card>
-          <Head icon={<CalendarDays size={14} />} title="Agenda" href="/calendario" link="ver tudo" />
-          <div className="flex flex-col px-[18px] pb-[18px] pt-1.5">
+        {/* ------------------------------ agenda ------------------------------ */}
+        <Card className="lg:col-span-4">
+          <Head title="Agenda" href="/calendario" link="ver tudo" />
+          <div className="flex flex-col px-5 pb-5 pt-2">
             {m.up.length === 0 ? (
               <Ghost>Agenda livre.</Ghost>
             ) : (
@@ -980,16 +889,14 @@ export default function HomePage() {
                 return (
                   <Row key={e.id}>
                     <span
-                      className="h-[7px] w-[7px] shrink-0 rounded-full"
+                      className="h-2 w-2 shrink-0 rounded-full"
                       style={{ background: corDoRotulo(e.color) }}
                     />
-                    <span className="min-w-0 flex-1 text-sm font-medium">
+                    <span className="min-w-0 flex-1 text-[14px] font-semibold">
                       <span className="block truncate">{e.title}</span>
-                      <span className="mt-0.5 block text-[11.5px] font-normal text-fg-mute">
+                      <span className="mt-0.5 block text-[12px] font-medium text-fg-mute">
                         {isToday ? "hoje" : dateBR(localDay(e.start_at)).slice(0, 5)}
-                        {e.all_day
-                          ? " · dia inteiro"
-                          : ` · ${localTime(e.start_at)}`}
+                        {e.all_day ? " · dia inteiro" : ` · ${localTime(e.start_at)}`}
                         {e.series_id && REPETE[e.recurrence] && ` · ${REPETE[e.recurrence]}`}
                         {e.location && ` · ${e.location}`}
                       </span>
@@ -1001,11 +908,12 @@ export default function HomePage() {
           </div>
         </Card>
 
-        <Card>
-          <Head icon={<Repeat2 size={14} />} title="Recorrentes" href="/recorrentes" link="gerenciar" />
-          <div className="px-[18px] pb-[18px] pt-1.5">
+        {/* ---------------------------- recorrentes ---------------------------- */}
+        <Card className="lg:col-span-4">
+          <Head title="Recorrentes" href="/recorrentes" link="gerenciar" />
+          <div className="px-5 pb-5 pt-2">
             {m.dueRec.length > 0 && (
-              <div className="mb-2.5 flex items-center gap-2 rounded-[14px] bg-warn/12 px-3 py-2.5 text-[12px] font-medium text-warn">
+              <div className="mb-1 mt-1 flex items-center gap-2 rounded-full bg-warn/15 px-3.5 py-2 text-[12px] font-semibold text-warn">
                 <Zap size={14} className="shrink-0" />
                 {m.dueRec.length} pendente{m.dueRec.length > 1 ? "s" : ""} hoje
               </div>
@@ -1018,14 +926,14 @@ export default function HomePage() {
                   const nx = nextOccurrence(r);
                   return (
                     <Row key={r.id}>
-                      <span className={cx("h-[7px] w-[7px] shrink-0 rounded-full", PRIO_DOT[r.priority])} />
-                      <span className="min-w-0 flex-1 text-sm font-medium">
+                      <span className={cx("h-2 w-2 shrink-0 rounded-full", PRIO_DOT[r.priority])} />
+                      <span className="min-w-0 flex-1 text-[14px] font-semibold">
                         <span className="block truncate">{r.title}</span>
-                        <span className="mt-0.5 block text-[11.5px] font-normal text-fg-mute">
+                        <span className="mt-0.5 block text-[12px] font-medium text-fg-mute">
                           {frequencyDescription(r)}
                         </span>
                       </span>
-                      <span className="shrink-0 text-[11.5px] font-semibold text-fg-mute tnum">
+                      <span className="shrink-0 text-[12px] font-semibold text-fg-mute tnum">
                         {nx === today ? "hoje" : nx ? dateBR(nx).slice(0, 5) : "—"}
                       </span>
                     </Row>
@@ -1035,60 +943,76 @@ export default function HomePage() {
             </div>
           </div>
         </Card>
-      </div>
 
-      {/* ------------------------------ referências ------------------------------ */}
-      {/* Leitura e Aulas saíram do Início; ficam na tela de cada uma. */}
-      {refs.length > 0 && (
-        <div className="mt-4">
-            <Card>
-              <Head
-                icon={<Library size={14} />}
-                title="Referências recentes"
-                href="/referencias"
-                link="ver todas"
-              />
-              <div className="px-[18px] pb-[18px] pt-3">
-                {/*
-                  Miniaturas, não linhas de texto.
-                  
-                  Referência é o que se reconhece de olho — o nome dela diz
-                  muito menos que a imagem. Por isso aqui é a única parte do
-                  painel que é imagem e não lista.
-                */}
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                  {refs.slice(0, 6).map((r) => (
-                    <Link
-                      key={r.id}
-                      href="/referencias"
-                      title={decodificarEntidades(r.name)}
-                      className="group block"
-                    >
-                      <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-[10px] bg-ink-800">
-                        {r.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={r.image_url}
-                            alt=""
-                            loading="lazy"
-                            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
-                          />
-                        ) : (
-                          <span className="grid h-full w-full place-items-center text-brand-400/40">
-                            <Library size={16} />
-                          </span>
-                        )}
-                      </span>
-                      <span className="mt-1.5 block truncate text-[11px] font-medium text-fg-dim group-hover:text-brand-400">
-                        {decodificarEntidades(r.name)}
-                      </span>
-                    </Link>
-                  ))}
-                </div>
+        {/* ----------------------------- anotações ----------------------------- */}
+        <Card className="lg:col-span-4">
+          <Head title="Anotações" href="/anotacoes" link="escrever" />
+          <div className="px-5 pb-5 pt-2">
+            {m.pinned.length === 0 ? (
+              <Ghost>Nada fixado ainda.</Ghost>
+            ) : (
+              m.pinned.map((n) => {
+                /* O texto por trás das tags: `content` guarda HTML. */
+                const previa = textoDaNota(n.content);
+                return (
+                  <div key={n.id} className="border-b border-line-soft py-3 last:border-0">
+                    <div className="flex items-center gap-1.5">
+                      <Pin size={12} style={{ color: corDoRotulo(n.color) }} />
+                      <p className="truncate text-[14px] font-semibold">
+                        {n.title || "Sem título"}
+                      </p>
+                    </div>
+                    {previa && (
+                      <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-fg-mute">
+                        {previa}
+                      </p>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Card>
+
+        {/* ---------------------------- referências ---------------------------- */}
+        {refs.length > 0 && (
+          <Card className="lg:col-span-12">
+            <Head title="Referências recentes" href="/referencias" link="ver todas" />
+            <div className="px-5 pb-5 pt-4">
+              {/* Miniaturas, não linhas: referência se reconhece de olho. */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                {refs.slice(0, 6).map((r) => (
+                  <Link
+                    key={r.id}
+                    href="/referencias"
+                    title={decodificarEntidades(r.name)}
+                    className="group block rounded-[18px] border border-line bg-ink-800 p-2 transition-[transform,background-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-1 hover:bg-fg/[0.08]"
+                  >
+                    <span className="relative block aspect-[4/3] w-full overflow-hidden rounded-[12px] bg-ink-800">
+                      {r.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={r.image_url}
+                          alt=""
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+                        />
+                      ) : (
+                        <span className="grid h-full w-full place-items-center text-brand-400/40">
+                          <Library size={16} />
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-2 block truncate px-1 text-[12px] font-semibold text-fg-dim group-hover:text-brand-400">
+                      {decodificarEntidades(r.name)}
+                    </span>
+                  </Link>
+                ))}
               </div>
-            </Card>
-        </div>
-      )}
+            </div>
+          </Card>
+        )}
+      </div>
 
       {notice.node}
     </div>
@@ -1184,14 +1108,13 @@ function Fechamento({ contas, hoje }: { contas: Bill[]; hoje: string }) {
       : null;
 
   return (
-    <Card className="mt-4">
+    <Card className="lg:col-span-12">
       <Head
-        icon={<PieChart size={14} />}
         title={`Fechamento de ${nomeDoMes(f.mes)}`}
         href="/contas"
         link="ver contas"
       />
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-[18px] pb-[18px] pt-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-5 pb-5 pt-3 sm:grid-cols-4">
         <div>
           <span className="block text-[11.5px] text-fg-mute">Pago</span>
           <b className="text-[19px] font-bold tracking-[-0.04em] tnum">{brl(f.pago)}</b>
@@ -1236,59 +1159,55 @@ function Fechamento({ contas, hoje }: { contas: Bill[]; hoje: string }) {
 /* ------------------------------ peças ------------------------------ */
 
 function Head({
-  icon,
   title,
+  sub,
   href,
   link,
   explicacao,
 }: {
-  icon: React.ReactNode;
   title: string;
+  sub?: string;
   href: string;
+  /** O nome do destino: vira o balão e o rótulo do botão redondo. */
   link: string;
   /** O botao de "como calculamos", quando o cartao mostra numero derivado. */
   explicacao?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3.5 px-[18px] pt-[17px]">
-      <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-fg-mute">
-        {/*
-          O icone dentro de uma pastilha, e nao solto ao lado do texto.
-
-          Solto, ele e mais um cinza do mesmo tamanho da letra e some na
-          linha; com o fundo, ele vira a ancora visual do cartao e a fileira
-          de cabecalhos passa a se ler de relance. A cor e o accent a 10%,
-          entao a pastilha acompanha o tema sem virar mais uma cor na tela.
-        */}
-        <span className="grid h-[22px] w-[22px] shrink-0 place-items-center rounded-[7px] bg-brand-500/12 text-brand-400">
-          {icon}
+    <div className="flex items-start justify-between gap-3.5 px-5 pt-5">
+      <div className="min-w-0">
+        <span className="flex items-center gap-1.5 text-[15px] font-semibold text-fg">
+          {title}
+          {explicacao}
         </span>
-        {title}
-        {explicacao}
-      </span>
+        {sub && <span className="mt-0.5 block text-[12px] text-fg-mute">{sub}</span>}
+      </div>
       {/*
-        `prefetch={false}` pelo mesmo motivo da barra lateral: são sete
-        cabeçalhos de cartão, todos visíveis ao abrir, e cada um adiantava a
-        sua tela sozinho. Somados aos nove da barra, davam dezesseis pedidos
-        ao servidor antes de o painel buscar o primeiro dado dele.
+        O botão redondo com a seta, como nos cartões da referência. O texto
+        ("ver todas", "gerenciar") continua no balão e no leitor de tela.
+        `prefetch={false}`: são vários cabeçalhos visíveis ao abrir, e cada um
+        adiantaria a sua tela sozinho.
       */}
       <Link
         href={href}
         prefetch={false}
-        className="text-xs font-medium text-fg-mute transition-colors hover:text-brand-400"
+        aria-label={link}
+        title={link}
+        className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--vidro-borda)] bg-ink-800 text-fg-dim transition-[background-color,color,transform] duration-200 hover:-translate-y-px hover:bg-fg/[0.09] hover:text-fg"
       >
-        {link}
+        <ArrowUpRight size={16} />
       </Link>
     </div>
   );
 }
 
 const Row = ({ children }: { children: React.ReactNode }) => (
-  <div className="flex items-center gap-3 border-b border-line-soft py-2.5 last:border-0">
+  <div className="flex items-center gap-3 border-b border-line-soft py-3 last:border-0">
     {children}
   </div>
 );
 
+/** Um contador dentro do cartão de cor: vidro sobre o roxo. */
 const Mini = ({
   icon,
   value,
@@ -1298,24 +1217,41 @@ const Mini = ({
   value: number;
   label: string;
 }) => (
-  <div className="rounded-[14px] bg-white/10 px-2.5 py-3">
-    <span className="opacity-65">{icon}</span>
-    <b className="mt-1.5 block text-[19px] font-bold leading-none tracking-[-0.03em]">
-      {value}
+  <div className="rounded-[16px] border border-line bg-ink-800 px-3 py-3">
+    <span className="text-fg-mute">{icon}</span>
+    <b className="mt-1.5 block text-[20px] font-semibold leading-none tracking-[-0.03em]">
+      <Contador valor={value} />
     </b>
-    <small className="mt-1 block text-[10.5px] text-white/60">{label}</small>
+    <small className="mt-1 block text-[11px] font-medium text-fg-mute">{label}</small>
+  </div>
+);
+
+/** Um número do cabeçalho: ícone num círculo de vidro, valor e rótulo. */
+const Kpi = ({
+  icone,
+  valor,
+  rotulo,
+  selo,
+}: {
+  icone: React.ReactNode;
+  valor: React.ReactNode;
+  rotulo: string;
+  selo?: React.ReactNode;
+}) => (
+  <div className="flex min-w-0 items-center gap-3">
+    <span className="vidro-flutuante grid h-11 w-11 shrink-0 place-items-center rounded-full text-fg-dim">
+      {icone}
+    </span>
+    <span className="min-w-0">
+      <span className="flex flex-wrap items-center gap-2">
+        <b className="text-[22px] font-semibold leading-none tracking-[-0.03em]">{valor}</b>
+        {selo}
+      </span>
+      <span className="mt-1 block truncate text-[12px] font-medium text-fg-mute">{rotulo}</span>
+    </span>
   </div>
 );
 
 const Ghost = ({ children }: { children: React.ReactNode }) => (
   <p className="py-6 text-center text-[12.5px] text-fg-mute">{children}</p>
-);
-
-
-/* ícone de nota sem puxar outro import do lucide */
-const StickyIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M15 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9l5-5V5a2 2 0 0 0-2-2Z" />
-    <path d="M15 21v-4a1 1 0 0 1 1-1h4" />
-  </svg>
 );

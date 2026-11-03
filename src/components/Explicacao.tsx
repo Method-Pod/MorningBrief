@@ -118,7 +118,7 @@ export function Explicacao({
             role="dialog"
             aria-label={titulo}
             style={lugar}
-            className="brota fixed z-[85] rounded-[14px] border border-line bg-ink-900 p-3.5 shadow-[var(--elev-3)]"
+            className="brota vidro-flutuante fixed z-[85] rounded-[18px] p-3.5"
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.07em] text-fg-mute">
               {titulo}

@@ -67,7 +67,7 @@ export function AvisoDeVersao() {
   if (!temNova) return null;
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-[90] flex justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <div className="fixed inset-x-0 bottom-20 z-[90] flex justify-center p-3 lg:bottom-0 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
       <button
         type="button"
         onClick={() => window.location.reload()}

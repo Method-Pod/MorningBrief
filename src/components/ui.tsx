@@ -61,7 +61,7 @@ export function Button({
    * `box-shadow` na lista ela saltava.
    */
   const base =
-    "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition-[color,background-color,border-color,box-shadow] duration-150 disabled:opacity-45 disabled:pointer-events-none select-none";
+    "inline-flex items-center justify-center gap-2 rounded-full font-semibold transition-[color,background-color,border-color,box-shadow] duration-150 disabled:opacity-45 disabled:pointer-events-none select-none";
   const sizes = {
     sm: "h-8 px-3 text-xs",
     md: "h-10 px-4 text-sm",
@@ -87,7 +87,8 @@ export function Button({
        vir para frente. Ver `--a-degrade` em globals.css. */
     primary:
       "bg-brand-500 bg-[image:var(--a-degrade)] text-on-brand shadow-[var(--brilho)] hover:bg-brand-600 hover:bg-none hover:shadow-[var(--brilho-forte)]",
-    outline: "bg-ink-900 text-fg-dim shadow-[var(--elev-1)] hover:text-fg hover:shadow-[var(--elev-2)]",
+    /* Vidro com borda clara, como os botões redondos da referência. */
+    outline: "border border-[var(--vidro-borda)] bg-ink-800 text-fg-dim hover:bg-fg/[0.09] hover:text-fg",
     ghost: "text-fg-mute hover:text-fg hover:bg-ink-800",
     subtle: "bg-ink-800 text-fg-dim hover:bg-brand-500/12 hover:text-brand-400",
     danger: "bg-neg/10 text-neg hover:bg-neg/20",
@@ -108,11 +109,11 @@ export function Button({
 /* ------------------------------ Inputs ------------------------------ */
 
 const fieldBase =
-  "w-full rounded-[14px] border border-transparent bg-ink-800 px-3.5 text-sm text-fg placeholder:text-fg-mute transition-colors focus:border-brand-500 focus:bg-ink-900 focus:outline-none";
+  "w-full border border-[var(--a-line)] bg-ink-800 px-4 text-sm text-fg placeholder:text-fg-mute transition-colors focus:border-brand-500 focus:bg-ink-900 focus:outline-none";
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   const { className, ...rest } = props;
-  return <input className={cx(fieldBase, "h-10", className)} {...rest} />;
+  return <input className={cx(fieldBase, "h-10 rounded-full", className)} {...rest} />;
 }
 
 export function Textarea(
@@ -121,7 +122,7 @@ export function Textarea(
   const { className, ...rest } = props;
   return (
     <textarea
-      className={cx(fieldBase, "py-2.5 leading-relaxed", className)}
+      className={cx(fieldBase, "rounded-[18px] py-2.5 leading-relaxed", className)}
       {...rest}
     />
   );
@@ -367,7 +368,7 @@ export function Select({
         onKeyDown={naTecla}
         className={cx(
           fieldBase,
-          "flex h-10 items-center gap-2 pr-3 text-left",
+          "flex h-10 items-center gap-2 rounded-full pr-3 text-left",
           aberto && "border-brand-500 bg-ink-900",
           disabled && "cursor-not-allowed opacity-45",
           className
@@ -397,7 +398,7 @@ export function Select({
             tabIndex={-1}
             aria-activedescendant={`${idLista}-${emFoco}`}
             style={{ ...lugar, maxHeight: teto }}
-            className="brota fixed z-[70] overflow-y-auto overscroll-contain rounded-[14px] border border-line bg-ink-900 p-1.5 shadow-[var(--elev-3)]"
+            className="brota vidro-flutuante fixed z-[70] overflow-y-auto overscroll-contain rounded-[18px] p-1.5"
           >
             {opcoes.map((o, i) => {
               /* O rótulo do grupo entra antes da primeira opção dele. */
@@ -424,7 +425,7 @@ export function Select({
                       /* Linha alta no telefone e baixa no ponteiro: 40px é o
                          alvo confortável para o dedo, e no mouse essa altura
                          faria uma lista de dez opções passar da tela. */
-                      "flex cursor-pointer items-center gap-2 rounded-[10px] px-2.5 py-2.5 text-[13.5px] transition-colors sm:py-1.5",
+                      "flex cursor-pointer items-center gap-2 rounded-[12px] px-2.5 py-2.5 text-[13.5px] transition-colors sm:py-1.5",
                       escolhida ? "font-semibold text-brand-400" : "text-fg-dim",
                       i === emFoco && "bg-ink-800"
                     )}
@@ -545,7 +546,7 @@ export function Segmented<T extends string>({
   return (
     <div
       className={cx(
-        "inline-flex items-center gap-1 rounded-[14px] bg-ink-800 p-1",
+        "inline-flex items-center gap-1 rounded-full border border-[var(--a-line)] bg-ink-800 p-1",
         travado && "[&>button:not([aria-pressed=true])]:opacity-45"
       )}
     >
@@ -563,7 +564,7 @@ export function Segmented<T extends string>({
           disabled={travado}
           aria-pressed={value === o.value}
           className={cx(
-            "h-7 rounded-lg px-3 text-xs font-medium transition-colors disabled:cursor-default",
+            "h-7 rounded-full px-3.5 text-xs font-semibold transition-colors disabled:cursor-default",
             /*
               O escolhido é roxo cheio, não uma lasca branca levantada.
               
@@ -770,7 +771,7 @@ export function Modal({
            * e tinha que rolar procurando o Salvar. Assim cabeçalho e rodapé
            * ficam sempre à vista e só o miolo rola.
            */
-          "relative z-10 my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-[20px] bg-ink-900 shadow-[var(--elev-4)] sm:max-h-[calc(100dvh-3rem)]",
+          "vidro-flutuante relative z-10 my-auto flex max-h-[calc(100dvh-2rem)] w-full flex-col rounded-[24px] shadow-[inset_0_1px_0_var(--vidro-brilho),var(--elev-4)] sm:max-h-[calc(100dvh-3rem)]",
           saindo ? "pop-sai" : "pop",
           size === "xl" ? "max-w-3xl" : size === "lg" ? "max-w-2xl" : "max-w-lg"
         )}
@@ -787,7 +788,7 @@ export function Modal({
           <button
             onClick={onClose}
             aria-label="Fechar"
-            className="rounded-lg p-1.5 text-fg-mute transition-colors hover:bg-ink-750 hover:text-fg"
+            className="grid h-8 w-8 place-items-center rounded-full border border-[var(--a-line)] text-fg-mute transition-colors hover:bg-ink-800 hover:text-fg"
           >
             <X size={16} />
           </button>
@@ -1088,7 +1089,7 @@ export function useNotice() {
           <div
             role={aviso.tom === "erro" ? "alert" : "status"}
             className={cx(
-              "fixed bottom-5 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full px-4 py-3 text-center text-xs font-semibold shadow-[var(--elev-3)] pop",
+              "fixed bottom-24 left-1/2 z-[90] max-w-[92vw] -translate-x-1/2 rounded-full px-4 py-3 text-center text-xs font-semibold shadow-[var(--elev-3)] pop lg:bottom-5",
               TOM_DO_AVISO[aviso.tom]
             )}
           >

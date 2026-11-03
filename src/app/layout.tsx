@@ -1,15 +1,19 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
-import { Plus_Jakarta_Sans } from "next/font/google";
+import { Urbanist } from "next/font/google";
 import { TEMA_STORAGE } from "@/lib/tema";
 import { RegistroApp } from "@/components/RegistroApp";
 import { CorDaBarra } from "@/components/tema";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
+/*
+ * Urbanist, a pedido dele, junto com o visual de vidro: geométrica e
+ * arredondada, com o título compacto que faz parte desse desenho.
+ */
+const urbanist = Urbanist({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-jakarta",
+  variable: "--font-urbanist",
 });
 
 const SITE = "https://morningbrief-app.vercel.app";
@@ -112,8 +116,8 @@ export const viewport: Viewport = {
    * isto vira uma etiqueta no <head>, lida antes de qualquer CSS.
    */
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#f1f4f7" },
-    { media: "(prefers-color-scheme: dark)", color: "#1f2328" },
+    { media: "(prefers-color-scheme: light)", color: "#ebe8f2" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e0c13" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -159,7 +163,7 @@ export default async function RootLayout({
     // não silencia diferença nenhuma dentro da árvore.
     <html
       lang="pt-BR"
-      className={jakarta.variable}
+      className={urbanist.variable}
       suppressHydrationWarning
     >
       <head>

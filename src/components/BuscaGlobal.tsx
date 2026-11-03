@@ -318,7 +318,7 @@ export function BuscaGlobal() {
       <div
         role="dialog"
         aria-label="Buscar em tudo"
-        className="pop relative w-full max-w-[560px] overflow-hidden rounded-[18px] bg-ink-900 shadow-[var(--elev-4)]"
+        className="pop vidro-flutuante relative w-full max-w-[560px] overflow-hidden rounded-[22px] shadow-[inset_0_1px_0_var(--vidro-brilho),var(--elev-4)]"
       >
         <div className="flex items-center gap-2.5 border-b border-line-soft px-4">
           <Search size={16} className="shrink-0 text-fg-mute" />

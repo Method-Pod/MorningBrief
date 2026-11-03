@@ -322,6 +322,22 @@ export default function ContasPage() {
     setOpen(true);
   };
 
+  /*
+   * `?nova=1` abre o formulário de nova conta, e sai da URL.
+   *
+   * É como o botão "Nova conta" da barra de ícones chega aqui de qualquer
+   * tela. Reage ao parâmetro, e não só à montagem, porque clicar no botão
+   * estando nesta mesma tela não remonta a página. Tirar o parâmetro em
+   * seguida impede que recarregar abra o formulário de novo.
+   */
+  const pediuNova = paramDaUrl.get("nova") === "1";
+  React.useEffect(() => {
+    if (!pediuNova) return;
+    novo();
+    router.replace("/contas", { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pediuNova]);
+
   /**
    * Abre a criação da fatura de um cartão, já preenchida.
    *
