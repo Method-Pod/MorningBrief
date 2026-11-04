@@ -48,6 +48,7 @@ import {
   type Projeto,
   type RecurringTask,
   nomeDoCliente,
+  corDoRotulo,
 } from "@/lib/types";
 import { dataCurta, dateBR, daysUntil, horaCurta, todayISO } from "@/lib/format";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
@@ -69,6 +70,7 @@ import {
   ErroDeCarga,
 } from "@/components/ui";
 import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
+import { FiltroDeCliente, type ItemDoFiltro } from "@/components/FiltroDeCliente";
 import { Contador } from "@/components/Contador";
 import { SeletorDeData } from "@/components/SeletorDeData";
 import { ChipsDeLink, EditorLinks, limparLinks } from "@/components/Links";
@@ -1008,13 +1010,29 @@ export default function DemandasPage() {
   const ativas = React.useMemo(() => rows.filter((t) => !estaArquivada(t)), [rows]);
   const arquivadas = React.useMemo(() => rows.filter(estaArquivada), [rows]);
 
+  /*
+   * O filtro de cliente fala em três línguas: `c:<id>` é o cliente do
+   * cadastro (com todos os projetos dele), `p:<id>` é um projeto, e texto
+   * puro é o nome de antes do cadastro -- que é o que o clique no nome de um
+   * cartão manda, e continua valendo.
+   */
+  const casaCliente = React.useCallback(
+    (t: Task) =>
+      cliente === "all"
+        ? true
+        : cliente.startsWith("c:")
+          ? t.cliente_id === cliente.slice(2)
+          : cliente.startsWith("p:")
+            ? t.projeto_id === cliente.slice(2)
+            : (nomeDe(t) || SEM_CLIENTE) === cliente || t.client?.trim() === cliente,
+    [cliente, nomeDe]
+  );
+
   const filtered = React.useMemo(() => {
     const term = q.trim().toLowerCase();
     return (view === "arquivadas" ? arquivadas : ativas)
       .filter((t) => prio === "all" || t.priority === prio)
-      .filter(
-        (t) => cliente === "all" || (nomeDe(t) || SEM_CLIENTE) === cliente
-      )
+      .filter((t) => casaCliente(t))
       .filter(
         (t) =>
           !term ||
@@ -1034,7 +1052,7 @@ export default function DemandasPage() {
           horaCurta(b.due_time) || "99:99"
         );
       });
-  }, [ativas, arquivadas, view, q, prio, cliente, nomeDe]);
+  }, [ativas, arquivadas, view, q, prio, casaCliente, nomeDe]);
 
   const byStatus = (s: TaskStatus) => filtered.filter((t) => t.status === s);
 
@@ -1069,6 +1087,69 @@ export default function DemandasPage() {
         return a.nome.localeCompare(b.nome, "pt-BR");
       });
   }, [rows, nomeDe]);
+
+  /*
+   * A lista do filtro de cliente: um item por cliente, e os projetos dele
+   * embaixo quando dividem o trabalho (dois ou mais, ou um projeto e
+   * demandas soltas do cliente). Mesma contagem de `clientes`: o que está em
+   * aberto, sobre as não arquivadas.
+   */
+  const itensDoFiltro = React.useMemo(() => {
+    type Grupo = { item: ItemDoFiltro; total: number; projetos: Map<string, ItemDoFiltro & { total: number }> };
+    const grupos = new Map<string, Grupo>();
+    const contar = (it: ItemDoFiltro, t: Task) => {
+      if (t.status === "done") return;
+      it.abertas++;
+      if (t.due_date && daysUntil(t.due_date) < 0) it.atrasadas++;
+    };
+    for (const t of ativas) {
+      const c = t.cliente_id ? porId.get(t.cliente_id) : undefined;
+      const texto = t.client?.trim() ?? "";
+      const chave = c ? `c:${c.id}` : texto || SEM_CLIENTE;
+      const g =
+        grupos.get(chave) ??
+        {
+          item: {
+            valor: chave,
+            nome: c ? c.nome : texto || "Sem cliente",
+            cor: c ? corDoRotulo(c.cor) : undefined,
+            abertas: 0,
+            atrasadas: 0,
+            nivel: 0 as const,
+          },
+          total: 0,
+          projetos: new Map(),
+        };
+      g.total++;
+      contar(g.item, t);
+      const pr = c && t.projeto_id ? projetoPorId.get(t.projeto_id) : undefined;
+      if (pr) {
+        const pi =
+          g.projetos.get(pr.id) ??
+          { valor: `p:${pr.id}`, nome: pr.nome, cor: g.item.cor, abertas: 0, atrasadas: 0, nivel: 1 as const, total: 0 };
+        pi.total++;
+        contar(pi, t);
+        g.projetos.set(pr.id, pi);
+      }
+      grupos.set(chave, g);
+    }
+    const ordem = (a: ItemDoFiltro, b: ItemDoFiltro) =>
+      b.abertas - a.abertas || a.nome.localeCompare(b.nome, "pt-BR");
+    return [...grupos.values()]
+      .sort((a, b) =>
+        (a.item.valor === SEM_CLIENTE) !== (b.item.valor === SEM_CLIENTE)
+          ? a.item.valor === SEM_CLIENTE
+            ? 1
+            : -1
+          : (b.item.abertas > 0 ? 1 : 0) - (a.item.abertas > 0 ? 1 : 0) || ordem(a.item, b.item)
+      )
+      .flatMap((g) => {
+        const ps = [...g.projetos.values()];
+        const soltas = g.total - ps.reduce((s, p) => s + p.total, 0);
+        const mostrar = ps.length > 1 || (ps.length === 1 && soltas > 0);
+        return [g.item, ...(mostrar ? ps.sort(ordem).map(({ total: _t, ...p }) => p) : [])];
+      });
+  }, [ativas, porId, projetoPorId]);
 
   /* As demandas já filtradas, agrupadas para a visão por cliente. */
   const grupos = React.useMemo(
@@ -1221,52 +1302,15 @@ export default function DemandasPage() {
             cheias, e somadas aos filtros davam ~540px de controles antes da
             primeira demanda. */}
         <div className="flex w-full gap-2.5 sm:contents">
-        {clientes.length > 1 && (
-          <Select
-            value={cliente}
-            onChange={(e) => setCliente(e.target.value)}
-            className="min-w-0 flex-1 sm:w-[200px] sm:flex-none"
-            aria-label="Filtrar por cliente"
-          >
-            {/*
-              Separado em dois grupos, e não numa lista corrida.
-
-              O número ao lado do nome conta o que está EM ABERTO, então um
-              cliente sem nada pendente aparece com (0) — e ficava misturado,
-              do mesmo tamanho, entre os que têm trabalho esperando. Metade da
-              lista podia estar zerada sem nada dizer isso antes de clicar.
-
-              Os dois grupos respondem perguntas diferentes: "quem está me
-              esperando" e "com quem eu já trabalhei". Nenhum cliente some — o
-              histórico continua acessível, que é o motivo de o (0) existir.
-            */}
-            <option value="all">Todos os clientes</option>
-            {(() => {
-              const comTrabalho = clientes.filter((c) => c.abertas > 0);
-              const semTrabalho = clientes.filter((c) => c.abertas === 0);
-              const grupo = (
-                rotulo: string,
-                lista: typeof clientes,
-                mostrarNumero: boolean
-              ) =>
-                lista.length > 0 && (
-                  <optgroup label={rotulo}>
-                    {lista.map((c) => (
-                      <option key={c.chave} value={c.chave}>
-                        {c.nome}
-                        {mostrarNumero ? ` (${c.abertas})` : ""}
-                      </option>
-                    ))}
-                  </optgroup>
-                );
-              return (
-                <>
-                  {grupo("Com demandas abertas", comTrabalho, true)}
-                  {grupo("Sem nada em aberto", semTrabalho, false)}
-                </>
-              );
-            })()}
-          </Select>
+        {itensDoFiltro.filter((i) => i.nivel === 0).length > 1 && (
+          <div className="min-w-0 flex-1 sm:w-[220px] sm:flex-none">
+            <FiltroDeCliente
+              valor={cliente}
+              itens={itensDoFiltro}
+              totalAbertas={openCount}
+              onChange={setCliente}
+            />
+          </div>
         )}
 
         <div className="relative min-w-0 flex-1 sm:ml-auto sm:w-64 sm:flex-none">
