@@ -59,6 +59,11 @@ test("o navegador fala com o banco, e com o oEmbed do YouTube", () => {
   /* Regressao: `dadosDoLink` chama o oEmbed do navegador ao colar o link de
      uma aula. Sem isto, cadastrar aula pararia de trazer titulo e capa. */
   assert.ok(c.includes("https://www.youtube.com"), "o oEmbed da aula");
+  /* Regressao: o clima do Inicio busca a temperatura e a cidade digitada
+     direto no Open-Meteo. Sem os dois, digitar a cidade dava sempre "nao
+     encontrei" e a posicao do aparelho nunca virava temperatura. */
+  assert.ok(c.includes("https://api.open-meteo.com"), "a temperatura");
+  assert.ok(c.includes("https://geocoding-api.open-meteo.com"), "a busca da cidade");
 });
 
 test("endereco de banco torto nao derruba a politica", () => {

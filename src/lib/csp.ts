@@ -111,8 +111,21 @@ export function politicaDeConteudo({
      * `'self'` cobre as rotas de /api. O Supabase é o banco. O YouTube está
      * aqui porque o oEmbed dele é chamado do navegador ao colar o link de uma
      * aula — é o que traz título, canal e miniatura.
+     *
+     * Os dois do Open-Meteo são o clima do Início (components/Clima): a
+     * temperatura pela posição do aparelho e a busca da cidade digitada vão
+     * direto do navegador, de propósito, para a posição de ninguém passar
+     * pelo servidor do app. Ficaram de fora quando esta política nasceu, e o
+     * clima ficou só com o palpite pelo endereço de rede: digitar a cidade
+     * dava sempre "Não encontrei o clima dessa cidade".
      */
-    "connect-src": ["'self'", ...supabase, "https://www.youtube.com"],
+    "connect-src": [
+      "'self'",
+      ...supabase,
+      "https://www.youtube.com",
+      "https://api.open-meteo.com",
+      "https://geocoding-api.open-meteo.com",
+    ],
 
     /* O service worker do app, e nenhum outro. */
     "worker-src": ["'self'", "blob:"],

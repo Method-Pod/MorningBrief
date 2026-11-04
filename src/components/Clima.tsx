@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import {
   Cloud,
   CloudDrizzle,
@@ -144,14 +145,20 @@ function pedirLocal(): Promise<Lugar | null> {
   });
 }
 
-/** Coordenada de um nome de cidade, pelo geocoder do próprio Open-Meteo. */
-async function acharCidade(nome: string): Promise<Lugar | null> {
+/**
+ * Coordenada de um nome de cidade, pelo geocoder do próprio Open-Meteo.
+ *
+ * `null` = o serviço respondeu e a cidade não existe; "falhou" = o pedido
+ * nem chegou (sem rede, serviço fora). São recados diferentes na tela.
+ */
+async function acharCidade(nome: string): Promise<Lugar | null | "falhou"> {
   const url =
     "https://geocoding-api.open-meteo.com/v1/search?count=1&language=pt" +
     `&format=json&name=${encodeURIComponent(nome)}`;
   try {
     const r = await fetch(url);
-    const d = r.ok ? await r.json() : null;
+    if (!r.ok) return "falhou";
+    const d = await r.json();
     const a = d?.results?.[0];
     if (!a || !Number.isFinite(a.latitude)) return null;
     return {
@@ -160,7 +167,7 @@ async function acharCidade(nome: string): Promise<Lugar | null> {
       nome: [a.name, a.admin1].filter(Boolean).join(", "),
     };
   } catch {
-    return null;
+    return "falhou";
   }
 }
 
@@ -201,8 +208,13 @@ export function Clima({ className }: { className?: string }) {
   const [clima, setClima] = React.useState<Clima | null>(null);
   const [abrindo, setAbrindo] = React.useState(false);
   const [rascunho, setRascunho] = React.useState("");
-  const [erro, setErro] = React.useState(false);
+  /* Duas falhas diferentes, dois recados: nome que não existe pede para
+     conferir o nome; rede que caiu pede para tentar de novo. */
+  const [erro, setErro] = React.useState<false | "nome" | "rede">(false);
   const [salvando, setSalvando] = React.useState(false);
+  const botao = React.useRef<HTMLButtonElement>(null);
+  const caixa = React.useRef<HTMLDivElement>(null);
+  const [lugarDoPainel, setLugarDoPainel] = React.useState<React.CSSProperties>({});
   /*
    * Se as três fontes falharam.
    *
@@ -294,6 +306,10 @@ export function Clima({ className }: { className?: string }) {
     setErro(false);
     setSalvando(true);
     const lugar = await acharCidade(nome);
+    if (lugar === "falhou" || !lugar) {
+      setSalvando(false);
+      return setErro(lugar === "falhou" ? "rede" : "nome");
+    }
     /*
      * A cidade só é gravada depois que a temperatura dela chega.
      *
@@ -302,14 +318,62 @@ export function Clima({ className }: { className?: string }) {
      * sumia da tela levando o próprio campo de cidade embora. Confirmando
      * primeiro, uma falha só mostra o aviso e o painel continua aberto.
      */
-    const c = lugar ? await buscarClima(lugar) : null;
+    const c = await buscarClima(lugar);
     setSalvando(false);
-    if (!lugar || !c) return setErro(true);
+    if (!c) return setErro("rede");
     gravar(CHAVE_CIDADE, JSON.stringify(lugar));
     setClima({ ...c, lugar: lugar.nome ?? null, fonte: "cidade" });
     setAbrindo(false);
     setRascunho("");
   };
+
+  /*
+   * O painel da cidade flutua por cima da página, preso à tela, e não dentro
+   * da pílula da data.
+   *
+   * Dentro dela ele era um `absolute` que descia por cima do primeiro
+   * cartão e, conforme a largura, ficava atrás dele (o cartão de vidro tem
+   * a própria camada) -- a borda roxa do "Seu dia" atravessava o painel. E
+   * só fechava pelo próprio botão: clicar fora deixava o painel aberto.
+   * Agora fecha ao clicar fora, com Esc e ao rolar a página.
+   */
+  const abrir = () => {
+    const b = botao.current?.getBoundingClientRect();
+    if (!b) return;
+    const largura = Math.min(260, window.innerWidth - 32);
+    setLugarDoPainel({
+      top: b.bottom + 10,
+      left: Math.max(16, Math.min(b.right - largura, window.innerWidth - largura - 16)),
+      width: largura,
+    });
+    setErro(false);
+    setAbrindo(true);
+  };
+
+  React.useEffect(() => {
+    if (!abrindo) return;
+    const fora = (e: PointerEvent) => {
+      const t = e.target as Node;
+      if (!caixa.current?.contains(t) && !botao.current?.contains(t)) setAbrindo(false);
+    };
+    const fechar = () => setAbrindo(false);
+    const tecla = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setAbrindo(false);
+        botao.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", fora);
+    document.addEventListener("keydown", tecla);
+    window.addEventListener("resize", fechar);
+    window.addEventListener("scroll", fechar, true);
+    return () => {
+      document.removeEventListener("pointerdown", fora);
+      document.removeEventListener("keydown", tecla);
+      window.removeEventListener("resize", fechar);
+      window.removeEventListener("scroll", fechar, true);
+    };
+  }, [abrindo]);
 
   /* Enquanto as fontes ainda respondem, nada na tela: um ícone que aparece e
      troca de valor sozinho chamaria mais atenção que o próprio dado. */
@@ -322,8 +386,10 @@ export function Clima({ className }: { className?: string }) {
   return (
     <span className={cx("relative", className)}>
       <button
+        ref={botao}
         type="button"
-        onClick={() => setAbrindo((v) => !v)}
+        aria-expanded={abrindo}
+        onClick={() => (abrindo ? setAbrindo(false) : abrir())}
         title={
           clima
             ? `${rotulo}${clima.lugar ? ` · ${clima.lugar}` : ""} · ${COMO[clima.fonte]}`
@@ -343,38 +409,57 @@ export function Clima({ className }: { className?: string }) {
         <span className="tnum">{clima ? `${clima.temp}°` : "--°"}</span>
       </button>
 
-      {abrindo && (
-        <span className="absolute right-0 top-[calc(100%+10px)] z-20 flex w-[230px] flex-col gap-1.5 rounded-[14px] bg-ink-900 p-2.5 text-left shadow-[var(--elev-3)]">
-          <span className="flex items-center gap-1.5 px-0.5 text-[10px] font-medium uppercase tracking-wider text-fg-mute">
-            <MapPin size={11} />
-            Sua cidade
-          </span>
-          <Input
-            autoFocus
-            value={rascunho}
-            onChange={(e) => {
-              setRascunho(e.target.value);
-              setErro(false);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                salvarCidade();
-              }
-              if (e.key === "Escape") setAbrindo(false);
-            }}
-            placeholder="Campo Grande"
-            className="h-9 text-[12.5px] font-normal"
-          />
-          <span className="px-0.5 text-[10.5px] font-normal text-fg-mute">
-            {salvando
-              ? "Buscando..."
-              : erro
-                ? "Não encontrei o clima dessa cidade. Confira o nome."
-                : "Enter para salvar."}
-          </span>
-        </span>
-      )}
+      {abrindo &&
+        createPortal(
+          <div
+            ref={caixa}
+            role="dialog"
+            aria-label="Escolher a cidade do clima"
+            style={lugarDoPainel}
+            className="brota vidro-flutuante fixed z-[70] flex flex-col gap-1.5 rounded-[18px] p-3 text-left"
+          >
+            <span className="flex items-center gap-1.5 px-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-fg-mute">
+              <MapPin size={11} />
+              Sua cidade
+            </span>
+            {clima?.lugar && clima.fonte === "cidade" && (
+              <span className="px-0.5 text-[12px] text-fg-dim">
+                Agora: <b className="font-semibold text-fg">{clima.lugar}</b>
+              </span>
+            )}
+            <Input
+              autoFocus
+              value={rascunho}
+              onChange={(e) => {
+                setRascunho(e.target.value);
+                setErro(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  salvarCidade();
+                }
+              }}
+              placeholder="Belo Horizonte"
+              className="h-9 text-[12.5px] font-normal"
+            />
+            <span
+              className={cx(
+                "px-0.5 text-[11px] font-normal",
+                erro ? "text-neg" : "text-fg-mute"
+              )}
+            >
+              {salvando
+                ? "Buscando..."
+                : erro === "nome"
+                  ? "Não achei essa cidade. Confira o nome."
+                  : erro === "rede"
+                    ? "Sem resposta do serviço de clima agora. Tente de novo."
+                    : "Enter para salvar."}
+            </span>
+          </div>,
+          document.body
+        )}
     </span>
   );
 }
