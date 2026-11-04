@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { brl, dataCurta, todayISO } from "@/lib/format";
 import { diaDeManutencao } from "@/lib/viradaDoDia";
 import { gravarEnergia, lerRegistro } from "@/lib/registroDoDia";
-import { lerDadosDaSemana, montarRevisao, semanaEmRevisao, type Revisao } from "@/lib/revisaoDaSemana";
+import { lerDadosDaSemana, montarRevisao, semanaDe, semanaEmRevisao, type Revisao } from "@/lib/revisaoDaSemana";
 import { DIAS_PARA_COMECAR, lerPadroes, type Padrao } from "@/lib/padroes";
 import { somarDias } from "@/lib/modelosDeDemanda";
 import { naoExiste } from "@/lib/saudeDoBanco";
@@ -35,24 +35,28 @@ export function EnergiaDoDia() {
   const [pronto, setPronto] = React.useState(false);
   const [semTabela, setSemTabela] = React.useState(false);
   const [falhou, setFalhou] = React.useState(false);
-  /* Os seis dias antes de hoje; o de hoje é `energia`, que muda no toque. */
+  /* Os outros dias da semana; o de hoje é `energia`, que muda no toque. */
   const [semana, setSemana] = React.useState<Map<string, number | null>>(new Map());
   const [hoje] = React.useState(() => diaDeManutencao());
+  /* A semana de segunda a domingo, a mesma da revisão da semana. Eram os
+     últimos 7 dias corridos, e a fileira começava num dia qualquer
+     ("Q S S D S T Q" numa quarta) -- parecia defeito, e era. */
+  const { de: segunda } = semanaDe(hoje);
 
   React.useEffect(() => {
-    lerRegistro(supabase, { de: somarDias(hoje, -6), ate: hoje }).then((r) => {
+    lerRegistro(supabase, { de: segunda, ate: hoje }).then((r) => {
       setSemTabela(r.semTabela);
       setSemana(new Map(r.dias.map((d) => [d.dia, d.energia])));
       setEnergia(r.dias.find((d) => d.dia === hoje)?.energia ?? null);
       setPronto(true);
     });
-  }, [supabase, hoje]);
+  }, [supabase, hoje, segunda]);
 
-  /* Os últimos 7 dias, de seis dias atrás até hoje. */
   const dias = Array.from({ length: 7 }, (_, i) => {
-    const dia = somarDias(hoje, i - 6);
-    return { dia, valor: dia === hoje ? energia : (semana.get(dia) ?? null) };
+    const dia = somarDias(segunda, i);
+    return { dia, valor: dia === hoje ? energia : (semana.get(dia) ?? null), futuro: dia > hoje };
   });
+  const passados = dias.filter((d) => !d.futuro).length;
   const marcados = dias.filter((d) => d.valor != null).map((d) => d.valor as number);
   const media = marcados.length ? marcados.reduce((s, v) => s + v, 0) / marcados.length : null;
 
@@ -107,31 +111,39 @@ export function EnergiaDoDia() {
       </div>
 
       {/*
-        Os últimos 7 dias, uma barrinha por dia, da altura da energia daquele
-        dia. Dia sem marca fica só com o trilho, para a falta aparecer em vez
-        de virar um "zero" que não aconteceu.
+        A semana, de segunda a domingo, uma barrinha por dia, da altura da
+        energia daquele dia. Dia sem marca fica só com o trilho, para a falta
+        aparecer em vez de virar um "zero" que não aconteceu; dia que ainda
+        não chegou fica tracejado.
       */}
       {pronto && (
         <div className="mt-4">
           <div className="flex items-center justify-between gap-2 text-[11.5px] text-fg-mute">
-            <span>Últimos 7 dias</span>
-            <span className="tnum">
+            <span className="min-w-0 truncate">Esta semana</span>
+            <span className="shrink-0 tnum">
               {media == null
-                ? "nenhum dia marcado"
-                : `média ${media.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} · ${marcados.length} de 7 dias`}
+                ? "nada marcado"
+                : `média ${media.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} · ${marcados.length}/${passados} dias`}
             </span>
           </div>
-          <ol className="mt-2 grid grid-cols-7 gap-1.5" aria-label="Energia dos últimos 7 dias">
-            {dias.map(({ dia, valor }) => {
+          <ol className="mt-2 grid grid-cols-7 gap-1.5" aria-label="Energia desta semana">
+            {dias.map(({ dia, valor, futuro }) => {
               const ehHoje = dia === hoje;
               const dow = diaDaSemana(dia);
               return (
                 <li
                   key={dia}
                   className="flex flex-col items-center gap-1"
-                  title={`${ehHoje ? "hoje" : NOME_DO_DIA[dow]}: ${valor ? `${valor} (${ROTULOS_ENERGIA[valor - 1]})` : "sem marca"}`}
+                  title={`${ehHoje ? "hoje" : NOME_DO_DIA[dow]}: ${
+                    futuro ? "ainda não chegou" : valor ? `${valor} (${ROTULOS_ENERGIA[valor - 1]})` : "sem marca"
+                  }`}
                 >
-                  <span className="flex h-12 w-full max-w-[22px] items-end overflow-hidden rounded-full bg-fg/[0.07]">
+                  <span
+                    className={cx(
+                      "flex h-12 w-full max-w-[22px] items-end overflow-hidden rounded-full",
+                      futuro ? "border border-dashed border-line" : "bg-fg/[0.07]"
+                    )}
+                  >
                     {valor != null && (
                       <span
                         className={cx(
@@ -145,7 +157,7 @@ export function EnergiaDoDia() {
                   <span
                     className={cx(
                       "text-[10.5px] font-semibold",
-                      ehHoje ? "text-brand-400" : "text-fg-mute"
+                      ehHoje ? "text-brand-400" : futuro ? "text-fg-mute/50" : "text-fg-mute"
                     )}
                   >
                     {SIGLA_DO_DIA[dow]}
