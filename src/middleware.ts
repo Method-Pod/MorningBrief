@@ -18,6 +18,9 @@ export const config = {
    * cabeçalho Authorization com o CRON_SECRET — é a checagem certa para quem
    * chama de máquina, e ela recusa qualquer chamada sem o segredo.
    *
+   * /api/mcp pelo mesmo motivo: quem chama é o Claude Code, sem cookie. A
+   * trava é a chave pessoal (Conta > Claude), conferida pelo hash na rota.
+   *
    * sw.js e offline.html saem por um terceiro motivo. Quem pede o sw.js é o
    * navegador registrando o service worker, sem sessão nenhuma; preso aqui ele
    * levaria 307 para /login, e um 307 no lugar de JavaScript faz o registro
@@ -26,6 +29,6 @@ export const config = {
    * A extensão .js e .html não estava na lista de arquivos liberados abaixo.
    */
   matcher: [
-    "/((?!api/cron|_next/static|_next/image|favicon\.ico|robots\.txt|sitemap\.xml|manifest\.webmanifest|sw\.js|offline\.html|apple-icon\.png|icon\.png|og\.png|\.well-known|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)",
+    "/((?!api/cron|api/mcp|_next/static|_next/image|favicon\.ico|robots\.txt|sitemap\.xml|manifest\.webmanifest|sw\.js|offline\.html|apple-icon\.png|icon\.png|og\.png|\.well-known|.*\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)$).*)",
   ],
 };

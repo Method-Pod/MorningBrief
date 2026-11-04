@@ -19,8 +19,21 @@ import {
   Eye,
   Archive,
   ArchiveRestore,
+  LayoutTemplate,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  EscolherModelo,
+  GerenciarModelos,
+  SalvarComoModelo,
+  useModelos,
+} from "@/components/ModelosDeDemanda";
+import {
+  demandaDoModelo,
+  diasAte,
+  modeloDaDemanda,
+  type ModeloDeDemanda,
+} from "@/lib/modelosDeDemanda";
 import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
@@ -229,6 +242,66 @@ export default function DemandasPage() {
   const confirm = useConfirm();
   const notice = useNotice();
   const [erroCarga, setErroCarga] = React.useState("");
+
+  /* Modelos de demanda. Ver components/ModelosDeDemanda. */
+  const { modelos, semTabela: semModelos, carregar: carregarModelos } = useModelos(supabase);
+  const [salvandoModelo, setSalvandoModelo] = React.useState(false);
+  const [vendoModelos, setVendoModelos] = React.useState(false);
+
+  const aplicarModelo = (m: ModeloDeDemanda) => {
+    const d = demandaDoModelo(m, today);
+    /* Cliente ou projeto que saiu do cadastro não volta pelo modelo. */
+    const cOk = d.cliente_id && cadastro.some((c) => c.id === d.cliente_id);
+    const pOk = cOk && d.projeto_id && projetos.some((p) => p.id === d.projeto_id);
+    setForm({
+      ...blank(),
+      status: form.status,
+      title: d.title,
+      description: d.description,
+      cliente_id: cOk ? d.cliente_id! : "",
+      projeto_id: pOk ? d.projeto_id! : "",
+      priority: d.priority,
+      links: d.links,
+      due_date: d.due_date ?? "",
+    });
+    setChecklist(d.checklist.map((title) => ({ title, done: false })));
+    setErr("");
+  };
+
+  const gravarModelo = async (
+    nome: string,
+    prazoDias: number | null,
+    substituir: ModeloDeDemanda | undefined
+  ): Promise<string> => {
+    const linha = modeloDaDemanda(
+      {
+        title: form.title,
+        description: form.description,
+        cliente_id: form.cliente_id || null,
+        projeto_id: form.projeto_id || null,
+        priority: form.priority,
+        links: form.links,
+        checklist: checklist.map((i) => i.title),
+      },
+      nome,
+      prazoDias
+    );
+    const { error } = substituir
+      ? await supabase.from("modelos_de_demanda").update(linha).eq("id", substituir.id).select("id")
+      : await supabase.from("modelos_de_demanda").insert(linha).select("id");
+    if (error) {
+      if (error.code === "23505") return "Já existe um modelo com esse nome.";
+      return `Não foi possível salvar o modelo: ${error.message}`;
+    }
+    await carregarModelos();
+    notice.show(substituir ? `Modelo "${linha.nome}" atualizado.` : `Modelo "${linha.nome}" salvo.`, "ok");
+    return "";
+  };
+
+  const excluirModelo = async (m: ModeloDeDemanda) => {
+    const { error } = await supabase.from("modelos_de_demanda").delete().eq("id", m.id);
+    if (!notice.check(error, "excluir o modelo")) await carregarModelos();
+  };
 
   const load = React.useCallback(async () => {
     /*
@@ -1696,6 +1769,15 @@ export default function DemandasPage() {
         topo={resumoDaDemanda()}
         footer={
           <>
+            {/* O formulário como está vira modelo. À esquerda, longe do Salvar:
+                é outra ação, e não um segundo jeito de salvar a demanda. */}
+            {!form.recurring && !semModelos && (
+              <Button type="button" onClick={() => setSalvandoModelo(true)} className="mr-auto">
+                <LayoutTemplate size={15} />
+                <span className="hidden sm:inline">Salvar como modelo</span>
+                <span className="sm:hidden">Modelo</span>
+              </Button>
+            )}
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
             <Button variant="primary" onClick={save} disabled={busy}>
               {busy ? "Salvando..." : "Salvar"}
@@ -1718,6 +1800,13 @@ export default function DemandasPage() {
           demais.
         */}
         <form onSubmit={save} className="space-y-5">
+          {!editing && !form.recurring && (
+            <EscolherModelo
+              modelos={modelos}
+              onAplicar={aplicarModelo}
+              onGerenciar={() => setVendoModelos(true)}
+            />
+          )}
           <Field label="Título">
             <Input
               autoFocus
@@ -2100,6 +2189,27 @@ export default function DemandasPage() {
         </form>
       </Modal>
 
+      <SalvarComoModelo
+        open={salvandoModelo}
+        onClose={() => setSalvandoModelo(false)}
+        modelos={modelos}
+        sugestaoNome={form.title.trim()}
+        sugestaoPrazo={diasAte(today, form.due_date)}
+        onSalvar={gravarModelo}
+      />
+      <GerenciarModelos
+        open={vendoModelos}
+        onClose={() => setVendoModelos(false)}
+        modelos={modelos}
+        nomeDoCliente={(m) =>
+          nomeDoCliente(
+            { client: "", cliente_id: m.cliente_id, projeto_id: m.projeto_id },
+            porId,
+            projetoPorId
+          )
+        }
+        onExcluir={excluirModelo}
+      />
       {confirm.node}
       {notice.node}
     </div>

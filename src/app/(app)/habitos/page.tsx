@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { CabecalhoCrescimento } from "@/components/AbasCrescimento";
+import { CartaoPadroes } from "@/components/RevisaoDaSemana";
 import { FaixaResumo } from "@/components/FaixaResumo";
 import {
   Check,
@@ -550,6 +551,12 @@ export default function HabitosPage() {
           </ul>
         </>
       )}
+
+      {/* Os padrões que os hábitos revelam, cruzados com o resto do app.
+          Ver lib/padroes. */}
+      <div className="mt-4">
+        <CartaoPadroes />
+      </div>
 
       <Modal
         open={open}

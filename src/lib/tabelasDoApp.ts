@@ -9,10 +9,11 @@
  * lista com toda tabela que o código consulta, para isso não voltar a
  * acontecer calado.
  *
- * Fica de fora, de propósito, só `push_assinaturas`: são os endereços de
- * notificação de cada aparelho, com as chaves de cada um. Não é dado da
- * pessoa, não serve para restaurar nada (o aparelho se inscreve de novo) e
- * não deve passear num arquivo baixado.
+ * Ficam de fora, de propósito: `push_assinaturas` (os endereços de
+ * notificação de cada aparelho, com as chaves de cada um -- o aparelho se
+ * inscreve de novo), `chaves_do_claude` (impressões digitais de chaves de
+ * acesso, que não devem passear num arquivo baixado) e `app_erros` (registro
+ * técnico, não dado da pessoa).
  */
 export const TABELAS_DO_APP = [
   "bills",
@@ -41,7 +42,9 @@ export const TABELAS_DO_APP = [
   "subjects",
   "lesson_goals",
   "channels",
+  "registro_do_dia",
+  "modelos_de_demanda",
 ] as const;
 
 /** As que o código consulta e que, de propósito, não entram na cópia. */
-export const TABELAS_FORA_DA_COPIA = ["push_assinaturas", "app_erros"] as const;
+export const TABELAS_FORA_DA_COPIA = ["push_assinaturas", "app_erros", "chaves_do_claude"] as const;

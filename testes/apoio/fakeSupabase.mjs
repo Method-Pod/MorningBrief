@@ -49,9 +49,15 @@ class Consulta {
   gt(c, v) { return this._filtro((r) => cmp.gt(r[c], v)); }
   gte(c, v) { return this._filtro((r) => cmp.gte(r[c], v)); }
   in(c, vs) { return this._filtro((r) => vs.includes(r[c])); }
+  ilike(c, padrao) {
+    const escapado = padrao.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*");
+    const re = new RegExp("^" + escapado + "$", "i");
+    return this._filtro((r) => re.test(String(r[c] ?? "")));
+  }
   is(c, v) { return this._filtro((r) => (v === null ? r[c] == null : r[c] === v)); }
   not(c, op, v) {
     if (op === "is" && v === null) return this._filtro((r) => r[c] != null);
+    if (op === "is") return this._filtro((r) => r[c] !== v);
     return this._filtro((r) => !cmp[op](r[c], v));
   }
 
@@ -105,6 +111,17 @@ class Consulta {
           };
         }
 
+        if (this.acao === "upsert") {
+          const alvo = (this.banco.tabelas[this.tabela] ??= []);
+          const { linhas, chaves } = this.payload;
+          for (const n of Array.isArray(linhas) ? linhas : [linhas]) {
+            const achou = alvo.find((r) => chaves.every((k) => r[k] === n[k]));
+            if (achou) Object.assign(achou, n);
+            else alvo.push({ ...n });
+          }
+          return { data: null, error: null };
+        }
+
         if (this.acao === "delete") {
           const fora = new Set(this._casam());
           this.banco.tabelas[this.tabela] =
@@ -136,6 +153,7 @@ export function fakeSupabase(tabelas = {}) {
         insert: (p) => new Consulta(banco, tabela, "insert", p),
         update: (p) => new Consulta(banco, tabela, "update", p),
         delete: () => new Consulta(banco, tabela, "delete"),
+        upsert: (p, op) => new Consulta(banco, tabela, "upsert", { linhas: p, chaves: (op?.onConflict ?? "id").split(",") }),
       };
     },
   };

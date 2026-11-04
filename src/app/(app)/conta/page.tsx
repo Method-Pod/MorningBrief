@@ -15,6 +15,7 @@ import {
   Monitor,
   Moon,
   ShieldCheck,
+  Sparkles,
   Sun,
   User,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { sairDaConta } from "@/lib/sair";
 import { TEMAS, useTema } from "@/components/tema";
 import { TrocarFoto, useAvatar } from "@/components/Avatar";
 import { SaudeDoSistema } from "@/components/SaudeDoSistema";
+import { ConectarClaude } from "@/components/ConectarClaude";
 import { Button, Card, Input, cx } from "@/components/ui";
 import { Kpi, TituloComNumeros } from "@/components/CabecalhoPagina";
 
@@ -366,6 +368,8 @@ export default function ContaPage() {
               </>
             )}
 
+            {aba === "claude" && <ConectarClaude />}
+
             {aba === "acesso" && (
               <>
                 <Titulo
@@ -401,13 +405,14 @@ export default function ContaPage() {
   );
 }
 
-type Aba = "perfil" | "aparencia" | "notificacoes" | "dados" | "acesso";
+type Aba = "perfil" | "aparencia" | "notificacoes" | "dados" | "claude" | "acesso";
 
 const ABAS: { chave: Aba; rotulo: string; Icone: typeof User }[] = [
   { chave: "perfil", rotulo: "Perfil", Icone: User },
   { chave: "aparencia", rotulo: "Aparência", Icone: Sun },
   { chave: "notificacoes", rotulo: "Notificações", Icone: Bell },
   { chave: "dados", rotulo: "Dados", Icone: Download },
+  { chave: "claude", rotulo: "Claude", Icone: Sparkles },
   { chave: "acesso", rotulo: "Acesso", Icone: KeyRound },
 ];
 

@@ -10,6 +10,7 @@
     "test": "node --import ./testes/apoio/registrar.mjs --test --test-reporter=spec \"testes/*.test.mjs\""
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
     "@supabase/ssr": "^0.6.1",
     "@supabase/supabase-js": "^2.49.0",
     "@tiptap/core": "^3.31.3",
@@ -26,7 +27,8 @@
     "next": "^15.3.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",

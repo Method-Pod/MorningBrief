@@ -17,6 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Clima } from "@/components/Clima";
+import { CartaoRevisao, EnergiaDoDia } from "@/components/RevisaoDaSemana";
 import { Contador } from "@/components/Contador";
 import { Kpi } from "@/components/CabecalhoPagina";
 import { Explicacao, Ressalva } from "@/components/Explicacao";
@@ -608,6 +609,10 @@ export default function HomePage() {
         cartão de cor com o anel -- o "Team quota" de lá, que aqui é o dia.
       */}
       <div className="grid gap-4 lg:grid-cols-12">
+        {/* A semana fechada, de domingo às 18h até segunda à noite. Some
+            sozinho fora dessa janela. Ver components/RevisaoDaSemana. */}
+        <CartaoRevisao />
+
         {/* ------------------------------ hoje ------------------------------ */}
         <Card className="lg:col-span-8">
           <Head
@@ -739,11 +744,14 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 px-5 pb-5 pt-2">
+          <div className="grid grid-cols-3 gap-2 px-5 pb-4 pt-2">
             <Mini icon={<CheckCircle2 size={15} />} value={m.feitas} label="feitas" />
             <Mini icon={<Repeat2 size={15} />} value={m.actRec.length} label="recorrentes" />
             <Mini icon={<CalendarDays size={15} />} value={m.evToday.length} label="na agenda" />
           </div>
+          {/* Um toque por dia: é o que deixa os padrões cruzarem energia com
+              o resto. Ver lib/padroes. */}
+          <EnergiaDoDia />
         </Card>
 
         {/* ------------------------ fechamento do mês ------------------------ */}

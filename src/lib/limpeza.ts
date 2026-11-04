@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { ultimaVirada } from "./viradaDoDia";
+import { guardarNoRegistro } from "./registroDoDia";
 
 /**
  * Meses que uma conta paga fica guardada, contando o mês atual.
@@ -62,10 +63,16 @@ export async function limparConcluidas(
    * valer: sem o filtro explícito, este delete alcançaria as linhas de todos os
    * usuários. No navegador o parâmetro é dispensável, porque lá o RLS restringe.
    */
-  const montar = (soAtivas: boolean) => {
-    let consulta = supabase
+  /*
+   * Primeiro guarda no registro do dia, depois apaga. A revisão da semana e
+   * os padrões dependem desse histórico, e a demanda concluída não existe
+   * mais depois das 6h. Se não der para guardar, não apaga: a demanda fica
+   * mais um dia, e a próxima passada tenta de novo.
+   */
+  const ler = (soAtivas: boolean) => {
+    let c = supabase
       .from("tasks")
-      .delete()
+      .select("id, title, client, cliente_id, completed_at")
       .eq("status", "done")
       .not("completed_at", "is", null)
       .lt("completed_at", limite);
@@ -73,19 +80,56 @@ export async function limparConcluidas(
      * Arquivada nunca sai sozinha. Pedido dele: ela fica anotada até ele
      * desarquivar ou excluir, mesmo que tenha sido arquivada já concluída.
      */
-    if (soAtivas) consulta = consulta.is("arquivada_em", null);
-    if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
-    return consulta.select("id");
+    if (soAtivas) c = c.is("arquivada_em", null);
+    if (opcoes.userId) c = c.eq("user_id", opcoes.userId);
+    return c;
   };
-
-  let { data, error } = await montar(true);
+  let soAtivas = true;
+  let lidas = await ler(true);
   /*
    * Banco sem DEMANDAS-ARQUIVADAS.sql não tem a coluna, e o filtro falha. Aí
    * não existe arquivada para proteger, então vale a limpeza de sempre — em
    * vez de a limpeza parar de rodar até a migração.
    */
-  if (error && /arquivada_em/.test(error.message)) ({ data, error } = await montar(false));
+  if (lidas.error && /arquivada_em/.test(lidas.error.message)) {
+    soAtivas = false;
+    lidas = await ler(false);
+  }
+  if (lidas.error) return null;
+  const saem = (lidas.data ?? []) as {
+    id: string;
+    title: string;
+    client: string | null;
+    cliente_id?: string | null;
+    completed_at: string;
+  }[];
+  if (!saem.length) return 0;
 
+  const guardou = await guardarNoRegistro(
+    supabase,
+    "concluidas",
+    saem.map((t) => ({
+      id: t.id,
+      titulo: t.title,
+      cliente: t.client ?? "",
+      cliente_id: t.cliente_id ?? null,
+      concluida_em: t.completed_at,
+    })),
+    opcoes.userId
+  );
+  if (guardou === "erro") return null;
+
+  /* Pelos ids lidos, e com o mesmo recorte de novo: se alguém reabriu ou
+     arquivou a demanda entre a leitura e aqui, ela não sai. */
+  let apagar = supabase
+    .from("tasks")
+    .delete()
+    .in("id", saem.map((t) => t.id))
+    .eq("status", "done")
+    .lt("completed_at", limite);
+  if (soAtivas) apagar = apagar.is("arquivada_em", null);
+  if (opcoes.userId) apagar = apagar.eq("user_id", opcoes.userId);
+  const { data, error } = await apagar.select("id");
   if (error) return null;
   return data?.length ?? 0;
 }
@@ -284,10 +328,10 @@ export async function limparAulasAssistidas(
 
   /* `userId` é obrigatório para quem chama com a chave de serviço, que passa
      por cima do RLS — sem o filtro, o delete alcançaria todo mundo. */
-  const montar = (soSoltas: boolean) => {
-    let consulta = supabase
+  const ler = (soSoltas: boolean) => {
+    let c = supabase
       .from("lessons")
-      .delete()
+      .select("id, title, feita_em")
       .eq("feita", true)
       .not("feita_em", "is", null)
       .lt("feita_em", limite);
@@ -297,18 +341,45 @@ export async function limparAulasAssistidas(
      * playlist mostrar onde você está. Só a aula solta segue a regra dos 7
      * dias.
      */
-    if (soSoltas) consulta = consulta.is("playlist_id", null);
-    if (opcoes.userId) consulta = consulta.eq("user_id", opcoes.userId);
-    return consulta.select("id");
+    if (soSoltas) c = c.is("playlist_id", null);
+    if (opcoes.userId) c = c.eq("user_id", opcoes.userId);
+    return c;
   };
 
-  let { data, error } = await montar(true);
+  let soSoltas = true;
+  let lidas = await ler(true);
   /*
    * Banco sem PASTAS-DE-PLAYLIST.sql não tem a coluna, e o filtro falha. Aí
    * não existe aula de pasta para proteger, então a limpeza antiga vale
    * inteira — em vez de a limpeza parar de rodar até a migração.
    */
-  if (error && /playlist_id/.test(error.message)) ({ data, error } = await montar(false));
+  if (lidas.error && /playlist_id/.test(lidas.error.message)) {
+    soSoltas = false;
+    lidas = await ler(false);
+  }
+  if (lidas.error) return null;
+  const saem = (lidas.data ?? []) as { id: string; title: string; feita_em: string }[];
+  if (!saem.length) return 0;
+
+  /* Guarda antes de apagar, como as demandas: os padrões contam aulas por
+     dia, e depois de 7 dias a aula solta não existe mais. */
+  const guardou = await guardarNoRegistro(
+    supabase,
+    "aulas",
+    saem.map((a) => ({ id: a.id, titulo: a.title, concluida_em: a.feita_em })),
+    opcoes.userId
+  );
+  if (guardou === "erro") return null;
+
+  let apagar = supabase
+    .from("lessons")
+    .delete()
+    .in("id", saem.map((a) => a.id))
+    .eq("feita", true)
+    .lt("feita_em", limite);
+  if (soSoltas) apagar = apagar.is("playlist_id", null);
+  if (opcoes.userId) apagar = apagar.eq("user_id", opcoes.userId);
+  const { data, error } = await apagar.select("id");
   if (error) return null;
   return data?.length ?? 0;
 }

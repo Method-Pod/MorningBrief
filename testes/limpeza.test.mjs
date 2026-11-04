@@ -191,7 +191,14 @@ test("aula assistida sai depois de sete dias; a da fila nunca sai", async () => 
 /* ------------------------------ falhas ------------------------------ */
 
 test("falha do banco devolve null, e nao um numero que mente", async () => {
-  const sb = fakeSupabase({ tasks: [], bills: [], events: [], lessons: [] });
+  /* Uma linha para sair em cada uma: sem nada a apagar, a limpeza nem chega a
+     pedir o delete, e a falha simulada nunca aconteceria. */
+  const sb = fakeSupabase({
+    tasks: [{ id: "t", user_id: "u1", status: "done", completed_at: "2020-01-01T12:00:00Z" }],
+    bills: [],
+    events: [],
+    lessons: [{ id: "a", user_id: "u1", title: "aula", feita: true, feita_em: "2020-01-01T12:00:00Z" }],
+  });
   sb.banco.errosPorTabela["delete:tasks"] = { code: "42501", message: "rls" };
   sb.banco.errosPorTabela["delete:bills"] = { code: "42501", message: "rls" };
   sb.banco.errosPorTabela["select:events"] = { code: "42501", message: "rls" };
@@ -207,4 +214,64 @@ test("falha do banco devolve null, e nao um numero que mente", async () => {
     null
   );
   assert.equal(await limparAulasAssistidas(sb, { userId: "u1" }), null);
+});
+
+/* --------------------------- registro do dia --------------------------- */
+
+test("a concluida e guardada no registro do dia antes de sair", async () => {
+  const agora = new Date("2026-03-10T12:00:00Z");
+  const sb = fakeSupabase({
+    tasks: [
+      /* 23h de segunda em Sao Paulo: dia 09 */
+      { id: "1", user_id: "u1", title: "Thumb EP 12", client: "Papo de Elite", cliente_id: "c1", status: "done", completed_at: "2026-03-10T02:00:00Z" },
+      /* 3h da madrugada de terca: ainda e o dia 09 (o dia vai das 6h as 6h) */
+      { id: "2", user_id: "u1", title: "Capa", client: "", cliente_id: null, status: "done", completed_at: "2026-03-10T06:00:00Z" },
+      { id: "3", user_id: "u2", title: "de outra pessoa", status: "done", completed_at: "2026-03-09T20:00:00Z" },
+    ],
+    registro_do_dia: [{ user_id: "u1", dia: "2026-03-09", concluidas: [], aulas: [], energia: 4 }],
+  });
+  assert.equal(await limparConcluidas(sb, { userId: "u1", agora }), 2);
+  const reg = sb.banco.tabelas.registro_do_dia.filter((r) => r.user_id === "u1");
+  assert.equal(reg.length, 1);
+  assert.equal(reg[0].dia, "2026-03-09");
+  assert.deepEqual(reg[0].concluidas.map((c) => c.titulo), ["Thumb EP 12", "Capa"]);
+  assert.equal(reg[0].energia, 4, "a energia do dia nao e tocada");
+  assert.deepEqual(sb.banco.tabelas.tasks.map((t) => t.id), ["3"]);
+});
+
+test("rodar duas vezes nao duplica o registro", async () => {
+  const agora = new Date("2026-03-10T12:00:00Z");
+  const linha = { id: "1", user_id: "u1", title: "X", client: "", status: "done", completed_at: "2026-03-09T20:00:00Z" };
+  const sb = fakeSupabase({ tasks: [{ ...linha }] });
+  await limparConcluidas(sb, { userId: "u1", agora });
+  sb.banco.tabelas.tasks.push({ ...linha });
+  await limparConcluidas(sb, { userId: "u1", agora });
+  assert.equal(sb.banco.tabelas.registro_do_dia[0].concluidas.length, 1);
+});
+
+test("se nao der para guardar, nao apaga", async () => {
+  const agora = new Date("2026-03-10T12:00:00Z");
+  const sb = fakeSupabase({
+    tasks: [{ id: "1", user_id: "u1", title: "X", client: "", status: "done", completed_at: "2026-03-09T20:00:00Z" }],
+  });
+  sb.banco.errosPorTabela["select:registro_do_dia"] = { code: "08006", message: "conexao caiu" };
+  assert.equal(await limparConcluidas(sb, { userId: "u1", agora }), null);
+  assert.equal(sb.banco.tabelas.tasks.length, 1, "a demanda fica para a proxima passada");
+});
+
+test("sem a tabela do registro (SQL nao rodado), limpa como antes", async () => {
+  const agora = new Date("2026-03-10T12:00:00Z");
+  const sb = fakeSupabase({
+    tasks: [{ id: "1", user_id: "u1", title: "X", client: "", status: "done", completed_at: "2026-03-09T20:00:00Z" }],
+  });
+  sb.banco.errosPorTabela["select:registro_do_dia"] = { code: "PGRST205", message: "Could not find the table" };
+  assert.equal(await limparConcluidas(sb, { userId: "u1", agora }), 1);
+});
+
+test("aula assistida tambem e guardada antes de sair", async () => {
+  const sb = fakeSupabase({
+    lessons: [{ id: "a", user_id: "u1", title: "Aula 3", feita: true, feita_em: "2020-01-01T15:00:00Z", playlist_id: null }],
+  });
+  assert.equal(await limparAulasAssistidas(sb, { userId: "u1" }), 1);
+  assert.deepEqual(sb.banco.tabelas.registro_do_dia[0].aulas.map((a) => a.titulo), ["Aula 3"]);
 });

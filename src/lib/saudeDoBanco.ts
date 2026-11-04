@@ -78,6 +78,14 @@ export const ARQUIVOS_SQL: ArquivoSql[] = [
       { tabela: "recurring_tasks", colunas: ["cliente_id", "projeto_id"] },
     ],
   },
+  {
+    arquivo: "CLAUDE-REVISAO-E-MODELOS.sql",
+    sondas: [
+      { tabela: "registro_do_dia", colunas: ["concluidas", "aulas", "energia"] },
+      { tabela: "modelos_de_demanda" },
+      { tabela: "chaves_do_claude" },
+    ],
+  },
   { arquivo: "CONTAS-SEM-DUPLICATA.sql", sondas: null, porque: "só cria um índice contra conta fixa duplicada" },
   { arquivo: "COR-ROXA.sql", sondas: null, porque: "só troca a cor padrão de itens novos" },
   {
