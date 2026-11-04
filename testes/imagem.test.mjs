@@ -13,6 +13,9 @@ test("imagem do Storage vira o endereco de reducao, no dobro da medida", () => {
   assert.equal(u.searchParams.get("width"), "400");
   assert.equal(u.searchParams.get("quality"), "70");
   assert.equal(u.searchParams.get("height"), null);
+  /* Regressao: so com a largura, o Supabase mantinha a altura original e
+     cortava uma faixa do meio (capa 1721x2560 voltava 440x2560). */
+  assert.equal(u.searchParams.get("resize"), "contain");
 });
 
 test("com altura, corta para preencher (a foto de perfil)", () => {

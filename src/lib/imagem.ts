@@ -36,6 +36,17 @@ export function imagemReduzida(
   if (opcoes.altura) {
     u.searchParams.set("height", String(Math.round(opcoes.altura * 2)));
     u.searchParams.set("resize", "cover");
+  } else {
+    /*
+     * `contain` quando só a largura é dada, e não é detalhe.
+     *
+     * Sem ele o Supabase usa `cover` com a altura ORIGINAL: a capa de
+     * 1721×2560 pedida com 440 de largura voltava 440×2560 -- uma faixa
+     * estreita do meio, que na tela aparecia ampliada e cortada. Com
+     * `contain` volta 440×655, a capa inteira na proporção dela. Pegava as
+     * capas da Leitura e as miniaturas de Referências e do Início.
+     */
+    u.searchParams.set("resize", "contain");
   }
   u.searchParams.set("quality", String(opcoes.qualidade ?? 70));
   return u.toString();
