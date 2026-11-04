@@ -25,15 +25,10 @@ import { createClient } from "@/lib/supabase/client";
 import {
   EscolherModelo,
   GerenciarModelos,
-  SalvarComoModelo,
   useModelos,
+  type LinhaDoModelo,
 } from "@/components/ModelosDeDemanda";
-import {
-  demandaDoModelo,
-  diasAte,
-  modeloDaDemanda,
-  type ModeloDeDemanda,
-} from "@/lib/modelosDeDemanda";
+import { demandaDoModelo, type ModeloDeDemanda } from "@/lib/modelosDeDemanda";
 import { NADA_GRAVADO, nenhumaLinha } from "@/lib/erros";
 import { currentUserId, SESSION_EXPIRED } from "@/lib/session";
 import {
@@ -245,7 +240,6 @@ export default function DemandasPage() {
 
   /* Modelos de demanda. Ver components/ModelosDeDemanda. */
   const { modelos, semTabela: semModelos, carregar: carregarModelos } = useModelos(supabase);
-  const [salvandoModelo, setSalvandoModelo] = React.useState(false);
   const [vendoModelos, setVendoModelos] = React.useState(false);
 
   const aplicarModelo = (m: ModeloDeDemanda) => {
@@ -268,33 +262,17 @@ export default function DemandasPage() {
     setErr("");
   };
 
-  const gravarModelo = async (
-    nome: string,
-    prazoDias: number | null,
-    substituir: ModeloDeDemanda | undefined
-  ): Promise<string> => {
-    const linha = modeloDaDemanda(
-      {
-        title: form.title,
-        description: form.description,
-        cliente_id: form.cliente_id || null,
-        projeto_id: form.projeto_id || null,
-        priority: form.priority,
-        links: form.links,
-        checklist: checklist.map((i) => i.title),
-      },
-      nome,
-      prazoDias
-    );
-    const { error } = substituir
-      ? await supabase.from("modelos_de_demanda").update(linha).eq("id", substituir.id).select("id")
+  /* Cria (sem id) ou altera um modelo, pelo formulário de Gerenciar › Modelos. */
+  const salvarModelo = async (linha: LinhaDoModelo, id: string | null): Promise<string> => {
+    const { error } = id
+      ? await supabase.from("modelos_de_demanda").update(linha).eq("id", id).select("id")
       : await supabase.from("modelos_de_demanda").insert(linha).select("id");
     if (error) {
       if (error.code === "23505") return "Já existe um modelo com esse nome.";
       return `Não foi possível salvar o modelo: ${error.message}`;
     }
     await carregarModelos();
-    notice.show(substituir ? `Modelo "${linha.nome}" atualizado.` : `Modelo "${linha.nome}" salvo.`, "ok");
+    notice.show(id ? `Modelo "${linha.nome}" atualizado.` : `Modelo "${linha.nome}" criado.`, "ok");
     return "";
   };
 
@@ -1165,6 +1143,17 @@ export default function DemandasPage() {
                 icone: <Repeat2 size={15} />,
                 aoEscolher: () => router.push("/recorrentes"),
               },
+              /* Os modelos se criam e se configuram aqui, num formulário
+                 igual ao de Nova demanda. Pedido dele. */
+              ...(semModelos
+                ? []
+                : [
+                    {
+                      rotulo: "Modelos de demanda",
+                      icone: <LayoutTemplate size={15} />,
+                      aoEscolher: () => setVendoModelos(true),
+                    },
+                  ]),
             ]}
           />
           <Button
@@ -1769,15 +1758,6 @@ export default function DemandasPage() {
         topo={resumoDaDemanda()}
         footer={
           <>
-            {/* O formulário como está vira modelo. À esquerda, longe do Salvar:
-                é outra ação, e não um segundo jeito de salvar a demanda. */}
-            {!form.recurring && !semModelos && (
-              <Button type="button" onClick={() => setSalvandoModelo(true)} className="mr-auto">
-                <LayoutTemplate size={15} />
-                <span className="hidden sm:inline">Salvar como modelo</span>
-                <span className="sm:hidden">Modelo</span>
-              </Button>
-            )}
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
             <Button variant="primary" onClick={save} disabled={busy}>
               {busy ? "Salvando..." : "Salvar"}
@@ -2189,25 +2169,13 @@ export default function DemandasPage() {
         </form>
       </Modal>
 
-      <SalvarComoModelo
-        open={salvandoModelo}
-        onClose={() => setSalvandoModelo(false)}
-        modelos={modelos}
-        sugestaoNome={form.title.trim()}
-        sugestaoPrazo={diasAte(today, form.due_date)}
-        onSalvar={gravarModelo}
-      />
       <GerenciarModelos
         open={vendoModelos}
         onClose={() => setVendoModelos(false)}
         modelos={modelos}
-        nomeDoCliente={(m) =>
-          nomeDoCliente(
-            { client: "", cliente_id: m.cliente_id, projeto_id: m.projeto_id },
-            porId,
-            projetoPorId
-          )
-        }
+        clientes={cadastro}
+        projetos={projetos}
+        onSalvar={salvarModelo}
         onExcluir={excluirModelo}
       />
       {confirm.node}
