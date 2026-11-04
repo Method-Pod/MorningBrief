@@ -8,12 +8,19 @@ import { diaDeManutencao } from "@/lib/viradaDoDia";
 import { gravarEnergia, lerRegistro } from "@/lib/registroDoDia";
 import { lerDadosDaSemana, montarRevisao, semanaEmRevisao, type Revisao } from "@/lib/revisaoDaSemana";
 import { DIAS_PARA_COMECAR, lerPadroes, type Padrao } from "@/lib/padroes";
+import { somarDias } from "@/lib/modelosDeDemanda";
 import { naoExiste } from "@/lib/saudeDoBanco";
 import { Card, cx } from "./ui";
 
 /* ------------------------------ energia do dia ------------------------------ */
 
 const ROTULOS_ENERGIA = ["muito baixa", "baixa", "média", "boa", "alta"];
+const SIGLA_DO_DIA = ["D", "S", "T", "Q", "Q", "S", "S"];
+const NOME_DO_DIA = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const diaDaSemana = (iso: string) => {
+  const [a, m, d] = iso.split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, d)).getUTCDay();
+};
 
 /**
  * A energia do dia, de 1 a 5, com um toque. Tocar no mesmo número de novo
@@ -28,15 +35,26 @@ export function EnergiaDoDia() {
   const [pronto, setPronto] = React.useState(false);
   const [semTabela, setSemTabela] = React.useState(false);
   const [falhou, setFalhou] = React.useState(false);
+  /* Os seis dias antes de hoje; o de hoje é `energia`, que muda no toque. */
+  const [semana, setSemana] = React.useState<Map<string, number | null>>(new Map());
+  const [hoje] = React.useState(() => diaDeManutencao());
 
   React.useEffect(() => {
-    const dia = diaDeManutencao();
-    lerRegistro(supabase, { de: dia, ate: dia }).then((r) => {
+    lerRegistro(supabase, { de: somarDias(hoje, -6), ate: hoje }).then((r) => {
       setSemTabela(r.semTabela);
-      setEnergia(r.dias[0]?.energia ?? null);
+      setSemana(new Map(r.dias.map((d) => [d.dia, d.energia])));
+      setEnergia(r.dias.find((d) => d.dia === hoje)?.energia ?? null);
       setPronto(true);
     });
-  }, [supabase]);
+  }, [supabase, hoje]);
+
+  /* Os últimos 7 dias, de seis dias atrás até hoje. */
+  const dias = Array.from({ length: 7 }, (_, i) => {
+    const dia = somarDias(hoje, i - 6);
+    return { dia, valor: dia === hoje ? energia : (semana.get(dia) ?? null) };
+  });
+  const marcados = dias.filter((d) => d.valor != null).map((d) => d.valor as number);
+  const media = marcados.length ? marcados.reduce((s, v) => s + v, 0) / marcados.length : null;
 
   if (semTabela) return null;
 
@@ -87,6 +105,60 @@ export function EnergiaDoDia() {
           );
         })}
       </div>
+
+      {/*
+        Os últimos 7 dias, uma barrinha por dia, da altura da energia daquele
+        dia. Dia sem marca fica só com o trilho, para a falta aparecer em vez
+        de virar um "zero" que não aconteceu.
+      */}
+      {pronto && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-2 text-[11.5px] text-fg-mute">
+            <span>Últimos 7 dias</span>
+            <span className="tnum">
+              {media == null
+                ? "nenhum dia marcado"
+                : `média ${media.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} · ${marcados.length} de 7 dias`}
+            </span>
+          </div>
+          <ol className="mt-2 grid grid-cols-7 gap-1.5" aria-label="Energia dos últimos 7 dias">
+            {dias.map(({ dia, valor }) => {
+              const ehHoje = dia === hoje;
+              const dow = diaDaSemana(dia);
+              return (
+                <li
+                  key={dia}
+                  className="flex flex-col items-center gap-1"
+                  title={`${ehHoje ? "hoje" : NOME_DO_DIA[dow]}: ${valor ? `${valor} (${ROTULOS_ENERGIA[valor - 1]})` : "sem marca"}`}
+                >
+                  <span className="flex h-12 w-full max-w-[22px] items-end overflow-hidden rounded-full bg-fg/[0.07]">
+                    {valor != null && (
+                      <span
+                        className={cx(
+                          "cresce-y block w-full rounded-full",
+                          ehHoje ? "bg-brand-500 bg-[image:var(--a-degrade)]" : "bg-brand-500/55"
+                        )}
+                        style={{ height: `${(valor / 5) * 100}%` }}
+                      />
+                    )}
+                  </span>
+                  <span
+                    className={cx(
+                      "text-[10.5px] font-semibold",
+                      ehHoje ? "text-brand-400" : "text-fg-mute"
+                    )}
+                  >
+                    {SIGLA_DO_DIA[dow]}
+                  </span>
+                  <span className="sr-only">
+                    {ehHoje ? "hoje" : NOME_DO_DIA[dow]}: {valor ?? "sem marca"}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
     </div>
   );
 }
