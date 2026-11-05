@@ -118,20 +118,25 @@ export async function lerRegistro(
 }
 
 /**
- * Grava a energia do dia em curso (1 a 5), ou tira com `null`. Com a chave
- * de serviço (o Claude), passe `userId`.
+ * Grava a energia de um dia (1 a 5), ou tira com `null`. Sem `dia`, é o dia
+ * em curso. Dia que ainda não chegou é recusado: energia é do que já foi
+ * vivido. Com a chave de serviço (o Claude), passe `userId`.
  */
 export async function gravarEnergia(
   supabase: SupabaseClient,
   energia: number | null,
-  { agora = new Date(), userId }: { agora?: Date; userId?: string } = {}
+  { agora = new Date(), userId, dia }: { agora?: Date; userId?: string; dia?: string } = {}
 ) {
+  const hoje = diaDeManutencao(agora);
+  const alvo = dia ?? hoje;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(alvo) || alvo > hoje)
+    return { data: null, error: { message: "Só dá para marcar a energia de hoje ou de um dia que já passou." } };
   return supabase
     .from("registro_do_dia")
     .upsert(
       {
         ...(userId ? { user_id: userId } : {}),
-        dia: diaDeManutencao(agora),
+        dia: alvo,
         energia,
         atualizado_em: agora.toISOString(),
       },

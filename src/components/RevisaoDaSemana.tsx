@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BookOpen, CalendarRange, CheckCircle2, Hourglass, Sparkles, Zap } from "lucide-react";
+import { BookOpen, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Hourglass, Sparkles, Zap } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { brl, dataCurta, todayISO } from "@/lib/format";
 import { diaDeManutencao } from "@/lib/viradaDoDia";
@@ -26,35 +26,48 @@ const diaDaSemana = (iso: string) => {
  * A energia do dia, de 1 a 5, com um toque. Tocar no mesmo número de novo
  * desmarca. O dia vai das 6h às 6h, como o resto do registro.
  *
+ * Embaixo, a semana de segunda a domingo, uma barrinha por dia. Tocar na
+ * barrinha de um dia que já passou escolhe aquele dia, e os botões passam a
+ * marcar ele -- pedido dele, para o dia em que esqueceu de marcar. As setas
+ * mostram as semanas anteriores (na segunda-feira, "ontem" é da semana
+ * passada). Dia que ainda não chegou não se escolhe.
+ *
  * Some sem aviso se o SQL ainda não rodou: um seletor que não grava seria
  * pior que nenhum.
  */
 export function EnergiaDoDia() {
   const supabase = React.useMemo(() => createClient(), []);
-  const [energia, setEnergia] = React.useState<number | null>(null);
-  const [pronto, setPronto] = React.useState(false);
+  const [hoje] = React.useState(() => diaDeManutencao());
+  /* 0 = esta semana, -1 = a passada... Nunca adiante. */
+  const [semanas, setSemanas] = React.useState(0);
+  const [escolhido, setEscolhido] = React.useState(hoje);
+  /* Energia por dia, de todas as semanas já vistas. */
+  const [valores, setValores] = React.useState<Map<string, number | null>>(new Map());
+  const [carregadas, setCarregadas] = React.useState<Set<string>>(new Set());
   const [semTabela, setSemTabela] = React.useState(false);
   const [falhou, setFalhou] = React.useState(false);
-  /* Os outros dias da semana; o de hoje é `energia`, que muda no toque. */
-  const [semana, setSemana] = React.useState<Map<string, number | null>>(new Map());
-  const [hoje] = React.useState(() => diaDeManutencao());
-  /* A semana de segunda a domingo, a mesma da revisão da semana. Eram os
-     últimos 7 dias corridos, e a fileira começava num dia qualquer
-     ("Q S S D S T Q" numa quarta) -- parecia defeito, e era. */
-  const { de: segunda } = semanaDe(hoje);
+
+  /* A semana de segunda a domingo, a mesma da revisão da semana. */
+  const segunda = somarDias(semanaDe(hoje).de, semanas * 7);
+  const pronto = carregadas.has(segunda);
 
   React.useEffect(() => {
-    lerRegistro(supabase, { de: segunda, ate: hoje }).then((r) => {
+    if (carregadas.has(segunda)) return;
+    const domingo = somarDias(segunda, 6);
+    lerRegistro(supabase, { de: segunda, ate: domingo < hoje ? domingo : hoje }).then((r) => {
       setSemTabela(r.semTabela);
-      setSemana(new Map(r.dias.map((d) => [d.dia, d.energia])));
-      setEnergia(r.dias.find((d) => d.dia === hoje)?.energia ?? null);
-      setPronto(true);
+      setValores((v) => {
+        const m = new Map(v);
+        for (const d of r.dias) m.set(d.dia, d.energia);
+        return m;
+      });
+      setCarregadas((c) => new Set(c).add(segunda));
     });
-  }, [supabase, hoje, segunda]);
+  }, [supabase, hoje, segunda, carregadas]);
 
   const dias = Array.from({ length: 7 }, (_, i) => {
     const dia = somarDias(segunda, i);
-    return { dia, valor: dia === hoje ? energia : (semana.get(dia) ?? null), futuro: dia > hoje };
+    return { dia, valor: valores.get(dia) ?? null, futuro: dia > hoje };
   });
   const passados = dias.filter((d) => !d.futuro).length;
   const marcados = dias.filter((d) => d.valor != null).map((d) => d.valor as number);
@@ -62,30 +75,61 @@ export function EnergiaDoDia() {
 
   if (semTabela) return null;
 
+  const energia = valores.get(escolhido) ?? null;
+  const ehHojeEscolhido = escolhido === hoje;
+  const nomeDoEscolhido = `${NOME_DO_DIA[diaDaSemana(escolhido)]}, ${escolhido.slice(8, 10)}/${escolhido.slice(5, 7)}`;
+  const titulo = ehHojeEscolhido ? "Sua energia hoje" : `Energia de ${nomeDoEscolhido}`;
+
   const escolher = async (n: number) => {
-    const novo = energia === n ? null : n;
-    const antes = energia;
-    setEnergia(novo);
+    const dia = escolhido;
+    const antes = valores.get(dia) ?? null;
+    const novo = antes === n ? null : n;
+    setValores((v) => new Map(v).set(dia, novo));
     setFalhou(false);
-    const { error } = await gravarEnergia(supabase, novo);
+    const { error } = await gravarEnergia(supabase, novo, { dia });
     if (error) {
-      setEnergia(antes);
+      setValores((v) => new Map(v).set(dia, antes));
       setFalhou(true);
       if (naoExiste(error)) setSemTabela(true);
     }
   };
 
+  const tituloDaSemana =
+    semanas === 0
+      ? "Esta semana"
+      : semanas === -1
+        ? "Semana passada"
+        : `Semana de ${segunda.slice(8, 10)}/${segunda.slice(5, 7)}`;
+
   return (
     <div className="px-5 pb-5">
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[12px] font-semibold text-fg-mute">
-          <Zap size={13} /> Sua energia hoje
+        <span className="flex min-w-0 items-center gap-1.5 text-[12px] font-semibold text-fg-mute">
+          <Zap size={13} className="shrink-0" />
+          <span className="truncate">{titulo}</span>
         </span>
-        <span className="text-[11.5px] text-fg-mute">
-          {falhou ? "não gravou, tente de novo" : energia ? ROTULOS_ENERGIA[energia - 1] : "toque para marcar"}
-        </span>
+        {ehHojeEscolhido ? (
+          <span className="shrink-0 text-[11.5px] text-fg-mute">
+            {falhou ? "não gravou, tente de novo" : energia ? ROTULOS_ENERGIA[energia - 1] : "toque para marcar"}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setEscolhido(hoje);
+              setSemanas(0);
+              setFalhou(false);
+            }}
+            className="shrink-0 rounded-full px-2 py-0.5 text-[11.5px] font-semibold text-brand-400 transition-colors hover:bg-brand-500/12"
+          >
+            voltar para hoje
+          </button>
+        )}
       </div>
-      <div className="mt-2 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label="Sua energia hoje, de 1 a 5">
+      {!ehHojeEscolhido && falhou && (
+        <p className="mt-1 text-[11.5px] text-neg">Não gravou, tente de novo.</p>
+      )}
+      <div className="mt-2 grid grid-cols-5 gap-1.5" role="radiogroup" aria-label={`${titulo}, de 1 a 5`}>
         {[1, 2, 3, 4, 5].map((n) => {
           const ativo = energia != null && n <= energia;
           return (
@@ -95,7 +139,7 @@ export function EnergiaDoDia() {
               role="radio"
               aria-checked={energia === n}
               aria-label={`${n}: ${ROTULOS_ENERGIA[n - 1]}`}
-              disabled={!pronto}
+              disabled={!carregadas.has(semanaDe(escolhido).de)}
               onClick={() => escolher(n)}
               className={cx(
                 "h-9 rounded-full text-[13px] font-semibold transition-[background-color,color,transform] duration-200 active:scale-95",
@@ -114,41 +158,73 @@ export function EnergiaDoDia() {
         A semana, de segunda a domingo, uma barrinha por dia, da altura da
         energia daquele dia. Dia sem marca fica só com o trilho, para a falta
         aparecer em vez de virar um "zero" que não aconteceu; dia que ainda
-        não chegou fica tracejado.
+        não chegou fica tracejado e não se escolhe.
       */}
-      {pronto && (
-        <div className="mt-4">
-          <div className="flex items-center justify-between gap-2 text-[11.5px] text-fg-mute">
-            <span className="min-w-0 truncate">Esta semana</span>
-            <span className="shrink-0 tnum">
-              {media == null
+      <div className="mt-4">
+        <div className="flex items-center justify-between gap-2 text-[11.5px] text-fg-mute">
+          <span className="flex min-w-0 items-center gap-1">
+            <button
+              type="button"
+              aria-label="Semana anterior"
+              onClick={() => setSemanas((s) => s - 1)}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded-full transition-colors hover:bg-fg/[0.08] hover:text-fg"
+            >
+              <ChevronLeft size={14} />
+            </button>
+            <span className="truncate">{tituloDaSemana}</span>
+            {semanas < 0 && (
+              <button
+                type="button"
+                aria-label="Semana seguinte"
+                onClick={() => setSemanas((s) => Math.min(0, s + 1))}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-full transition-colors hover:bg-fg/[0.08] hover:text-fg"
+              >
+                <ChevronRight size={14} />
+              </button>
+            )}
+          </span>
+          <span className="shrink-0 tnum">
+            {!pronto
+              ? ""
+              : media == null
                 ? "nada marcado"
                 : `média ${media.toLocaleString("pt-BR", { maximumFractionDigits: 1 })} · ${marcados.length}/${passados} dias`}
-            </span>
-          </div>
-          <ol className="mt-2 grid grid-cols-7 gap-1.5" aria-label="Energia desta semana">
-            {dias.map(({ dia, valor, futuro }) => {
-              const ehHoje = dia === hoje;
-              const dow = diaDaSemana(dia);
-              return (
-                <li
-                  key={dia}
-                  className="flex flex-col items-center gap-1"
-                  title={`${ehHoje ? "hoje" : NOME_DO_DIA[dow]}: ${
-                    futuro ? "ainda não chegou" : valor ? `${valor} (${ROTULOS_ENERGIA[valor - 1]})` : "sem marca"
-                  }`}
+          </span>
+        </div>
+        <ol className="mt-2 grid grid-cols-7 gap-1.5" aria-label={`Energia: ${tituloDaSemana.toLowerCase()}`}>
+          {dias.map(({ dia, valor, futuro }) => {
+            const ehHoje = dia === hoje;
+            const ehEscolhido = dia === escolhido;
+            const dow = diaDaSemana(dia);
+            const descricao = `${ehHoje ? "hoje" : NOME_DO_DIA[dow]}: ${
+              futuro ? "ainda não chegou" : valor ? `${valor} (${ROTULOS_ENERGIA[valor - 1]})` : "sem marca"
+            }`;
+            return (
+              <li key={dia}>
+                <button
+                  type="button"
+                  disabled={futuro || !pronto}
+                  aria-pressed={ehEscolhido}
+                  aria-label={futuro ? descricao : `${descricao}. Toque para marcar este dia`}
+                  title={descricao}
+                  onClick={() => {
+                    setEscolhido(dia);
+                    setFalhou(false);
+                  }}
+                  className="group flex w-full flex-col items-center gap-1 disabled:cursor-default"
                 >
                   <span
                     className={cx(
                       "flex h-12 w-full max-w-[22px] items-end overflow-hidden rounded-full",
-                      futuro ? "border border-dashed border-line" : "bg-fg/[0.07]"
+                      futuro ? "border border-dashed border-line" : "bg-fg/[0.07] group-hover:bg-fg/[0.12]",
+                      ehEscolhido && "outline outline-2 outline-offset-2 outline-brand-500/70"
                     )}
                   >
                     {valor != null && (
                       <span
                         className={cx(
-                          "cresce-y block w-full rounded-full",
-                          ehHoje ? "bg-brand-500 bg-[image:var(--a-degrade)]" : "bg-brand-500/55"
+                          "block w-full rounded-full",
+                          ehEscolhido ? "bg-brand-500 bg-[image:var(--a-degrade)]" : "bg-brand-500/55"
                         )}
                         style={{ height: `${(valor / 5) * 100}%` }}
                       />
@@ -157,20 +233,17 @@ export function EnergiaDoDia() {
                   <span
                     className={cx(
                       "text-[10.5px] font-semibold",
-                      ehHoje ? "text-brand-400" : futuro ? "text-fg-mute/50" : "text-fg-mute"
+                      ehEscolhido || ehHoje ? "text-brand-400" : futuro ? "text-fg-mute/50" : "text-fg-mute"
                     )}
                   >
                     {SIGLA_DO_DIA[dow]}
                   </span>
-                  <span className="sr-only">
-                    {ehHoje ? "hoje" : NOME_DO_DIA[dow]}: {valor ?? "sem marca"}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      )}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
     </div>
   );
 }
