@@ -21,12 +21,16 @@ import {
   PRIORITY_LABEL,
   WEEKDAYS,
   WEEKDAYS_SIGLA,
+  type Cliente,
   type Frequency,
   type Priority,
+  type Projeto,
   type RecurringTask,
 } from "@/lib/types";
 import { dateBR, todayISO } from "@/lib/format";
 import { EditorLinks, limparLinks } from "@/components/Links";
+import { EditorChecklist, type ItemEmEdicao } from "@/components/Checklist";
+import { camposDaRegra, criarRecorrencia, recadoDoErro } from "@/lib/criarRecorrencia";
 import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
 import {
   Badge,
@@ -60,12 +64,15 @@ const blank = () => ({
   title: "",
   description: "",
   client: "",
+  cliente_id: "",
+  projeto_id: "",
   links: [] as string[],
   priority: "medium" as Priority,
   frequency: "weekly" as Frequency,
-  weekday: 1,
-  weekdays: [1] as number[],
-  day_of_month: 1,
+  /* Começa no dia de hoje: quem cria na terça quase sempre quer a terça. */
+  weekday: new Date().getDay(),
+  weekdays: [new Date().getDay()] as number[],
+  day_of_month: new Date().getDate(),
   active: true,
 });
 
@@ -79,19 +86,51 @@ export default function RecorrentesPage() {
   const [form, setForm] = React.useState(blank());
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState("");
+  /* O checklist que cada ocorrência recebe (o modelo da regra). */
+  const [checklist, setChecklist] = React.useState<ItemEmEdicao[]>([]);
+  /* O cadastro de clientes e projetos, para escolher em vez de digitar. */
+  const [cadastro, setCadastro] = React.useState<Cliente[]>([]);
+  const [projetos, setProjetos] = React.useState<Projeto[]>([]);
   const confirm = useConfirm();
   const notice = useNotice();
 
   const today = todayISO();
 
   const load = React.useCallback(async () => {
-    const { data } = await supabase
-      .from("recurring_tasks")
-      .select("*")
-      .order("created_at");
-    setRows((data as RecurringTask[]) ?? []);
+    const [r, c, p] = await Promise.all([
+      supabase.from("recurring_tasks").select("*").order("created_at"),
+      supabase.from("clientes").select("*").order("nome"),
+      supabase.from("projetos").select("*").order("nome"),
+    ]);
+    setRows((r.data as RecurringTask[]) ?? []);
+    /* Sem CLIENTES.sql as duas consultas falham: fica o campo de texto. */
+    setCadastro((c.data as Cliente[]) ?? []);
+    setProjetos((p.data as Projeto[]) ?? []);
     setLoading(false);
   }, [supabase]);
+
+  const projetosDoCliente = React.useMemo(
+    () =>
+      projetos
+        .filter((p) => p.cliente_id === form.cliente_id)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.nome.localeCompare(b.nome)),
+    [projetos, form.cliente_id]
+  );
+
+  /* O nome do cliente da regra: o do cadastro, ou o texto de antes dele. */
+  const nomeDoCliente = (r: RecurringTask) => {
+    const c = r.cliente_id ? cadastro.find((x) => x.id === r.cliente_id) : undefined;
+    const p = r.projeto_id ? projetos.find((x) => x.id === r.projeto_id) : undefined;
+    return c ? (p ? `${c.nome} - ${p.nome}` : c.nome) : r.client;
+  };
+
+  const startNew = () => {
+    setEditing(null);
+    setForm(blank());
+    setChecklist([]);
+    setErr("");
+    setOpen(true);
+  };
 
   React.useEffect(() => {
     load();
@@ -103,6 +142,8 @@ export default function RecorrentesPage() {
       title: r.title,
       description: r.description,
       client: r.client,
+      cliente_id: r.cliente_id ?? "",
+      projeto_id: r.projeto_id ?? "",
       links: r.links ?? [],
       priority: r.priority,
       frequency: r.frequency,
@@ -112,6 +153,7 @@ export default function RecorrentesPage() {
       day_of_month: r.day_of_month ?? 1,
       active: r.active,
     });
+    setChecklist((r.checklist ?? []).map((title) => ({ title, done: false })));
     setErr("");
     setOpen(true);
   };
@@ -122,28 +164,76 @@ export default function RecorrentesPage() {
     if (!form.title.trim()) return setErr("Informe o título.");
     setBusy(true);
 
-    const needsWeekday =
-      form.frequency === "weekly" || form.frequency === "biweekly";
-    const needsDom = ["monthly", "quarterly", "yearly"].includes(form.frequency);
+    /* O texto do cliente vira o retrato do cadastro, como em Nova demanda. */
+    const cSel = cadastro.find((c) => c.id === form.cliente_id);
+    const pSel = projetos.find((p) => p.id === form.projeto_id);
+    const textoCliente = cadastro.length
+      ? cSel
+        ? pSel
+          ? `${cSel.nome} - ${pSel.nome}`
+          : cSel.nome
+        : ""
+      : form.client.trim();
+    const links = limparLinks(form.links);
+    const itens = checklist.map((i) => i.title.trim()).filter(Boolean);
+
+    if (!editing) {
+      const uid = await currentUserId(supabase);
+      if (!uid) {
+        setBusy(false);
+        return setErr(SESSION_EXPIRED);
+      }
+      const r = await criarRecorrencia(supabase, {
+        uid,
+        hoje: today,
+        dados: {
+          title: form.title.trim(),
+          description: form.description.trim(),
+          client: textoCliente,
+          priority: form.priority,
+          cliente_id: form.cliente_id || null,
+          projeto_id: form.projeto_id || null,
+          links,
+        },
+        regra: {
+          frequency: form.frequency,
+          weekday: form.weekday,
+          weekdays: form.weekdays,
+          day_of_month: form.day_of_month,
+        },
+        checklist: itens.map((title) => ({ title })),
+        comCadastro: cadastro.length > 0,
+      });
+      setBusy(false);
+      if ("erro" in r) return setErr(r.erro);
+      setOpen(false);
+      notice.show(
+        r.geradaHoje
+          ? `Recorrência criada. A demanda de hoje já está em Demandas.`
+          : r.primeira
+            ? `Recorrência criada. A primeira demanda sai em ${dateBR(r.primeira).slice(0, 5)}.`
+            : "Recorrência criada.",
+        "ok"
+      );
+      return load();
+    }
 
     const payload = {
       title: form.title.trim(),
       description: form.description.trim(),
-      client: form.client.trim(),
+      client: textoCliente,
+      ...(cadastro.length
+        ? { cliente_id: form.cliente_id || null, projeto_id: form.projeto_id || null }
+        : {}),
+      /* O modelo do checklist, só quando a coluna existe (SUBTAREFAS.sql). */
+      ...("checklist" in editing ? { checklist: itens.length ? itens : null } : {}),
       /* Sempre presente, inclusive nulo: apagar os campos na tela tem que
          apagar no banco. Se a coluna não existe, a mensagem de erro abaixo diz
          qual arquivo rodar. */
-      links: limparLinks(form.links).length ? limparLinks(form.links) : null,
+      links: links.length ? links : null,
       priority: form.priority,
-      frequency: form.frequency,
-      /* No semanal, `weekday` guarda o primeiro dia marcado — é o que mantém a
-         regra válida num banco sem a migração de vários dias. */
-      weekday: needsWeekday
-        ? form.frequency === "weekly"
-          ? Math.min(...form.weekdays)
-          : Number(form.weekday)
-        : null,
-      day_of_month: needsDom ? Number(form.day_of_month) : null,
+      /* frequency, weekday e day_of_month: as mesmas contas da criação. */
+      ...camposDaRegra(form),
       active: form.active,
       /* A coluna de vários dias só entra quando há mais de um. Ver o comentário
          equivalente em demandas: sem isso, um banco sem DIAS-DA-SEMANA.sql
@@ -165,7 +255,7 @@ export default function RecorrentesPage() {
     };
 
     let error;
-    if (editing) {
+    {
       /*
        * `select("id")` para saber se gravou de verdade.
        *
@@ -183,29 +273,9 @@ export default function RecorrentesPage() {
         setBusy(false);
         return setErr(NADA_GRAVADO);
       }
-    } else {
-      const uid = await currentUserId(supabase);
-      if (!uid) {
-        setBusy(false);
-        return setErr(SESSION_EXPIRED);
-      }
-      ({ error } = await supabase
-        .from("recurring_tasks")
-        .insert({ ...payload, user_id: uid }));
     }
     setBusy(false);
-    if (error) {
-      if (/links/.test(error.message))
-        return setErr(
-          "Links precisam de supabase/LINK-NA-DEMANDA.sql no banco. Rode o arquivo ou deixe os campos vazios."
-        );
-      /* PGRST204/42703: a coluna de vários dias não existe no banco ainda. */
-      if (/weekdays/.test(error.message))
-        return setErr(
-          "Vários dias da semana precisa de supabase/DIAS-DA-SEMANA.sql no banco. Rode o arquivo ou deixe um dia só marcado."
-        );
-      return setErr(error.message);
-    }
+    if (error) return setErr(recadoDoErro(error.message));
     setOpen(false);
     load();
   };
@@ -363,15 +433,15 @@ export default function RecorrentesPage() {
           </h1>
           <p className="mt-1 text-sm text-fg-mute">
             {activeCount} ativa{activeCount === 1 ? "" : "s"} · a demanda volta
-            sozinha em cada data. Para criar, marque a caixa em Nova demanda.
+            sozinha em cada data.
           </p>
         </div>
-        <Link href="/demandas">
-          <Button variant="primary">
-            <Plus size={15} />
-            Nova demanda recorrente
-          </Button>
-        </Link>
+        {/* Abre o painel aqui mesmo. Era um link para Demandas: o clique
+            levava de volta para lá sem abrir painel nenhum. */}
+        <Button variant="primary" onClick={startNew}>
+          <Plus size={15} />
+          Nova demanda recorrente
+        </Button>
       </div>
 
       {dueToday > 0 && (
@@ -405,16 +475,14 @@ export default function RecorrentesPage() {
             sub={
               rows.length
                 ? "Troque o filtro para ver as outras."
-                : "Marque \"Demanda recorrente\" ao criar uma demanda e a regra aparece aqui."
+                : "Crie uma demanda que volta sozinha toda semana, todo mês ou na frequência que quiser."
             }
             action={
               !rows.length ? (
-                <Link href="/demandas">
-                  <Button variant="primary" size="sm">
-                    <Plus size={14} />
-                    Criar em Nova demanda
-                  </Button>
-                </Link>
+                <Button variant="primary" size="sm" onClick={startNew}>
+                  <Plus size={14} />
+                  Nova demanda recorrente
+                </Button>
               ) : undefined
             }
           />
@@ -476,10 +544,10 @@ export default function RecorrentesPage() {
                   >
                     {PRIORITY_LABEL[r.priority]}
                   </Badge>
-                  {r.client && (
+                  {nomeDoCliente(r) && (
                     <span className="inline-flex items-center gap-1 text-[10px] text-fg-mute">
                       <Building2 size={9} />
-                      {r.client}
+                      {nomeDoCliente(r)}
                     </span>
                   )}
                   {due && r.active && (
@@ -536,11 +604,18 @@ export default function RecorrentesPage() {
 
 
       {/* ------------------------------ modal ------------------------------ */}
+      {/*
+        Criar e editar no mesmo painel, com o que o formulário de Nova demanda
+        tem para recorrente: cliente e projeto do cadastro (era texto livre, e
+        mudar o nome aqui não mudava o cliente das demandas geradas) e o
+        checklist que cada ocorrência recebe (não dava para editar).
+      */}
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={editing ? "Editar recorrência" : "Nova recorrência"}
-        sub="Define o que se repete e com que frequência."
+        size="lg"
+        title={editing ? "Editar recorrência" : "Nova demanda recorrente"}
+        sub="O que se repete, para quem e com que frequência."
         footer={
           <>
             <Button onClick={() => setOpen(false)}>Cancelar</Button>
@@ -550,7 +625,7 @@ export default function RecorrentesPage() {
           </>
         }
       >
-        <form onSubmit={save} className="space-y-4">
+        <form onSubmit={save} className="space-y-5">
           <Field label="Título">
             <Input
               autoFocus
@@ -560,167 +635,193 @@ export default function RecorrentesPage() {
             />
           </Field>
 
-          <Field
-            label="Links do material"
-            hint="Cada demanda gerada nasce com eles."
-          >
-            <EditorLinks
-              links={form.links}
-              onChange={(links) => setForm({ ...form, links })}
-            />
-          </Field>
-
-          <Field label="Descrição">
-            <Textarea
-              rows={2}
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="O que precisa ser feito nessa recorrência"
-            />
-          </Field>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Cliente / projeto">
-              <Input
-                value={form.client}
-                onChange={(e) => setForm({ ...form, client: e.target.value })}
-                placeholder="Opcional"
-              />
-            </Field>
-            <Field label="Prioridade">
-              <Select
-                value={form.priority}
-                onChange={(e) =>
-                  setForm({ ...form, priority: e.target.value as Priority })
-                }
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {PRIORITY_LABEL[p]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Frequência">
-              <Select
-                value={form.frequency}
-                onChange={(e) =>
-                  setForm({ ...form, frequency: e.target.value as Frequency })
-                }
-              >
-                {FREQS.map((f) => (
-                  <option key={f} value={f}>
-                    {FREQUENCY_LABEL[f]}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            {form.frequency === "weekly" && (
-              <Field
-                label="Dias da semana"
-                hint={
-                  form.weekdays.length > 1
-                    ? "A demanda volta em cada dia marcado."
-                    : undefined
-                }
-              >
-                {/* Caixinhas em vez de select: os sete dias e o que está
-                    marcado se leem de uma vez. Mesmo formato usado em Nova
-                    demanda. */}
-                <div className="flex gap-1">
-                  {WEEKDAYS_SIGLA.map((sigla, i) => {
-                    const marcado = form.weekdays.includes(i);
-                    return (
-                      <button
-                        key={i}
-                        type="button"
-                        aria-label={WEEKDAYS[i]}
-                        aria-pressed={marcado}
-                        onClick={() =>
-                          setForm({
-                            ...form,
-                            /* Nunca deixa ficar sem nenhum dia marcado. */
-                            weekdays: marcado
-                              ? form.weekdays.length > 1
-                                ? form.weekdays.filter((d) => d !== i)
-                                : form.weekdays
-                              : [...form.weekdays, i].sort((a, b) => a - b),
-                          })
-                        }
-                        className={cx(
-                          "h-9 flex-1 rounded-[12px] text-[12.5px] font-bold transition-colors",
-                          marcado
-                            ? "bg-brand-500 text-on-brand"
-                            : "bg-ink-800 text-fg-mute hover:text-fg-dim"
-                        )}
-                      >
-                        {sigla}
-                      </button>
-                    );
-                  })}
-                </div>
-              </Field>
-            )}
-
-            {form.frequency === "biweekly" && (
-              <Field label="Dia da semana">
+          <div className="space-y-4 border-t border-line-soft pt-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              {cadastro.length > 0 ? (
+                <>
+                  <Field label="Cliente">
+                    <Select
+                      value={form.cliente_id}
+                      onChange={(e) => setForm({ ...form, cliente_id: e.target.value, projeto_id: "" })}
+                    >
+                      <option value="">Sem cliente</option>
+                      {cadastro.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nome}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field
+                    label="Projeto"
+                    hint={
+                      !form.cliente_id
+                        ? "Escolha um cliente primeiro."
+                        : projetosDoCliente.length === 0
+                          ? "Este cliente ainda não tem projeto."
+                          : undefined
+                    }
+                  >
+                    <Select
+                      value={form.projeto_id}
+                      disabled={!form.cliente_id || projetosDoCliente.length === 0}
+                      onChange={(e) => setForm({ ...form, projeto_id: e.target.value })}
+                    >
+                      <option value="">Sem projeto</option>
+                      {projetosDoCliente.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nome}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                </>
+              ) : (
+                <Field label="Cliente / projeto" className="sm:col-span-2">
+                  <Input
+                    value={form.client}
+                    onChange={(e) => setForm({ ...form, client: e.target.value })}
+                    placeholder="Opcional"
+                  />
+                </Field>
+              )}
+              <Field label="Prioridade">
                 <Select
-                  value={String(form.weekday)}
-                  onChange={(e) =>
-                    setForm({ ...form, weekday: Number(e.target.value) })
-                  }
+                  value={form.priority}
+                  onChange={(e) => setForm({ ...form, priority: e.target.value as Priority })}
                 >
-                  {WEEKDAYS.map((w, i) => (
-                    <option key={w} value={i}>
-                      {w}
+                  {PRIORITIES.map((p) => (
+                    <option key={p} value={p}>
+                      {PRIORITY_LABEL[p]}
                     </option>
                   ))}
                 </Select>
               </Field>
-            )}
+            </div>
 
-            {needsDom && (
-              <Field
-                label="Dia do mês"
-                hint="Em meses curtos, cai no último dia."
-              >
-                <Input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={form.day_of_month}
-                  onChange={(e) =>
-                    setForm({ ...form, day_of_month: Number(e.target.value) })
-                  }
-                />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Frequência">
+                <Select
+                  value={form.frequency}
+                  onChange={(e) => setForm({ ...form, frequency: e.target.value as Frequency })}
+                >
+                  {FREQS.map((f) => (
+                    <option key={f} value={f}>
+                      {FREQUENCY_LABEL[f]}
+                    </option>
+                  ))}
+                </Select>
               </Field>
-            )}
+
+              {form.frequency === "weekly" && (
+                <Field
+                  label="Dias da semana"
+                  hint={form.weekdays.length > 1 ? "A demanda volta em cada dia marcado." : undefined}
+                >
+                  {/* Caixinhas em vez de select: os sete dias e o que está
+                      marcado se leem de uma vez. Mesmo formato usado em Nova
+                      demanda. */}
+                  <div className="flex gap-1">
+                    {WEEKDAYS_SIGLA.map((sigla, i) => {
+                      const marcado = form.weekdays.includes(i);
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          aria-label={WEEKDAYS[i]}
+                          aria-pressed={marcado}
+                          onClick={() =>
+                            setForm({
+                              ...form,
+                              /* Nunca deixa ficar sem nenhum dia marcado. */
+                              weekdays: marcado
+                                ? form.weekdays.length > 1
+                                  ? form.weekdays.filter((d) => d !== i)
+                                  : form.weekdays
+                                : [...form.weekdays, i].sort((a, b) => a - b),
+                            })
+                          }
+                          className={cx(
+                            "h-9 flex-1 rounded-[12px] text-[12.5px] font-bold transition-colors",
+                            marcado ? "bg-brand-500 text-on-brand" : "bg-ink-800 text-fg-mute hover:text-fg-dim"
+                          )}
+                        >
+                          {sigla}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+              )}
+
+              {form.frequency === "biweekly" && (
+                <Field label="Dia da semana">
+                  <Select
+                    value={String(form.weekday)}
+                    onChange={(e) => setForm({ ...form, weekday: Number(e.target.value) })}
+                  >
+                    {WEEKDAYS.map((w, i) => (
+                      <option key={w} value={i}>
+                        {w}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
+
+              {needsDom && (
+                <Field label="Dia do mês" hint="Em meses curtos, cai no último dia.">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={form.day_of_month}
+                    onChange={(e) => setForm({ ...form, day_of_month: Number(e.target.value) })}
+                  />
+                </Field>
+              )}
+            </div>
+            <p className="text-[11.5px] text-fg-mute">
+              {frequencyDescription(form)}
+              {!editing && " · se cair hoje, a demanda de hoje já é criada junto."}
+            </p>
           </div>
 
-          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-line-soft bg-ink-900/50 px-3.5 py-3">
-            <input
-              type="checkbox"
-              checked={form.active}
-              onChange={(e) => setForm({ ...form, active: e.target.checked })}
-              className="h-4 w-4 accent-brand-500"
-            />
-            <span className="text-sm text-fg-dim">
-              Ativa
-              <span className="ml-1 text-[11px] text-fg-mute">
-                (pausada não gera demandas)
-              </span>
-            </span>
-          </label>
+          <div className="space-y-4 border-t border-line-soft pt-5">
+            <Field label="Descrição">
+              <Textarea
+                rows={2}
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="O que precisa ser feito nessa recorrência"
+              />
+            </Field>
 
-          {err && (
-            <p className="rounded-xl border border-neg/30 bg-neg/10 p-3 text-xs text-neg">
-              {err}
-            </p>
+            <Field label="Links do material" hint="Cada demanda gerada nasce com eles.">
+              <EditorLinks links={form.links} onChange={(links) => setForm({ ...form, links })} />
+            </Field>
+
+            <Field label="Checklist" hint="Cada demanda gerada nasce com estes itens desmarcados.">
+              <EditorChecklist itens={checklist} onChange={setChecklist} />
+            </Field>
+          </div>
+
+          {editing && (
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-line-soft bg-ink-900/50 px-3.5 py-3">
+              <input
+                type="checkbox"
+                checked={form.active}
+                onChange={(e) => setForm({ ...form, active: e.target.checked })}
+                className="h-4 w-4 accent-brand-500"
+              />
+              <span className="text-sm text-fg-dim">
+                Ativa
+                <span className="ml-1 text-[11px] text-fg-mute">(pausada não gera demandas)</span>
+              </span>
+            </label>
           )}
+
+          {err && <p className="rounded-xl border border-neg/30 bg-neg/10 p-3 text-xs text-neg">{err}</p>}
         </form>
       </Modal>
 

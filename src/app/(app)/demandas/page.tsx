@@ -51,7 +51,8 @@ import {
   corDoRotulo,
 } from "@/lib/types";
 import { dataCurta, dateBR, daysUntil, horaCurta, todayISO } from "@/lib/format";
-import { frequencyDescription, isDueOn, nextOccurrence } from "@/lib/recurring";
+import { frequencyDescription } from "@/lib/recurring";
+import { criarRecorrencia } from "@/lib/criarRecorrencia";
 import {
   Badge,
   Button,
@@ -523,141 +524,35 @@ export default function DemandasPage() {
      * como hoje evita que o dashboard gere uma segunda cópia ao abrir.
      */
     if (form.recurring) {
-      const weekly = form.frequency === "weekly" || form.frequency === "biweekly";
-      const monthly = ["monthly", "quarterly", "yearly"].includes(form.frequency);
-
-      /*
-       * Só materializa hoje se a regra cai hoje.
-       *
-       * Criava a demanda de hoje sempre: uma mensal do dia 20 criada no dia 3
-       * nascia com uma demanda no dia 3 — e no dia 20 vinha outra. E gravar
-       * "rodou hoje" pulava a primeira de uma quinzenal ou trimestral. Fora do
-       * dia, a regra nasce sem nada e a primeira sai na data dela.
-       */
-      const regraNova = {
-        active: true,
-        last_run_on: null,
-        frequency: form.frequency,
-        weekday: weekly
-          ? form.frequency === "weekly"
-            ? Math.min(...form.weekdays)
-            : Number(form.weekday)
-          : null,
-        weekdays: form.frequency === "weekly" ? form.weekdays : null,
-        day_of_month: monthly
-          ? Math.min(31, Math.max(1, Number(form.day_of_month) || 1))
-          : null,
-      } as unknown as RecurringTask;
-      const venceHoje = isDueOn(regraNova, today);
-
-      const { data: rule, error: ruleError } = await supabase
-        .from("recurring_tasks")
-        .insert({
+      /* O caminho é o mesmo da tela de Recorrentes. Ver lib/criarRecorrencia. */
+      const r = await criarRecorrencia(supabase, {
+        uid,
+        hoje: today,
+        dados: {
           ...base,
-          ...comLink,
-          ...comCliente,
-          user_id: uid,
+          cliente_id: form.cliente_id || null,
+          projeto_id: form.projeto_id || null,
+          links,
+        },
+        regra: {
           frequency: form.frequency,
-          /*
-           * `weekday` segue sendo gravado: é o que as regras antigas usam e o
-           * que o quinzenal continua lendo. No semanal ele fica com o primeiro
-           * dia marcado, então uma regra criada aqui funciona igual num banco
-           * sem a migração de vários dias.
-           */
-          weekday: weekly
-            ? form.frequency === "weekly"
-              ? Math.min(...form.weekdays)
-              : Number(form.weekday)
-            : null,
-          /*
-           * A coluna de vários dias só entra quando há mais de um.
-           *
-           * Vem de DIAS-DA-SEMANA.sql. Mandá-la sempre faria toda demanda
-           * recorrente falhar num banco onde a migração não rodou, inclusive as
-           * de um dia só, que funcionam sem ela.
-           */
-          ...(form.frequency === "weekly" && form.weekdays.length > 1
-            ? { weekdays: form.weekdays }
-            : {}),
-          day_of_month: monthly
-            ? Math.min(31, Math.max(1, Number(form.day_of_month) || 1))
-            : null,
-          active: true,
-          last_run_on: venceHoje ? today : null,
-          /* O modelo só entra quando há itens: sem a migração, mandá-lo faria
-             toda recorrente falhar, inclusive as sem checklist. */
-          /* O modelo guarda só os títulos: cada ocorrência nasce desmarcada. */
-          ...(checklist.length
-            ? { checklist: checklist.map((i) => i.title) }
-            : {}),
-        })
-        .select("id")
-        .single();
-
-      if (ruleError || !rule) {
-        setBusy(false);
-        /* PGRST204/42703: a coluna de vários dias não existe no banco ainda. */
-        if (ruleError && /weekdays/.test(ruleError.message))
-          return setErr(
-            "Vários dias da semana precisa de supabase/DIAS-DA-SEMANA.sql no banco. Rode o arquivo ou deixe um dia só marcado."
-          );
-        if (ruleError && /checklist/.test(ruleError.message))
-          return setErr(
-            "Checklist precisa de supabase/SUBTAREFAS.sql no banco. Rode o arquivo ou deixe a lista vazia."
-          );
-        if (ruleError && /links/.test(ruleError.message))
-          return setErr(
-            "Links precisam de supabase/LINK-NA-DEMANDA.sql no banco. Rode o arquivo ou deixe os campos vazios."
-          );
-        return setErr(ruleError?.message ?? "Não foi possível criar a recorrência.");
-      }
-
-      if (!venceHoje) {
-        const primeira = nextOccurrence(regraNova, today);
-        setBusy(false);
-        setOpen(false);
-        notice.show(
-          primeira
-            ? `Recorrência criada. A primeira demanda sai em ${dateBR(primeira).slice(0, 5)}.`
-            : "Recorrência criada.",
-          "ok"
-        );
-        return load();
-      }
-
-      const { data: hoje1, error: taskError } = await supabase
-        .from("tasks")
-        .insert({
-          ...base,
-          ...comLink,
-          ...comCliente,
-          user_id: uid,
-          status: "todo",
-          due_date: today,
-          origin_id: rule.id,
-        })
-        .select("id")
-        .single();
-
-      if (taskError) {
-        setBusy(false);
-        return setErr(taskError.message);
-      }
-
-      /* A ocorrência de hoje já nasce com os itens do modelo. */
-      if (hoje1 && checklist.length)
-        await supabase.from("task_items").insert(
-          checklist.map((item, i) => ({
-            user_id: uid,
-            task_id: hoje1.id,
-            title: item.title,
-            done: item.done,
-            position: i,
-          }))
-        );
-
+          weekday: form.weekday,
+          weekdays: form.weekdays,
+          day_of_month: form.day_of_month,
+        },
+        checklist,
+        comCadastro: cadastro.length > 0,
+      });
       setBusy(false);
+      if ('erro' in r) return setErr(r.erro);
       setOpen(false);
+      if (!r.geradaHoje)
+        notice.show(
+          r.primeira
+            ? `Recorrência criada. A primeira demanda sai em ${dateBR(r.primeira).slice(0, 5)}.`
+            : 'Recorrência criada.',
+          'ok'
+        );
       return load();
     }
 

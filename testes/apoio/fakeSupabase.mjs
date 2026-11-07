@@ -41,6 +41,9 @@ class Consulta {
   order() { return this; }
   limit() { return this; }
   range(de, ate) { this.faixa = [de, ate]; return this; }
+  /* Uma linha so, como o PostgREST: o resultado vira o objeto, nao a lista. */
+  single() { this.umSo = true; return this; }
+  maybeSingle() { this.umSo = true; return this; }
 
   eq(c, v) { return this._filtro((r) => cmp.eq(r[c], v)); }
   neq(c, v) { return this._filtro((r) => cmp.neq(r[c], v)); }
@@ -131,6 +134,9 @@ class Consulta {
 
         throw new Error("acao desconhecida: " + this.acao);
       })
+      .then((r) =>
+        this.umSo && r && Array.isArray(r.data) ? { ...r, data: r.data[0] ?? null } : r
+      )
       .then(ok, falha);
   }
 }
