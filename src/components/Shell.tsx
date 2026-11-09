@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BuscaGlobal } from "./BuscaGlobal";
+import { Marca } from "./Marca";
 import * as React from "react";
 import { ListPlus, Moon, Receipt, Search, Sun } from "lucide-react";
 import { ROTAS_CRESCIMENTO } from "./AbasCrescimento";
@@ -184,14 +185,9 @@ export function Shell({
           prefetch={false}
           className="flex shrink-0 items-center gap-2.5 text-[20px] font-bold tracking-[-0.035em] text-fg"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/icon-dark.svg"
-            alt=""
-            width={34}
-            height={34}
-            className="block h-[34px] w-[34px] rounded-[11px]"
-          />
+          {/* A marca nova, sem pastilha: o hexágono já é a forma, e o
+              degradê segue o tema. Ver components/Marca. */}
+          <Marca className="block h-[32px] w-auto shrink-0" />
           <span>
             morning<span className="font-normal text-fg-mute">brief</span>
           </span>

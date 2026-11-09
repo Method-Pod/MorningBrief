@@ -214,6 +214,10 @@
   --capa-txt-c: 0.14;
 
   --tinta-cor: #ffffff;
+  /* A marca do cabeçalho: o hexágono no degradê escuro sobre o fundo claro,
+     e no degradê claro sobre o escuro (as versões 3 e 4 da logo). */
+  --marca-1: #000000;
+  --marca-2: #666666;
   /*
    * A prioridade é uma ESCALA, e a cor dela tem que subir junto.
    *
@@ -535,6 +539,8 @@
     --capa-txt-l: 0.8;
     --capa-txt-c: 0.12;
     --tinta-cor: #151515;
+    --marca-1: #ffffff;
+    --marca-2: #999999;
 
     /*
      * As tres pastilhas que ele mandou despir — so aqui no escuro.
@@ -688,6 +694,8 @@
   --capa-txt-l: 0.8;
   --capa-txt-c: 0.12;
   --tinta-cor: #151515;
+  --marca-1: #ffffff;
+  --marca-2: #999999;
 
   /*
    * As tres pastilhas que ele mandou despir — so aqui no escuro.

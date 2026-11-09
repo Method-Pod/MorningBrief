@@ -23,7 +23,10 @@
  * engano — o CACHE abaixo é limpo no activate de qualquer forma.
  */
 
-const CACHE = "mb-v1";
+/* v2: a logo nova (nov/2026). Os ícones vêm do aparelho primeiro, então
+   trocar o desenho sem trocar o nome do cache deixaria o antigo para sempre;
+   o activate apaga todo cache com nome diferente deste. */
+const CACHE = "mb-v2";
 const OFFLINE = "/offline.html";
 
 /*
@@ -66,7 +69,7 @@ self.addEventListener("activate", (evento) => {
 function eImutavel(url) {
   return (
     url.pathname.startsWith("/_next/static/") ||
-    /^\/(app-icon-[\w-]+|icon|apple-icon|og|logo|icon-dark|icon-light)\.(png|svg)$/.test(
+    /^\/(app-icon-[\w-]+|icon|apple-icon|og|logo|icon-dark|icon-light|marca-[\w-]+)\.(png|svg)$/.test(
       url.pathname
     )
   );

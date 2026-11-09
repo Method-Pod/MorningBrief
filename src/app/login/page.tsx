@@ -186,9 +186,9 @@ function Formulario() {
               <img
                 src="/logo.svg"
                 alt=""
-                width={26}
-                height={20}
-                className="block h-[20px] w-auto shrink-0"
+                width={19}
+                height={22}
+                className="block h-[22px] w-auto shrink-0"
               />
               <span>
                 morning<span className="font-normal text-white/60">brief</span>
