@@ -187,7 +187,7 @@ export function Shell({
         >
           {/* A marca nova, sem pastilha: o hexágono já é a forma, e o
               degradê segue o tema. Ver components/Marca. */}
-          <Marca className="block h-[32px] w-auto shrink-0" />
+          <Marca className="block h-[25px] w-auto shrink-0" />
           <span>
             morning<span className="font-normal text-fg-mute">brief</span>
           </span>
