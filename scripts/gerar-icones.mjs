@@ -7,7 +7,7 @@
  * os do app instalado (public/app-icon-*.png) e os ladrilhos em SVG
  * (public/icon-dark.svg e icon-light.svg). Todos no mesmo desenho: o
  * hexágono claro sobre um quadrado em degradê preto, com um brilho roxo suave
- * no canto de baixo à esquerda.
+ * no canto de cima à esquerda.
  *
  * Depois de rodar, suba o número do CACHE em public/sw.js: o app guarda os
  * ícones no aparelho pelo nome do arquivo, e sem isso o desenho antigo fica.
@@ -24,9 +24,9 @@ const D = /d="([^"]+)"/.exec(fs.readFileSync(path.join(RAIZ, "public/marca-clara
 
 /* O fundo do ladrilho: degradê preto, do canto de cima para o de baixo. */
 const FUNDO = `<linearGradient id="bg" x1="168.907" y1="0" x2="831.093" y2="1000" gradientUnits="userSpaceOnUse"><stop stop-color="#3a3a3a"/><stop offset="1" stop-color="#000000"/></linearGradient>`;
-/* Um brilho roxo suave no canto de baixo à esquerda, na cor do app (--a):
+/* Um brilho roxo suave no canto de cima à esquerda, na cor do app (--a):
    um detalhe, que só tinge o canto, sem disputar com o hexágono. */
-const BRILHO = `<radialGradient id="brilho" cx="70" cy="960" r="520" gradientUnits="userSpaceOnUse"><stop stop-color="#7e28e7" stop-opacity="0.34"/><stop offset="0.5" stop-color="#7e28e7" stop-opacity="0.08"/><stop offset="1" stop-color="#7e28e7" stop-opacity="0"/></radialGradient>`;
+const BRILHO = `<radialGradient id="brilho" cx="70" cy="40" r="520" gradientUnits="userSpaceOnUse"><stop stop-color="#7e28e7" stop-opacity="0.22"/><stop offset="0.5" stop-color="#7e28e7" stop-opacity="0.05"/><stop offset="1" stop-color="#7e28e7" stop-opacity="0"/></radialGradient>`;
 /* O hexágono: as versões 4 (claro, sobre o escuro) e 3 (escuro, sobre o branco). */
 const DEGRADE_CLARO = `<linearGradient id="m" x1="260.543" y1="38.5473" x2="0" y2="261.345" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#999999"/></linearGradient>`;
 const DEGRADE_ESCURO = `<linearGradient id="m" x1="216.592" y1="0" x2="43.9514" y2="299.893" gradientUnits="userSpaceOnUse"><stop stop-color="#000000"/><stop offset="1" stop-color="#666666"/></linearGradient>`;
