@@ -6,8 +6,7 @@
  * Gera o ícone da aba (src/app/icon.png), o do iPhone (src/app/apple-icon.png),
  * os do app instalado (public/app-icon-*.png) e os ladrilhos em SVG
  * (public/icon-dark.svg e icon-light.svg). Todos no mesmo desenho: o
- * hexágono claro sobre um quadrado em degradê preto, com um brilho roxo suave
- * no canto de cima à esquerda.
+ * hexágono claro sobre um quadrado em degradê preto.
  *
  * Depois de rodar, suba o número do CACHE em public/sw.js: o app guarda os
  * ícones no aparelho pelo nome do arquivo, e sem isso o desenho antigo fica.
@@ -24,9 +23,6 @@ const D = /d="([^"]+)"/.exec(fs.readFileSync(path.join(RAIZ, "public/marca-clara
 
 /* O fundo do ladrilho: degradê preto, do canto de cima para o de baixo. */
 const FUNDO = `<linearGradient id="bg" x1="168.907" y1="0" x2="831.093" y2="1000" gradientUnits="userSpaceOnUse"><stop stop-color="#3a3a3a"/><stop offset="1" stop-color="#000000"/></linearGradient>`;
-/* Um brilho roxo suave no canto de cima à esquerda, na cor do app (--a):
-   um detalhe, que só tinge o canto, sem disputar com o hexágono. */
-const BRILHO = `<radialGradient id="brilho" cx="70" cy="40" r="520" gradientUnits="userSpaceOnUse"><stop stop-color="#7e28e7" stop-opacity="0.22"/><stop offset="0.5" stop-color="#7e28e7" stop-opacity="0.05"/><stop offset="1" stop-color="#7e28e7" stop-opacity="0"/></radialGradient>`;
 /* O hexágono: as versões 4 (claro, sobre o escuro) e 3 (escuro, sobre o branco). */
 const DEGRADE_CLARO = `<linearGradient id="m" x1="260.543" y1="38.5473" x2="0" y2="261.345" gradientUnits="userSpaceOnUse"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#999999"/></linearGradient>`;
 const DEGRADE_ESCURO = `<linearGradient id="m" x1="216.592" y1="0" x2="43.9514" y2="299.893" gradientUnits="userSpaceOnUse"><stop stop-color="#000000"/><stop offset="1" stop-color="#666666"/></linearGradient>`;
@@ -41,10 +37,8 @@ const marca = (altura) => {
 
 const ladrilho = ({ rx, altura, claro = false }) =>
   `<svg width="1000" height="1000" viewBox="0 0 1000 1000" fill="none" xmlns="http://www.w3.org/2000/svg"><defs>${
-    claro ? DEGRADE_ESCURO : DEGRADE_CLARO + FUNDO + BRILHO
-  }</defs><rect width="1000" height="1000" rx="${rx}" fill="${claro ? "#ffffff" : "url(#bg)"}"/>${
-    claro ? "" : `<rect width="1000" height="1000" rx="${rx}" fill="url(#brilho)"/>`
-  }${marca(altura)}</svg>`;
+    claro ? DEGRADE_ESCURO : DEGRADE_CLARO + FUNDO
+  }</defs><rect width="1000" height="1000" rx="${rx}" fill="${claro ? "#ffffff" : "url(#bg)"}"/>${marca(altura)}</svg>`;
 
 const png = (fonte, tamanho, saida) =>
   sharp(Buffer.from(fonte), { density: 300 })
