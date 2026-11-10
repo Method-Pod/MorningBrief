@@ -23,11 +23,11 @@
  * engano — o CACHE abaixo é limpo no activate de qualquer forma.
  */
 
-/* Sobe a cada troca de ícone (v2: logo nova; v3: fundo em degradê preto).
+/* Sobe a cada troca de ícone (v2: logo nova; v3: fundo em degradê preto; v4: brilho roxo).
    Os ícones vêm do aparelho primeiro, então trocar o desenho sem trocar o
    nome do cache deixaria o antigo para sempre; o activate apaga todo cache
    com nome diferente deste. Ver scripts/gerar-icones.mjs. */
-const CACHE = "mb-v3";
+const CACHE = "mb-v4";
 const OFFLINE = "/offline.html";
 
 /*
