@@ -110,3 +110,64 @@ export function avisoDeExclusao(
     texto: `Excluir ${quantas} de "${descricao}"?${sobra}${repete}`,
   };
 }
+
+/* ------------------------------ uma compra por linha ------------------------------ */
+
+const DIA = 86_400_000;
+const emDias = (iso: string) => {
+  const [a, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return Date.UTC(a, m - 1, d) / DIA;
+};
+
+/**
+ * Separa as parcelas de mesmo nome nas compras de onde vieram.
+ *
+ * Gerenciar contas juntava numa linha tudo o que tinha a mesma descrição. Duas
+ * compras no mesmo lugar ("Perfumes - Árabes Guilherme" em setembro e de novo
+ * em outubro) viravam uma linha só, com as parcelas das duas misturadas --
+ * meses repetidos e uma parcela de setembro que era da outra compra. Pedido
+ * dele: aparecer só as parcelas que entraram junto ao adicionar a conta.
+ *
+ * A conta não guarda de qual compra veio, então a compra é reconstruída pelo
+ * encadeamento: mesmo total de parcelas, e cada parcela continua a cadeia cujo
+ * último número é o anterior ao dela, a cerca de um mês por parcela de
+ * distância. A parcela 1 sempre abre uma compra. Duas compras nos mesmos meses
+ * não se confundem, porque cada mês tem um número diferente em cada uma; e
+ * uma data mexida na edição não quebra a cadeia, porque o que manda é o número.
+ *
+ * Conta sem número de parcela (fixa, avulsa, abatida) volta num grupo só.
+ */
+export function separarCompras(contas: Bill[]): Bill[][] {
+  const semNumero = contas.filter((b) => b.installment_no == null || b.installment_total == null);
+  const comNumero = contas
+    .filter((b) => b.installment_no != null && b.installment_total != null)
+    .sort(
+      (a, b) =>
+        a.due_date.localeCompare(b.due_date) || (a.installment_no ?? 0) - (b.installment_no ?? 0)
+    );
+
+  const cadeias: Bill[][] = [];
+  for (const b of comNumero) {
+    const n = b.installment_no as number;
+    const total = b.installment_total as number;
+    const dia = emDias(b.due_date);
+    let melhor: Bill[] | null = null;
+    let erroMelhor = Infinity;
+    if (n > 1)
+      for (const c of cadeias) {
+        const ultima = c[c.length - 1];
+        const m = ultima.installment_no as number;
+        if (ultima.installment_total !== total || m >= n) continue;
+        /* Quanto a distância real foge de um mês por parcela; o número
+           anterior exato pesa mais que qualquer data. */
+        const erro = (n - m - 1) * 1000 + Math.abs(dia - emDias(ultima.due_date) - 30.4 * (n - m));
+        if (erro < erroMelhor) {
+          erroMelhor = erro;
+          melhor = c;
+        }
+      }
+    if (melhor) melhor.push(b);
+    else cadeias.push([b]);
+  }
+  return [...(semNumero.length ? [semNumero] : []), ...cadeias];
+}

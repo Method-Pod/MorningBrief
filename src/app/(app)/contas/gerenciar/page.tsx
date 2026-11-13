@@ -9,7 +9,7 @@ import { NADA_GRAVADO } from "@/lib/erros";
 import { mesesAdiante } from "@/components/ContasExtras";
 import { ehAbatida, restanteDe, type Bill } from "@/lib/types";
 import { brl, dataCurta, rotuloMes, todayISO, valorDigitado } from "@/lib/format";
-import { avisoDeExclusao, repartirSerie } from "@/lib/serieDeContas";
+import { avisoDeExclusao, repartirSerie, separarCompras } from "@/lib/serieDeContas";
 import { useCategorias } from "@/components/Categorias";
 import {
   Button,
@@ -65,6 +65,19 @@ const tipoDe = (b: Bill): Tipo =>
         ? "fixa"
         : "avulsa";
 
+/**
+ * O mês da 1ª parcela da compra: o da parcela de menor número, recuado do
+ * número dela. A parcela 3 de novembro diz que a compra começou em setembro.
+ */
+function inicioDaCompra(contas: Bill[]): string | null {
+  const com = contas.filter((b) => b.installment_no != null);
+  if (!com.length) return null;
+  const primeira = com.reduce((a, b) => ((b.installment_no as number) < (a.installment_no as number) ? b : a));
+  const [ano, mes] = primeira.due_date.slice(0, 7).split("-").map(Number);
+  const d = new Date(Date.UTC(ano, mes - 1 - ((primeira.installment_no as number) - 1), 1));
+  return d.toISOString().slice(0, 7);
+}
+
 /** "ago/26" → "ago". A faixa já está em ordem, o ano só polui. */
 const mesCurto = (iso: string) => rotuloMes(iso).split("/")[0];
 
@@ -100,6 +113,8 @@ type Serie = {
   parcelaAtual: number | null;
   /** parcelas do total que ainda não têm lançamento */
   faltam: number;
+  /** Mês da 1ª parcela (YYYY-MM), na parcelada: separa duas compras de mesmo nome. */
+  inicio: string | null;
 };
 
 const numero = (b: Bill): Bill => ({
@@ -158,7 +173,20 @@ export default function GerenciarPage() {
       mapa.set(chave, lista);
     });
 
-    return [...mapa.entries()]
+    /*
+     * A parcelada ainda se divide por compra: duas compras de mesmo nome eram
+     * uma linha só, com as parcelas misturadas. Ver separarCompras.
+     */
+    const grupos: [string, Bill[]][] = [];
+    for (const [chave, contas] of mapa) {
+      if (!chave.startsWith("parcelada:")) {
+        grupos.push([chave, contas]);
+        continue;
+      }
+      separarCompras(contas).forEach((compra, i) => grupos.push([`${chave}#${i}`, compra]));
+    }
+
+    return grupos
       .map(([chave, contas]) => {
         const ordenadas = [...contas].sort((a, b) =>
           a.due_date.localeCompare(b.due_date)
@@ -186,6 +214,7 @@ export default function GerenciarPage() {
             null
           ),
           faltam: faltamDe(ordenadas, recente.installment_total),
+          inicio: inicioDaCompra(ordenadas),
         };
       })
       /*
@@ -399,6 +428,13 @@ export default function GerenciarPage() {
               <LinhaSerie
                 key={s.chave}
                 serie={s}
+                /* Duas compras de mesmo nome: o mês da 1ª parcela é o que diz
+                   qual é qual. Com uma só, o nome basta. */
+                nota={
+                  s.inicio && visiveis.some((o) => o !== s && o.descricao === s.descricao)
+                    ? `compra de ${rotuloMes(s.inicio)}`
+                    : undefined
+                }
                 onEditarSerie={() => editarSerie(s)}
                 onEditarConta={(b) => setEdicao({ conta: b, serie: s })}
                 onExcluir={() => excluirSerie(s)}
@@ -439,12 +475,14 @@ export default function GerenciarPage() {
 
 function LinhaSerie({
   serie: s,
+  nota,
   onEditarSerie,
   onEditarConta,
   onExcluir,
   onGerarParcelas,
 }: {
   serie: Serie;
+  nota?: string;
   onEditarSerie: () => void;
   onEditarConta: (b: Bill) => void;
   onExcluir: () => void;
@@ -502,7 +540,10 @@ function LinhaSerie({
         </span>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] font-semibold">{s.descricao}</p>
-          <p className="mt-0.5 truncate text-[12px] text-fg-mute">{s.categoria}</p>
+          <p className="mt-0.5 truncate text-[12px] text-fg-mute">
+            {s.categoria}
+            {nota && <span className="font-semibold text-fg-dim"> · {nota}</span>}
+          </p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-ink-800 px-2.5 py-1 text-[11px] font-semibold text-fg-dim">
           <span
